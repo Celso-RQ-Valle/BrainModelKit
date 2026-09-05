@@ -21,6 +21,7 @@ STATUS_OPTIONS = (
     "Rejected",
 )
 INDUSTRY_SECTIONS = tuple("ABCDEFGHIJKLMNOPQRSTU")
+COMPANY_SIZES = ("Small", "Medium", "Large", "Very Large")
 
 INDUSTRY_RISK = {
     "A": 0.65,
@@ -50,6 +51,12 @@ STATUS_RISK_ADJUSTMENT = {
     "Approved Not Contracted": -0.05,
     "Rejected": 0.10,
 }
+COMPANY_SIZE_RISK_ADJUSTMENT = {
+    "Small": 0.08,
+    "Medium": 0.03,
+    "Large": -0.03,
+    "Very Large": -0.07,
+}
 
 
 def _generate_company_id(generator: random.Random) -> str:
@@ -64,9 +71,14 @@ def _generate_reference_date(generator: random.Random, max_days: int) -> date:
     return datetime.today().date() + timedelta(days=generator.randint(1, max_days))
 
 
-def _default_probability(status: str, industry_section: str) -> float:
+def _default_probability(
+    status: str,
+    industry_section: str,
+    company_size: str,
+) -> float:
     probability = INDUSTRY_RISK.get(industry_section, 0.40)
     probability += STATUS_RISK_ADJUSTMENT.get(status, 0.0)
+    probability += COMPANY_SIZE_RISK_ADJUSTMENT.get(company_size, 0.0)
     return min(max(probability, 0.01), 0.99)
 
 
@@ -133,7 +145,12 @@ def simulate_credit_data(
     for _ in range(row_count):
         status = generator.choice(STATUS_OPTIONS)
         industry_section = generator.choice(INDUSTRY_SECTIONS)
-        probability = _default_probability(status, industry_section)
+        company_size = generator.choice(COMPANY_SIZES)
+        probability = _default_probability(
+            status,
+            industry_section,
+            company_size,
+        )
         features = _generate_features(
             generator,
             probability,
@@ -146,6 +163,7 @@ def simulate_credit_data(
                 status,
                 int(generator.random() < probability),
                 industry_section,
+                company_size,
                 *features,
             )
         )
@@ -159,6 +177,7 @@ def simulate_credit_data(
         "status",
         "default_flag",
         "industry_section",
+        "company_size",
         *feature_columns,
     ]
     return spark_session.createDataFrame(rows, columns), feature_columns

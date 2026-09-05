@@ -92,7 +92,9 @@ credit_df, feature_columns = simulate_credit_data(
 ```
 
 The returned DataFrame contains `company_id`, `reference_date`, `status`,
-`default_flag`, `industry_section`, and the requested `feature_XX` columns.
+`default_flag`, `industry_section`, `company_size`, and the requested
+`feature_XX` columns. Company size is one of `Small`, `Medium`, `Large`, or
+`Very Large` and contributes to the simulated default risk.
 Use `default_flag` as the binary training label. `feature_columns` contains the
 numeric input column names for a Spark ML `VectorAssembler`:
 

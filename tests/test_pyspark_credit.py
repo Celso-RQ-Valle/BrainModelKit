@@ -31,6 +31,13 @@ def test_simulate_credit_data_uses_twenty_features_by_default() -> None:
     assert feature_columns[0] == "feature_01"
     assert feature_columns[-1] == "feature_20"
     assert columns[-20:] == feature_columns
+    assert "company_size" in columns
+    assert {row[5] for row in rows} <= {
+        "Small",
+        "Medium",
+        "Large",
+        "Very Large",
+    }
     assert all(len(row) == len(columns) for row in rows)
 
 
