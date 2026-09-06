@@ -14,29 +14,30 @@ PySpark integrations without requiring either framework for core usage.
 
 ## Installation
 
-Install the core package from the repository:
+Install the core package from PyPI:
 
 ```bash
-python -m pip install .
+python -m pip install BrainModelKit
 ```
 
-Install an optional dataframe integration:
+Install an optional dataframe integration from PyPI:
 
 ```bash
-python -m pip install ".[pandas]"
-python -m pip install ".[pyspark]"
-```
-
-From PyPI, install BrainModelKit with PySpark support using:
-
-```bash
+python -m pip install "BrainModelKit[pandas]"
 python -m pip install "BrainModelKit[pyspark]"
 ```
 
 Install both integrations:
 
 ```bash
-python -m pip install ".[dataframes]"
+python -m pip install "BrainModelKit[dataframes]"
+```
+
+To use the unreleased source from a local clone, replace `BrainModelKit` with
+`.` in the commands above, for example:
+
+```bash
+python -m pip install ".[pyspark]"
 ```
 
 ## Usage
@@ -47,7 +48,7 @@ import brainmodelkit
 print(brainmodelkit.__version__)
 ```
 
-Integration-specific functionality will live under explicit namespaces:
+Integration-specific functionality lives under explicit namespaces:
 
 ```python
 from brainmodelkit import pandas, pyspark
@@ -109,6 +110,44 @@ model_data = assembler.transform(credit_df).select(
 train_data, test_data = model_data.randomSplit([0.8, 0.2], seed=42)
 ```
 
+### Kolmogorov-Smirnov metrics
+
+Calculate exact point-by-point KS with Pandas, either overall or by group:
+
+```python
+from brainmodelkit.metrics.pandas import ks
+
+overall_ks = ks("score", pandas_df, None, "target")
+segment_ks = ks("score", pandas_df, "segment", "target")
+```
+
+For large Spark datasets, calculate an approximate KS from score tiles using
+only native Spark operations. The default is 10 tiles; no Pandas conversion or
+Python UDF is used:
+
+```python
+from brainmodelkit.metrics.pyspark import ks_ntile
+
+# Overall decile KS.
+overall_ks = ks_ntile("score", spark_df, None, "target")
+
+# KS by segment with a custom number of tiles.
+segment_ks = ks_ntile(
+    "score",
+    spark_df,
+    "segment",
+    "target",
+    n_tiles=20,
+)
+
+overall_ks.show()
+segment_ks.show()
+```
+
+Both functions return a DataFrame containing an uppercase `KS` column. Grouped
+calculations also include the requested group columns. KS is `NaN` when a
+dataset or group does not contain both target classes (`0` and `1`).
+
 ## Development
 
 Create a virtual environment and install the development dependencies:
@@ -116,6 +155,13 @@ Create a virtual environment and install the development dependencies:
 ```bash
 python -m venv .venv
 python -m pip install -e ".[dev]"
+```
+
+For local notebook development, install the small, reproducible notebook
+dependency set:
+
+```bash
+python -m pip install -r requirements-notebooks.txt
 ```
 
 Run the quality checks:

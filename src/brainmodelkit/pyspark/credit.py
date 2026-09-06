@@ -135,9 +135,9 @@ def simulate_credit_data(
                 "PySpark is required. Install it with "
                 "`pip install 'BrainModelKit[pyspark]'`."
             ) from error
-        spark_session = (
-            SparkSession.builder.appName("SyntheticCreditData").getOrCreate()
-        )
+        spark_session = SparkSession.builder.appName(
+            "SyntheticCreditData"
+        ).getOrCreate()
 
     generator = random.Random(seed)
     rows: list[tuple[Any, ...]] = []
@@ -168,9 +168,7 @@ def simulate_credit_data(
             )
         )
 
-    feature_columns = [
-        f"feature_{index:02d}" for index in range(1, feature_count + 1)
-    ]
+    feature_columns = [f"feature_{index:02d}" for index in range(1, feature_count + 1)]
     columns = [
         "company_id",
         "reference_date",
