@@ -6,6 +6,22 @@ import pytest
 from brainmodelkit.metrics.pandas import calculate_ks, ks
 
 
+def test_ks_defaults_and_custom_columns() -> None:
+    dataframe = pd.DataFrame({"score": [0.9, 0.1], "target": [1, 0]})
+    assert ks(dataframe=dataframe).iloc[0]["KS"] == pytest.approx(1.0)
+    renamed = dataframe.rename(columns={"score": "prediction", "target": "label"})
+    assert ks(dataframe=renamed, score_column="prediction", target="label").iloc[0][
+        "KS"
+    ] == pytest.approx(1.0)
+
+
+def test_ks_reports_missing_inputs() -> None:
+    with pytest.raises(ValueError, match="dataframe is required"):
+        ks()
+    with pytest.raises(ValueError, match="Missing columns"):
+        ks(dataframe=pd.DataFrame({"score": [0.5]}))
+
+
 def test_calculate_ks_point_by_point() -> None:
     """Exact KS should compare cumulative score distributions."""
     target = pd.Series([1, 0, 1, 0])

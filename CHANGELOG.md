@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-07
+
+### Changed
+
+- KS functions default to `score` and `target` columns with no grouping.
+- Existing positional calls remain supported; missing inputs raise clear errors.
+- Documented minimal calls and a complete Pandas example.
+
 ### Added
 
 - Synthetic PySpark credit data generation with configurable model features.
@@ -20,5 +28,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Initial project structure and optional Pandas and PySpark integrations.
 
-[Unreleased]: https://github.com/Celso-RQ-Valle/BrainModelKit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Celso-RQ-Valle/BrainModelKit/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Celso-RQ-Valle/BrainModelKit/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Celso-RQ-Valle/BrainModelKit/releases/tag/v0.1.0

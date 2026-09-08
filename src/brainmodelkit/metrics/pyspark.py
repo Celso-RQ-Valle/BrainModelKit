@@ -20,10 +20,10 @@ def _normalize_groups(
 
 
 def ks_ntile(
-    score_column: str,
-    dataframe: DataFrame,
-    group_columns: str | Sequence[str] | None,
-    target: str,
+    score_column: str = "score",
+    dataframe: DataFrame | None = None,
+    group_columns: str | Sequence[str] | None = None,
+    target: str = "target",
     n_tiles: int = 10,
 ) -> DataFrame:
     """Calculate binned KS overall or per group using only Spark operations.
@@ -32,9 +32,26 @@ def ks_ntile(
     divided into ``n_tiles`` approximately equal-sized buckets. The returned
     ``KS`` is the maximum absolute difference between cumulative event and
     non-event distributions across those buckets.
+
+    Use ``ks_ntile(dataframe=df)`` with ``score`` and ``target`` columns.
+    By default, calculate one overall result with 10 tiles. Set
+    ``group_columns`` to a name or sequence of names for grouped results.
+    Missing scores and non-binary targets are ignored. KS is NaN when
+    either target class is absent. Existing positional calls are supported.
     """
     if isinstance(n_tiles, bool) or not isinstance(n_tiles, int) or n_tiles < 2:
         raise ValueError("n_tiles must be an integer of at least 2")
+
+    if dataframe is None:
+        raise ValueError("dataframe is required; use ks_ntile(dataframe=df)")
+    groups = _normalize_groups(group_columns)
+    missing = [
+        name
+        for name in [score_column, target, *groups]
+        if name not in dataframe.columns
+    ]
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
 
     try:
         import pyspark.sql.functions as F
@@ -45,7 +62,6 @@ def ks_ntile(
             "`pip install 'BrainModelKit[pyspark]'`."
         ) from error
 
-    groups = _normalize_groups(group_columns)
     selected = dataframe.select(
         *[F.col(column) for column in groups],
         F.col(score_column).alias("__bmk_score"),

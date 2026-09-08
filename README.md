@@ -117,8 +117,8 @@ Calculate exact point-by-point KS with Pandas, either overall or by group:
 ```python
 from brainmodelkit.metrics.pandas import ks
 
-overall_ks = ks("score", pandas_df, None, "target")
-segment_ks = ks("score", pandas_df, "segment", "target")
+overall_ks = ks(dataframe=pandas_df)
+segment_ks = ks(dataframe=pandas_df, group_columns="segment")
 ```
 
 For large Spark datasets, calculate an approximate KS from score tiles using
@@ -129,14 +129,12 @@ Python UDF is used:
 from brainmodelkit.metrics.pyspark import ks_ntile
 
 # Overall decile KS.
-overall_ks = ks_ntile("score", spark_df, None, "target")
+overall_ks = ks_ntile(dataframe=spark_df)
 
 # KS by segment with a custom number of tiles.
 segment_ks = ks_ntile(
-    "score",
-    spark_df,
-    "segment",
-    "target",
+    dataframe=spark_df,
+    group_columns="segment",
     n_tiles=20,
 )
 
@@ -147,6 +145,23 @@ segment_ks.show()
 Both functions return a DataFrame containing an uppercase `KS` column. Grouped
 calculations also include the requested group columns. KS is `NaN` when a
 dataset or group does not contain both target classes (`0` and `1`).
+
+The defaults are `score_column="score"`, `target="target"`, and
+`group_columns=None`. Supply your DataFrame using `dataframe=...`; data cannot
+be inferred. For other column names, use
+`ks(dataframe=pandas_df, score_column="prediction", target="default_flag")`.
+Existing positional calls continue to work. `calculate_ks(y_true, y_pred)`
+requires the two actual data series.
+
+A complete Pandas example:
+
+```python
+import pandas as pd
+from brainmodelkit.metrics.pandas import ks
+
+df = pd.DataFrame({"score": [0.9, 0.8, 0.2, 0.1], "target": [1, 1, 0, 0]})
+print(ks(dataframe=df))  # KS = 1.0
+```
 
 ## Development
 

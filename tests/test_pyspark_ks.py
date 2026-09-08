@@ -31,6 +31,11 @@ def test_ks_ntile_rejects_an_invalid_tile_count() -> None:
         ks_ntile("score", None, None, "target", n_tiles=1)  # type: ignore[arg-type]
 
 
+def test_ks_ntile_reports_missing_dataframe() -> None:
+    with pytest.raises(ValueError, match="dataframe is required"):
+        ks_ntile()
+
+
 def test_ks_ntile_calculates_overall_and_grouped_ks(
     spark_session: SparkSession,
 ) -> None:
@@ -43,6 +48,9 @@ def test_ks_ntile_calculates_overall_and_grouped_ks(
     )
 
     complete = dataframe.where("segment = 'complete'")
+    assert pytest.approx(1.0) == ks_ntile(dataframe=complete).first().KS
+    with pytest.raises(ValueError, match="Missing columns"):
+        ks_ntile(dataframe=complete, target="missing")
     overall_ks = ks_ntile("score", complete, None, "target").first().KS
     grouped_rows = ks_ntile(
         "score",

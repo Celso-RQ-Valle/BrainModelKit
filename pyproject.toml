@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "brainmodelkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "A toolkit for model development, evaluation, and analysis."
 readme = "README.md"
 requires-python = ">=3.10"

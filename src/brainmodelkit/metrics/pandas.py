@@ -33,17 +33,36 @@ def calculate_ks(y_true: pd.Series, y_pred: pd.Series) -> float:
 
 
 def ks(
-    score_column: str,
-    dataframe: pd.DataFrame,
-    group_columns: str | Sequence[str] | None,
-    target: str,
+    score_column: str = "score",
+    dataframe: pd.DataFrame | None = None,
+    group_columns: str | Sequence[str] | None = None,
+    target: str = "target",
 ) -> pd.DataFrame:
-    """Calculate exact KS overall or independently for each Pandas group."""
+    """Calculate exact KS overall or independently for each Pandas group.
+
+    Pass your data as ``ks(dataframe=df)``. Column names default to ``score``
+    and ``target``; ``group_columns=None`` calculates one overall result.
+    Supply a column name or sequence of names for per-group results.
+    The result contains ``KS`` (between 0 and 1) and any group columns.
+    Missing pairs are ignored; KS is NaN when either binary class is absent.
+    Existing positional calls remain supported.
+    """
+    if dataframe is None:
+        raise ValueError("dataframe is required; use ks(dataframe=df)")
+    groups = (
+        [group_columns] if isinstance(group_columns, str) else list(group_columns or [])
+    )
+    missing = [
+        name
+        for name in [score_column, target, *groups]
+        if name not in dataframe.columns
+    ]
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
     if not group_columns:
         value = calculate_ks(dataframe[target], dataframe[score_column])
         return pd.DataFrame({"KS": [value]})
 
-    groups = [group_columns] if isinstance(group_columns, str) else list(group_columns)
     records = []
     for key, group in dataframe.groupby(groups, dropna=False, sort=False):
         keys = key if isinstance(key, tuple) else (key,)
