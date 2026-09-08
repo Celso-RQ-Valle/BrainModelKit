@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import pandas as pd
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, roc_curve
 
 
 def calculate_ks(y_true: pd.Series, y_pred: pd.Series) -> float:
@@ -100,7 +100,7 @@ def _calculate_auc_gini(y_true: pd.Series, y_score: pd.Series) -> tuple[float, f
     return auc, _calculate_gini(auc)
 
 
-def roc_auc_gini(
+def auc_gini(
     score_column: str = "score",
     df: pd.DataFrame | None = None,
     group_by: str | list[str] | None = None,
@@ -113,7 +113,7 @@ def roc_auc_gini(
     score_column:
         Score column, default ``score``. Higher scores indicate the positive class.
     df:
-        Input DataFrame; supply your data with ``roc_auc_gini(df=df)``.
+        Input DataFrame; supply your data with ``auc_gini(df=df)``.
     group_by:
         Group column or nonempty list of columns. None calculates overall metrics.
         Missing group keys are retained; unobserved categorical groups are omitted.
@@ -138,8 +138,8 @@ def roc_auc_gini(
 
     Examples
     --------
-    >>> roc_auc_gini(df=df, target_column="default_flag")  # doctest: +SKIP
-    >>> roc_auc_gini(df=df, group_by="segment")  # doctest: +SKIP
+    >>> auc_gini(df=df, target_column="default_flag")  # doctest: +SKIP
+    >>> auc_gini(df=df, group_by="segment")  # doctest: +SKIP
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
@@ -183,8 +183,121 @@ def roc_auc_gini(
     return pd.DataFrame.from_records(records, columns=[*group_columns, "auc", "gini"])
 
 
+def curve_roc(
+    score_column: str = "score",
+    df: pd.DataFrame | None = None,
+    target_column: str = "target",
+) -> pd.DataFrame:
+    """Return exact ROC points as a DataFrame for plotting.
+
+    Use ``curve_roc(df=df)`` with numeric ``score`` and binary 0/1 ``target``
+    columns. Higher scores indicate class 1. Null/NaN pairs are removed.
+    Returns ``fpr``, ``tpr``, and ``threshold`` in descending threshold order,
+    including the origin and endpoint. The origin threshold is infinity.
+    Empty or single-class data return an empty DataFrame with these columns.
+    Filter your DataFrame first to plot a particular group.
+    Invalid DataFrames, missing columns, and nonbinary targets raise errors.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("`df` must be a pandas DataFrame.")
+    missing = sorted({score_column, target_column}.difference(df.columns))
+    if missing:
+        raise KeyError("Missing required column(s): " + ", ".join(missing))
+    target = df[target_column].dropna()
+    if not target.isin([0, 1]).all():
+        raise ValueError(f"`{target_column}` must contain only binary values 0 and 1.")
+    data = df[[score_column, target_column]].dropna()
+    if data.empty or data[target_column].nunique() < 2:
+        return pd.DataFrame(
+            {name: pd.Series(dtype=float) for name in ["fpr", "tpr", "threshold"]}
+        )
+    fpr, tpr, thresholds = roc_curve(
+        data[target_column], data[score_column], pos_label=1, drop_intermediate=False
+    )
+    thresholds = thresholds.astype(float)
+    thresholds[0] = float("inf")
+    return pd.DataFrame({"fpr": fpr, "tpr": tpr, "threshold": thresholds})
+
+
+def risk_table(
+    score_column: str = "score",
+    df: pd.DataFrame | None = None,
+    target_column: str = "target",
+    n_tiles: int = 10,
+    *,
+    ascending: bool = False,
+) -> pd.DataFrame:
+    """Summarize risk in approximately equal-volume score tiles.
+
+    Use ``risk_table(df=df, n_tiles=10)``. Tile 1 contains the highest scores;
+    set ``ascending=True`` when lower scores indicate greater risk.
+    Targets must be numeric 0/1. Null/NaN score-target pairs are excluded.
+    Scores must be finite numeric values. No input data is modified.
+
+    Returns ``n_tile``, ``minimum_range``, ``maximum_range``, ``total_volume``,
+    ``total_events``, ``total_non_events``, and ``event_rate`` (events / volume).
+    Bounds are inclusive observed score minima/maxima, not reusable cutoffs:
+    tied scores may span tiles. Pandas retains input order within ties.
+    Remainder rows go to earlier tiles, matching Spark ntile sizes.
+    Only occupied tiles are returned; empty data produce an empty table.
+    Filter the input first to summarize a particular segment.
+    This function does not calculate KS, AUC, or ROC curves.
+    """
+    from ._risk import RISK_COLUMNS, validate_risk_options
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("`df` must be a pandas DataFrame.")
+    validate_risk_options(
+        list(df.columns), score_column, target_column, n_tiles, ascending
+    )
+    if not pd.api.types.is_numeric_dtype(
+        df[score_column]
+    ) or pd.api.types.is_complex_dtype(df[score_column]):
+        raise TypeError("Scores must be real numeric values.")
+    if not df[target_column].dropna().isin([0, 1]).all():
+        raise ValueError(f"`{target_column}` must contain only binary values 0 and 1.")
+    if df[score_column].isin([float("inf"), float("-inf")]).any():
+        raise ValueError("Scores must be finite.")
+    data = pd.DataFrame(
+        {"_score": df[score_column], "_target": df[target_column]}
+    ).dropna()
+    data = data.sort_values("_score", ascending=ascending, kind="stable").copy()
+    if data.empty:
+        return pd.DataFrame(
+            {
+                name: pd.Series(
+                    dtype="float64"
+                    if name in {"minimum_range", "maximum_range", "event_rate"}
+                    else "int64"
+                )
+                for name in RISK_COLUMNS
+            }
+        )
+    base, extra = divmod(len(data), n_tiles)
+    data["_tile"] = [
+        tile
+        for tile in range(1, min(n_tiles, len(data)) + 1)
+        for _ in range(base + (tile <= extra))
+    ]
+    data["_target"] = data["_target"].astype("int64")
+    result = (
+        data.groupby("_tile", sort=True)
+        .agg(
+            minimum_range=("_score", "min"),
+            maximum_range=("_score", "max"),
+            total_volume=("_target", "size"),
+            total_events=("_target", "sum"),
+        )
+        .rename_axis("n_tile")
+        .reset_index()
+    )
+    result["total_non_events"] = result["total_volume"] - result["total_events"]
+    result["event_rate"] = result["total_events"] / result["total_volume"]
+    return result[list(RISK_COLUMNS)]
+
+
 # Compatibility name for existing notebooks.
-auc_gini = roc_auc_gini
+roc_auc_gini = auc_gini
 
 
-__all__ = ["auc_gini", "calculate_ks", "ks", "roc_auc_gini"]
+__all__ = ["auc_gini", "calculate_ks", "curve_roc", "ks", "risk_table", "roc_auc_gini"]

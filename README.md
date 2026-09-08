@@ -148,10 +148,10 @@ Existing positional calls continue to work.
 #### ROC AUC and Gini
 
 ```python
-from brainmodelkit.metrics.pyspark import roc_auc_gini
+from brainmodelkit.metrics.pyspark import auc_gini
 
-overall = roc_auc_gini(df=spark_df, n_tiles=10)
-by_segment = roc_auc_gini(df=spark_df, group_by="segment", n_tiles=10)
+overall = auc_gini(df=spark_df, n_tiles=10)
+by_segment = auc_gini(df=spark_df, group_by="segment", n_tiles=10)
 overall.show()
 ```
 
@@ -168,7 +168,79 @@ Overall ranking uses an unpartitioned window. Grouped calculations collect
 distinct group keys and compute each group separately, so use a modest number
 of groups. The function runs Spark jobs immediately without collecting input rows.
 
+#### Plot a ROC curve
+
+Install plotting dependencies with `python -m pip install pandas matplotlib`.
+`curve_roc` returns a Spark DataFrame containing `tile`, `fpr` (false-positive
+rate), and `tpr` (true-positive rate), including the origin at tile 0.
+
+```python
+import matplotlib.pyplot as plt
+from brainmodelkit.metrics.pyspark import curve_roc
+
+roc_df = curve_roc(df=spark_df, n_tiles=10)
+points = roc_df.orderBy("tile").toPandas()
+plt.plot(points["fpr"], points["tpr"], label="ROC")
+plt.plot([0, 1], [0, 1], "--", label="Random classifier")
+plt.xlabel("False-positive rate")
+plt.ylabel("True-positive rate")
+plt.legend()
+plt.show()
+```
+
+Only the curve points (at most `n_tiles + 1`) are converted to Pandas.
+This uses the same tile approximation as `auc_gini`. For a segment, pass
+`df=spark_df.filter("segment = 'A'")`. Empty or single-class data return an
+empty curve. Use `score_column` and `target_column` for custom column names.
+
+#### Risk sorting table
+
+```python
+from brainmodelkit.metrics.pyspark import risk_table
+
+table = risk_table(df=spark_df, n_tiles=10)
+table.show(truncate=False)
+
+# Custom columns; use ascending=True when lower scores mean greater risk.
+table = risk_table(
+    df=spark_df,
+    score_column="score",
+    target_column="target",
+    n_tiles=10,
+    ascending=True,
+)
+```
+
+The returned Spark DataFrame has one row per occupied tile, ordered by `n_tile`:
+
+| Column | Meaning |
+| --- | --- |
+| `n_tile` | Tile number, starting at 1 |
+| `minimum_range` | Lowest observed score in the tile (inclusive) |
+| `maximum_range` | Highest observed score in the tile (inclusive) |
+| `total_volume` | Number of rows with a valid score/target pair |
+| `total_events` | Number of rows with target 1 |
+| `total_non_events` | Number of rows with target 0 |
+| `event_rate` | `total_events / total_volume`, between 0 and 1 |
+
+Tile 1 contains the highest scores by default (`ascending=False`). Use
+`ascending=True` if lower scores indicate greater risk. Tiles have nearly equal
+row counts; extra rows go to earlier tiles. If fewer rows than `n_tiles` remain,
+only occupied tiles are returned. `n_tiles=1` summarizes the entire input.
+Null/NaN pairs are excluded, targets must be 0 or 1, and scores must be finite
+numeric values. Empty input returns an empty table; single-class tiles have
+an event rate of 0 or 1.
+
+Ranges describe observed values, not reusable cutoff rules. Equal scores can
+span tiles, so adjacent ranges may overlap. Spark ordering within tied scores
+is unspecified, which can affect per-tile event counts. Filter `spark_df` first
+to summarize a segment. Spark reuses score preparation and tiling; the table
+uses an unpartitioned ranking window without collecting input rows. Calling
+`risk_table` does not calculate KS, AUC, or ROC; calling KS does not build this table.
+
 ### Pandas
+
+Install `matplotlib` separately for plotting (`python -m pip install matplotlib`).
 
 Install `BrainModelKit[pandas]` to include Pandas and scikit-learn.
 Create a sample DataFrame for the examples below:
@@ -208,10 +280,10 @@ Existing positional calls continue to work. The lower-level
 #### ROC AUC and Gini
 
 ```python
-from brainmodelkit.metrics.pandas import roc_auc_gini
+from brainmodelkit.metrics.pandas import auc_gini
 
-overall = roc_auc_gini(df=df)
-by_segment = roc_auc_gini(df=df, group_by="segment")
+overall = auc_gini(df=df)
+by_segment = auc_gini(df=df, group_by="segment")
 print(overall)  # auc = 1.0, gini = 1.0
 ```
 
@@ -221,6 +293,57 @@ Use `score_column` and `target_column` for custom column names, and a list for
 multiple grouping columns. Higher scores must indicate the positive class.
 Missing target/score pairs are dropped; empty data or single-class groups
 produce NaN. Gini is `2 * auc - 1`.
+
+#### Plot a ROC curve
+
+```python
+import matplotlib.pyplot as plt
+from brainmodelkit.metrics.pandas import curve_roc
+
+roc_df = curve_roc(df=df)
+plt.plot(roc_df["fpr"], roc_df["tpr"], label="ROC")
+plt.plot([0, 1], [0, 1], "--", label="Random classifier")
+plt.xlabel("False-positive rate")
+plt.ylabel("True-positive rate")
+plt.legend()
+plt.show()
+```
+
+The returned Pandas DataFrame contains `fpr`, `tpr`, and `threshold`, in curve
+order, including (0, 0) and (1, 1). The initial threshold is infinity.
+Targets must be 0 or 1; null/NaN pairs are removed. Empty or single-class data
+return an empty curve. For a segment, use `curve_roc(df=df[df["segment"] == "A"])`.
+Use `score_column` and `target_column` for custom column names. Pandas computes
+an exact curve; it does not use `n_tiles`. Plot each segment separately.
+
+#### Risk sorting table
+
+```python
+from brainmodelkit.metrics.pandas import risk_table
+
+table = risk_table(df=df, n_tiles=10)
+print(table)
+
+# Example with three tiles and ten observations.
+example = pd.DataFrame({"score": range(1, 11), "target": [0] * 5 + [1] * 5})
+print(risk_table(df=example, n_tiles=3))
+```
+
+| n_tile | minimum_range | maximum_range | total_volume | total_events | total_non_events | event_rate |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 7 | 10 | 4 | 4 | 0 | 1.0 |
+| 2 | 4 | 6 | 3 | 1 | 2 | 0.333333 |
+| 3 | 1 | 3 | 3 | 0 | 3 | 0.0 |
+
+The Pandas table uses the same columns, defaults, and tile sizes as Spark.
+Set `score_column` and `target_column` for custom names, and `ascending=True`
+when lower scores mean greater risk. Null/NaN pairs are excluded; targets must
+be 0 or 1 and scores must be finite numeric values. Only occupied tiles are
+returned, and empty data produce an empty table. The input DataFrame is unchanged.
+Pandas preserves input order within tied scores. Ties may span tiles, so the
+inclusive score ranges can overlap and tied results may differ from Spark.
+For a segment, pass `df=df[df["segment"] == "A"]`. This function computes only
+the requested risk summary, independently of KS, AUC, and ROC.
 
 ## Development
 

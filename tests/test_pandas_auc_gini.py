@@ -3,7 +3,32 @@
 import pandas as pd
 import pytest
 
-from brainmodelkit.metrics.pandas import roc_auc_gini
+from brainmodelkit.metrics.pandas import auc_gini, curve_roc
+
+
+def test_curve_roc_matches_auc_and_handles_ties() -> None:
+    df = pd.DataFrame({"score": [3, 2, 2, 1], "target": [1, 1, 0, 0]})
+    points = curve_roc(df=df)
+    assert points["fpr"].tolist() == [0, 0, 0.5, 1]
+    assert points["tpr"].tolist() == [0, 0.5, 1, 1]
+    assert points["threshold"].tolist() == [float("inf"), 3, 2, 1]
+    area = (points.fpr.diff() * (points.tpr + points.tpr.shift()) / 2).sum()
+    assert area == pytest.approx(auc_gini(df=df).iloc[0]["auc"])
+
+
+def test_curve_roc_missing_and_invalid_data() -> None:
+    df = pd.DataFrame({"prediction": [0.9, 0.1, None], "label": [1, 0, 1]})
+    assert len(curve_roc("prediction", df, "label")) == 3
+    for data in [df.iloc[:0], df.iloc[:1]]:
+        result = curve_roc("prediction", data, "label")
+        assert result.empty
+        assert list(result.columns) == ["fpr", "tpr", "threshold"]
+    with pytest.raises(TypeError):
+        curve_roc()
+    with pytest.raises(KeyError):
+        curve_roc(df=df)
+    with pytest.raises(ValueError, match="binary"):
+        curve_roc(df=pd.DataFrame({"score": [1, 2], "target": [0, 2]}))
 
 
 @pytest.mark.parametrize(
@@ -16,7 +41,7 @@ from brainmodelkit.metrics.pandas import roc_auc_gini
     ],
 )
 def test_overall_defaults(scores: list[float], expected: float) -> None:
-    result = roc_auc_gini(df=pd.DataFrame({"target": [1, 1, 0, 0], "score": scores}))
+    result = auc_gini(df=pd.DataFrame({"target": [1, 1, 0, 0], "score": scores}))
     assert list(result.columns) == ["auc", "gini"]
     assert result.iloc[0].to_dict() == pytest.approx(
         {"auc": expected, "gini": 2 * expected - 1}
@@ -25,13 +50,13 @@ def test_overall_defaults(scores: list[float], expected: float) -> None:
 
 def test_custom_columns_and_pairwise_missing_values() -> None:
     df = pd.DataFrame({"label": [1, 0, None, 1], "prediction": [0.9, 0.1, 1, None]})
-    result = roc_auc_gini("prediction", df, target_column="label")
+    result = auc_gini("prediction", df, target_column="label")
     assert result.iloc[0].to_dict() == {"auc": 1.0, "gini": 1.0}
 
 
 @pytest.mark.parametrize("targets", [[], [1, 1], [None, None]])
 def test_undefined_metrics(targets: list) -> None:
-    result = roc_auc_gini(
+    result = auc_gini(
         df=pd.DataFrame({"target": targets, "score": [0.5] * len(targets)})
     )
     assert result.shape == (1, 2)
@@ -48,7 +73,7 @@ def test_grouped_metrics_preserve_missing_keys(group_by: str | list[str]) -> Non
             "score": [0.9, 0.1, 0.8, 0.1, 0.9],
         }
     )
-    result = roc_auc_gini(df=df, group_by=group_by)
+    result = auc_gini(df=df, group_by=group_by)
     assert len(result) == 3
     assert result.iloc[0]["segment"] == "B"
     assert result.iloc[0]["auc"] == 1.0
@@ -59,7 +84,7 @@ def test_grouped_metrics_preserve_missing_keys(group_by: str | list[str]) -> Non
 
 def test_empty_grouped_result_has_expected_columns() -> None:
     df = pd.DataFrame(columns=["segment", "score", "target"])
-    result = roc_auc_gini(df=df, group_by="segment")
+    result = auc_gini(df=df, group_by="segment")
     assert result.empty
     assert list(result.columns) == ["segment", "auc", "gini"]
 
@@ -72,7 +97,7 @@ def test_categorical_groups_only_include_observed_values() -> None:
             "target": [1, 0],
         }
     )
-    assert roc_auc_gini(df=df, group_by="segment")["segment"].tolist() == ["A"]
+    assert auc_gini(df=df, group_by="segment")["segment"].tolist() == ["A"]
 
 
 @pytest.mark.parametrize(
@@ -80,16 +105,16 @@ def test_categorical_groups_only_include_observed_values() -> None:
 )
 def test_invalid_grouping(group_by: object) -> None:
     with pytest.raises(ValueError):
-        roc_auc_gini(df=pd.DataFrame(), group_by=group_by)
+        auc_gini(df=pd.DataFrame(), group_by=group_by)
 
 
 def test_invalid_dataframe_and_missing_columns() -> None:
     with pytest.raises(TypeError, match="pandas DataFrame"):
-        roc_auc_gini()
+        auc_gini()
     with pytest.raises(KeyError, match="target"):
-        roc_auc_gini(df=pd.DataFrame({"score": [0.5]}))
+        auc_gini(df=pd.DataFrame({"score": [0.5]}))
 
 
 def test_invalid_multiclass_target_raises() -> None:
     with pytest.raises(ValueError):
-        roc_auc_gini(df=pd.DataFrame({"score": [0.1, 0.5, 0.9], "target": [0, 1, 2]}))
+        auc_gini(df=pd.DataFrame({"score": [0.1, 0.5, 0.9], "target": [0, 1, 2]}))

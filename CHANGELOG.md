@@ -9,11 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Renamed the public AUC/Gini metric to `roc_auc_gini` in both integrations;
-  `auc_gini` remains a compatibility alias.
+- Restored `auc_gini` as the primary name; `roc_auc_gini` remains an alias.
 - README Spark examples explicitly show the default `n_tiles=10`.
 
 ### Added
+
+- Pandas and Spark `risk_table` with score ranges, volume, event counts, and rates.
+
+- Pandas and Spark `curve_roc` DataFrames with README plotting examples.
 
 - Spark `roc_auc_gini` metrics with configurable score tiles and optional grouping.
 - Pandas `roc_auc_gini` metrics with default column names and optional grouping.

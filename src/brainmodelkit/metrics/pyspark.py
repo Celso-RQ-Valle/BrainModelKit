@@ -157,13 +157,18 @@ def _prepare_auc_data(
     )
 
 
-def _create_score_tiles(df: DataFrame, n_tiles: int) -> DataFrame:
+def _create_score_tiles(
+    df: DataFrame, n_tiles: int, *, ascending: bool = False
+) -> DataFrame:
     """Assign descending score quantile tiles."""
     from pyspark.sql import Window
     from pyspark.sql import functions as F
 
     return df.withColumn(
-        "_tile", F.ntile(n_tiles).over(Window.orderBy(F.desc("_score")))
+        "_tile",
+        F.ntile(n_tiles).over(
+            Window.orderBy(F.asc("_score") if ascending else F.desc("_score"))
+        ),
     )
 
 
@@ -257,7 +262,7 @@ def _calculate_auc_gini(
     return auc, _calculate_gini(auc)
 
 
-def roc_auc_gini(
+def auc_gini(
     score_column: str = "score",
     df: DataFrame | None = None,
     group_by: str | list[str] | None = None,
@@ -271,7 +276,7 @@ def roc_auc_gini(
     score_column:
         Numeric score column, default ``score``. Higher scores indicate class 1.
     df:
-        Input Spark DataFrame. Use ``roc_auc_gini(df=df)`` for the default columns.
+        Input Spark DataFrame. Use ``auc_gini(df=df)`` for the default columns.
     group_by:
         Group column or nonempty list of columns; None means overall metrics.
     target_column:
@@ -372,8 +377,127 @@ def roc_auc_gini(
     return df.sparkSession.createDataFrame(results, StructType(schema + metric_fields))
 
 
+def curve_roc(
+    score_column: str = "score",
+    df: DataFrame | None = None,
+    target_column: str = "target",
+    n_tiles: int = 10,
+) -> DataFrame:
+    """Return tile-based ROC points as a Spark DataFrame for plotting.
+
+    Defaults to numeric ``score``, binary 0/1 ``target``, and 10 tiles.
+    Returns ``tile``, ``fpr``, and ``tpr``, with tile 0 representing (0, 0).
+    Sort by ``tile`` before plotting. At most ``n_tiles + 1`` rows are returned.
+    Null/NaN pairs are removed; empty or single-class data return no points.
+    Filter the input first for a particular group. Uses the same approximation
+    as ``auc_gini``: ties can span tiles and their ordering affects results.
+    Overall ranking uses an unpartitioned window. No input rows are collected.
+    Invalid inputs raise TypeError, KeyError, or ValueError.
+    """
+    try:
+        from pyspark.sql import DataFrame
+        from pyspark.sql import functions as F
+    except ImportError as error:
+        raise ImportError(
+            "PySpark is required. Install it with "
+            "`pip install 'BrainModelKit[pyspark]'`."
+        ) from error
+    if not isinstance(df, DataFrame):
+        raise TypeError("`df` must be a PySpark DataFrame.")
+    if not isinstance(n_tiles, int) or isinstance(n_tiles, bool):
+        raise TypeError("`n_tiles` must be an integer.")
+    if n_tiles < 2:
+        raise ValueError("`n_tiles` must be greater than or equal to 2.")
+    missing = sorted({score_column, target_column}.difference(df.columns))
+    if missing:
+        raise KeyError("Missing required column(s): " + ", ".join(missing))
+    _validate_binary_target(df, target_column)
+    prepared = _prepare_auc_data(df, score_column, target_column)
+    roc = _calculate_roc_curve(
+        _aggregate_roc_tiles(_create_score_tiles(prepared, n_tiles))
+    )
+    points = roc.filter(
+        (F.col("_total_positive") > 0) & (F.col("_total_negative") > 0)
+    ).select(
+        F.col("_tile").alias("tile"),
+        F.col("_fpr").alias("fpr"),
+        F.col("_tpr").alias("tpr"),
+    )
+    origin = points.limit(1).select(
+        F.lit(0).alias("tile"), F.lit(0.0).alias("fpr"), F.lit(0.0).alias("tpr")
+    )
+    return origin.unionByName(points).orderBy("tile")
+
+
+def risk_table(
+    score_column: str = "score",
+    df: DataFrame | None = None,
+    target_column: str = "target",
+    n_tiles: int = 10,
+    *,
+    ascending: bool = False,
+) -> DataFrame:
+    """Return a Spark risk table with approximately equal-volume score tiles.
+
+    Defaults to ``score``, binary 0/1 ``target``, and 10 tiles. Tile 1 contains
+    the highest scores; use ``ascending=True`` for scores where lower is riskier.
+    Null/NaN pairs are excluded; scores must be finite numeric values.
+    Returns ``n_tile``, ``minimum_range``, ``maximum_range``, ``total_volume``,
+    ``total_events``, ``total_non_events``, and ``event_rate`` (events / volume).
+    Bounds are inclusive observed minima/maxima, not reusable cutoff rules.
+    Ties may span tiles and Spark tie ordering is unspecified. Remainder rows
+    go to earlier tiles; only occupied tiles are returned. Empty inputs yield
+    an empty table. Filter input first for a particular segment.
+
+    Reuses score preparation and tiling, without computing KS/AUC/ROC.
+    Validation executes Spark jobs; aggregation remains distributed and no
+    input observations are collected. Ranking uses an unpartitioned window.
+    Sort by ``n_tile`` after further transformations when displaying results.
+    """
+    from ._risk import RISK_COLUMNS, validate_risk_options
+
+    try:
+        from pyspark.sql import DataFrame
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import BooleanType, NumericType
+    except ImportError as error:
+        raise ImportError(
+            "PySpark is required. Install `BrainModelKit[pyspark]`."
+        ) from error
+    if not isinstance(df, DataFrame):
+        raise TypeError("`df` must be a PySpark DataFrame.")
+    validate_risk_options(df.columns, score_column, target_column, n_tiles, ascending)
+    if not isinstance(df.schema[score_column].dataType, NumericType):
+        raise TypeError("Scores must be real numeric values.")
+    if not isinstance(df.schema[target_column].dataType, (NumericType, BooleanType)):
+        raise TypeError("Targets must be numeric binary values.")
+    _validate_binary_target(df, target_column)
+    if df.filter(df[score_column].isin(float("inf"), float("-inf"))).limit(1).count():
+        raise ValueError("Scores must be finite.")
+    prepared = _prepare_auc_data(df, score_column, target_column)
+    tiled = _create_score_tiles(prepared, n_tiles, ascending=ascending)
+    result = (
+        tiled.groupBy("_tile")
+        .agg(
+            F.min("_score").alias("minimum_range"),
+            F.max("_score").alias("maximum_range"),
+            F.count("_target").alias("total_volume"),
+            F.sum(F.col("_target").cast("long")).alias("total_events"),
+        )
+        .withColumnRenamed("_tile", "n_tile")
+    )
+    return (
+        result.withColumn(
+            "total_non_events", F.col("total_volume") - F.col("total_events")
+        )
+        .withColumn("event_rate", F.col("total_events") / F.col("total_volume"))
+        .select(*RISK_COLUMNS)
+        .orderBy("n_tile")
+    )
+
+
 # Compatibility name for existing notebooks.
-auc_gini = roc_auc_gini
+roc_auc_gini = auc_gini
 
 
-__all__ = ["auc_gini", "ks_ntile", "roc_auc_gini"]
+__all__ = ["auc_gini", "curve_roc", "ks_ntile", "risk_table", "roc_auc_gini"]
