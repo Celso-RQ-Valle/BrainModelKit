@@ -127,7 +127,7 @@ The default is 10 tiles; no Pandas conversion or Python UDF is used:
 ```python
 from brainmodelkit.metrics.pyspark import ks_ntile
 
-overall_ks = ks_ntile(dataframe=spark_df)
+overall_ks = ks_ntile(dataframe=spark_df, n_tiles=10)
 segment_ks = ks_ntile(
     dataframe=spark_df,
     group_columns="segment",
@@ -148,10 +148,10 @@ Existing positional calls continue to work.
 #### ROC AUC and Gini
 
 ```python
-from brainmodelkit.metrics.pyspark import auc_gini
+from brainmodelkit.metrics.pyspark import roc_auc_gini
 
-overall = auc_gini(df=spark_df)
-by_segment = auc_gini(df=spark_df, group_by="segment", n_tiles=100)
+overall = roc_auc_gini(df=spark_df, n_tiles=10)
+by_segment = roc_auc_gini(df=spark_df, group_by="segment", n_tiles=10)
 overall.show()
 ```
 
@@ -208,10 +208,10 @@ Existing positional calls continue to work. The lower-level
 #### ROC AUC and Gini
 
 ```python
-from brainmodelkit.metrics.pandas import auc_gini
+from brainmodelkit.metrics.pandas import roc_auc_gini
 
-overall = auc_gini(df=df)
-by_segment = auc_gini(df=df, group_by="segment")
+overall = roc_auc_gini(df=df)
+by_segment = roc_auc_gini(df=df, group_by="segment")
 print(overall)  # auc = 1.0, gini = 1.0
 ```
 

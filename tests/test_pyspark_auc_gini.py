@@ -8,7 +8,7 @@ from collections.abc import Iterator
 import pytest
 from pyspark.sql import SparkSession
 
-from brainmodelkit.metrics.pyspark import auc_gini
+from brainmodelkit.metrics.pyspark import roc_auc_gini
 
 
 @pytest.fixture(scope="module")
@@ -40,7 +40,7 @@ def test_overall_auc(
     df = spark_session.createDataFrame(
         list(zip(scores, [1, 1, 0, 0], strict=True)), "score double, target int"
     )
-    result = auc_gini(df=df, n_tiles=tiles).first()
+    result = roc_auc_gini(df=df, n_tiles=tiles).first()
     assert result.asDict() == pytest.approx({"auc": expected, "gini": 2 * expected - 1})
 
 
@@ -56,14 +56,14 @@ def test_missing_pairs_and_custom_columns(spark_session: SparkSession) -> None:
         ],
         "prediction double, label double",
     )
-    result = auc_gini("prediction", df, target_column="label").first()
+    result = roc_auc_gini("prediction", df, target_column="label").first()
     assert result.asDict() == {"auc": 1.0, "gini": 1.0}
 
 
 @pytest.mark.parametrize("rows", [[], [(0.9, 1.0)], [(None, None)]])
 def test_undefined_auc(spark_session: SparkSession, rows: list) -> None:
     df = spark_session.createDataFrame(rows, "score double, target double")
-    result = auc_gini(df=df).first()
+    result = roc_auc_gini(df=df).first()
     assert math.isnan(result.auc)
     assert math.isnan(result.gini)
 
@@ -81,7 +81,7 @@ def test_grouped_auc(spark_session: SparkSession, group_by: str | list[str]) -> 
         ],
         "segment string, region int, score double, target int",
     )
-    result = auc_gini(df=df, group_by=group_by)
+    result = roc_auc_gini(df=df, group_by=group_by)
     rows = {row.segment: row for row in result.collect()}
     assert rows["A"].auc == 1.0
     assert rows[None].gini == -1.0
@@ -92,25 +92,25 @@ def test_grouped_auc(spark_session: SparkSession, group_by: str | list[str]) -> 
 
 def test_empty_grouped_schema(spark_session: SparkSession) -> None:
     df = spark_session.createDataFrame([], "segment string, score double, target int")
-    result = auc_gini(df=df, group_by="segment")
+    result = roc_auc_gini(df=df, group_by="segment")
     assert result.columns == ["segment", "auc", "gini"]
     assert result.count() == 0
 
 
 def test_input_validation(spark_session: SparkSession) -> None:
     with pytest.raises(TypeError, match="PySpark DataFrame"):
-        auc_gini()
+        roc_auc_gini()
     df = spark_session.createDataFrame([(0.9, 1)], "score double, target int")
     for tiles in [True, 2.5, "10"]:
         with pytest.raises(TypeError, match="integer"):
-            auc_gini(df=df, n_tiles=tiles)
+            roc_auc_gini(df=df, n_tiles=tiles)
     with pytest.raises(ValueError, match="greater than or equal"):
-        auc_gini(df=df, n_tiles=1)
+        roc_auc_gini(df=df, n_tiles=1)
     for group in [[], 1, [1], ("score",), ["score", "score"], "auc"]:
         with pytest.raises(ValueError):
-            auc_gini(df=df, group_by=group)
+            roc_auc_gini(df=df, group_by=group)
     with pytest.raises(KeyError, match="missing"):
-        auc_gini(df=df, target_column="missing")
+        roc_auc_gini(df=df, target_column="missing")
     invalid = spark_session.createDataFrame([(0.9, 2)], "score double, target int")
     with pytest.raises(ValueError, match="binary"):
-        auc_gini(df=invalid)
+        roc_auc_gini(df=invalid)

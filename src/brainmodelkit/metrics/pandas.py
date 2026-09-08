@@ -100,7 +100,7 @@ def _calculate_auc_gini(y_true: pd.Series, y_score: pd.Series) -> tuple[float, f
     return auc, _calculate_gini(auc)
 
 
-def auc_gini(
+def roc_auc_gini(
     score_column: str = "score",
     df: pd.DataFrame | None = None,
     group_by: str | list[str] | None = None,
@@ -113,7 +113,7 @@ def auc_gini(
     score_column:
         Score column, default ``score``. Higher scores indicate the positive class.
     df:
-        Input DataFrame; supply your data with ``auc_gini(df=df)``.
+        Input DataFrame; supply your data with ``roc_auc_gini(df=df)``.
     group_by:
         Group column or nonempty list of columns. None calculates overall metrics.
         Missing group keys are retained; unobserved categorical groups are omitted.
@@ -138,8 +138,8 @@ def auc_gini(
 
     Examples
     --------
-    >>> auc_gini(df=df, target_column="default_flag")  # doctest: +SKIP
-    >>> auc_gini(df=df, group_by="segment")  # doctest: +SKIP
+    >>> roc_auc_gini(df=df, target_column="default_flag")  # doctest: +SKIP
+    >>> roc_auc_gini(df=df, group_by="segment")  # doctest: +SKIP
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame.")
@@ -183,4 +183,8 @@ def auc_gini(
     return pd.DataFrame.from_records(records, columns=[*group_columns, "auc", "gini"])
 
 
-__all__ = ["auc_gini", "calculate_ks", "ks"]
+# Compatibility name for existing notebooks.
+auc_gini = roc_auc_gini
+
+
+__all__ = ["auc_gini", "calculate_ks", "ks", "roc_auc_gini"]

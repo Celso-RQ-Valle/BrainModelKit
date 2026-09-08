@@ -257,7 +257,7 @@ def _calculate_auc_gini(
     return auc, _calculate_gini(auc)
 
 
-def auc_gini(
+def roc_auc_gini(
     score_column: str = "score",
     df: DataFrame | None = None,
     group_by: str | list[str] | None = None,
@@ -271,7 +271,7 @@ def auc_gini(
     score_column:
         Numeric score column, default ``score``. Higher scores indicate class 1.
     df:
-        Input Spark DataFrame. Use ``auc_gini(df=df)`` for the default columns.
+        Input Spark DataFrame. Use ``roc_auc_gini(df=df)`` for the default columns.
     group_by:
         Group column or nonempty list of columns; None means overall metrics.
     target_column:
@@ -372,4 +372,8 @@ def auc_gini(
     return df.sparkSession.createDataFrame(results, StructType(schema + metric_fields))
 
 
-__all__ = ["auc_gini", "ks_ntile"]
+# Compatibility name for existing notebooks.
+auc_gini = roc_auc_gini
+
+
+__all__ = ["auc_gini", "ks_ntile", "roc_auc_gini"]

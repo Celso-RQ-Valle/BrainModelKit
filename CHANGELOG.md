@@ -7,10 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the public AUC/Gini metric to `roc_auc_gini` in both integrations;
+  `auc_gini` remains a compatibility alias.
+- README Spark examples explicitly show the default `n_tiles=10`.
+
 ### Added
 
-- Spark `auc_gini` metrics with configurable score tiles and optional grouping.
-- Pandas `auc_gini` metrics with default column names and optional grouping.
+- Spark `roc_auc_gini` metrics with configurable score tiles and optional grouping.
+- Pandas `roc_auc_gini` metrics with default column names and optional grouping.
 - Scikit-learn dependency in the Pandas, dataframes, and development extras.
 
 ## [0.2.0] - 2026-09-07
