@@ -54,7 +54,9 @@ Integration-specific functionality lives under explicit namespaces:
 from brainmodelkit import pandas, pyspark
 ```
 
-### Simulate credit data with PySpark
+## Simulate data
+
+### PySpark credit data
 
 In a Jupyter notebook, install the package into the active kernel and restart
 the kernel if prompted:
@@ -110,28 +112,22 @@ model_data = assembler.transform(credit_df).select(
 train_data, test_data = model_data.randomSplit([0.8, 0.2], seed=42)
 ```
 
-### Kolmogorov-Smirnov metrics
+## Metrics
 
-Calculate exact point-by-point KS with Pandas, either overall or by group:
+### Spark
 
-```python
-from brainmodelkit.metrics.pandas import ks
+Install `BrainModelKit[pyspark]`. The examples below use a Spark DataFrame
+named `spark_df` with `score`, `target`, and `segment` columns.
 
-overall_ks = ks(dataframe=pandas_df)
-segment_ks = ks(dataframe=pandas_df, group_columns="segment")
-```
+#### Kolmogorov-Smirnov (KS)
 
-For large Spark datasets, calculate an approximate KS from score tiles using
-only native Spark operations. The default is 10 tiles; no Pandas conversion or
-Python UDF is used:
+Calculate approximate KS from score tiles using native Spark operations.
+The default is 10 tiles; no Pandas conversion or Python UDF is used:
 
 ```python
 from brainmodelkit.metrics.pyspark import ks_ntile
 
-# Overall decile KS.
 overall_ks = ks_ntile(dataframe=spark_df)
-
-# KS by segment with a custom number of tiles.
 segment_ks = ks_ntile(
     dataframe=spark_df,
     group_columns="segment",
@@ -142,26 +138,89 @@ overall_ks.show()
 segment_ks.show()
 ```
 
-Both functions return a DataFrame containing an uppercase `KS` column. Grouped
-calculations also include the requested group columns. KS is `NaN` when a
-dataset or group does not contain both target classes (`0` and `1`).
+Defaults are `score_column="score"`, `target="target"`, and
+`group_columns=None`. Results contain an uppercase `KS` column and any group
+columns. KS is NaN when a dataset or group lacks either target class (0 or 1).
+For custom columns, use
+`ks_ntile(dataframe=spark_df, score_column="prediction", target="default_flag")`.
+Existing positional calls continue to work.
 
-The defaults are `score_column="score"`, `target="target"`, and
-`group_columns=None`. Supply your DataFrame using `dataframe=...`; data cannot
-be inferred. For other column names, use
-`ks(dataframe=pandas_df, score_column="prediction", target="default_flag")`.
-Existing positional calls continue to work. `calculate_ks(y_true, y_pred)`
-requires the two actual data series.
+#### ROC AUC and Gini
 
-A complete Pandas example:
+```python
+from brainmodelkit.metrics.pyspark import auc_gini
+
+overall = auc_gini(df=spark_df)
+by_segment = auc_gini(df=spark_df, group_by="segment", n_tiles=100)
+overall.show()
+```
+
+Defaults are `score_column="score"`, `target_column="target"`, and `n_tiles=10`.
+Use `score_column` and `target_column` for custom column names, and a list in
+`group_by` for multiple grouping columns. Higher scores must indicate class 1.
+Targets must be 0 or 1. Null/NaN pairs are removed, and empty or single-class
+datasets/groups return NaN. Output columns are `auc` and `gini` plus group keys.
+Gini is `2 * auc - 1`.
+
+Spark AUC uses a score-tile approximation; it can differ from exact Pandas AUC.
+Equal scores can span tiles, making results sensitive to their ordering.
+Overall ranking uses an unpartitioned window. Grouped calculations collect
+distinct group keys and compute each group separately, so use a modest number
+of groups. The function runs Spark jobs immediately without collecting input rows.
+
+### Pandas
+
+Install `BrainModelKit[pandas]` to include Pandas and scikit-learn.
+Create a sample DataFrame for the examples below:
 
 ```python
 import pandas as pd
+
+df = pd.DataFrame(
+    {
+        "score": [0.9, 0.8, 0.2, 0.1],
+        "target": [1, 1, 0, 0],
+        "segment": ["A", "B", "A", "B"],
+    }
+)
+```
+
+#### Kolmogorov-Smirnov (KS)
+
+Calculate exact point-by-point KS overall or by group:
+
+```python
 from brainmodelkit.metrics.pandas import ks
 
-df = pd.DataFrame({"score": [0.9, 0.8, 0.2, 0.1], "target": [1, 1, 0, 0]})
-print(ks(dataframe=df))  # KS = 1.0
+overall_ks = ks(dataframe=df)
+segment_ks = ks(dataframe=df, group_columns="segment")
+print(overall_ks)  # KS = 1.0
 ```
+
+Defaults are `score_column="score"`, `target="target"`, and
+`group_columns=None`. Results contain an uppercase `KS` column and any group
+columns. KS is NaN when a dataset or group lacks either target class (0 or 1).
+For custom columns, use
+`ks(dataframe=df, score_column="prediction", target="default_flag")`.
+Existing positional calls continue to work. The lower-level
+`calculate_ks(y_true, y_pred)` function accepts two actual data series.
+
+#### ROC AUC and Gini
+
+```python
+from brainmodelkit.metrics.pandas import auc_gini
+
+overall = auc_gini(df=df)
+by_segment = auc_gini(df=df, group_by="segment")
+print(overall)  # auc = 1.0, gini = 1.0
+```
+
+Defaults are `score_column="score"`, `target_column="target"`, and `group_by=None`.
+Results contain lowercase `auc` and `gini` columns, plus any grouping columns.
+Use `score_column` and `target_column` for custom column names, and a list for
+multiple grouping columns. Higher scores must indicate the positive class.
+Missing target/score pairs are dropped; empty data or single-class groups
+produce NaN. Gini is `2 * auc - 1`.
 
 ## Development
 

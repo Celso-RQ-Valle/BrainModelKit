@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Spark `auc_gini` metrics with configurable score tiles and optional grouping.
+- Pandas `auc_gini` metrics with default column names and optional grouping.
+- Scikit-learn dependency in the Pandas, dataframes, and development extras.
+
 ## [0.2.0] - 2026-09-07
 
 ### Changed
