@@ -49,14 +49,25 @@ def test_empty_and_single_class():
     assert result[["KS", "AUC", "Gini"]].isna().all().all()
 
 
+@pytest.mark.parametrize("function", [calculate_metrics, calculate_ntile])
+def test_optional_group_columns_and_named_parameters(function):
+    df = pd.DataFrame({"prediction": [0.1, 0.9], "label": [0, 1]})
+    options = {"df": df, "score_columns": "prediction", "target_column": "label"}
+    overall = function(**options)
+    for groups in [None, []]:
+        pd.testing.assert_frame_equal(
+            function(**options, group_columns=groups), overall
+        )
+
+
 @pytest.mark.parametrize(
     "options, error",
     [
-        ({"scores": []}, ValueError),
-        ({"grupos": ["segment", "segment"]}, ValueError),
-        ({"grupos": ["score"]}, ValueError),
-        ({"scores": ["missing"]}, KeyError),
-        ({"scores": 3}, TypeError),
+        ({"score_columns": []}, ValueError),
+        ({"group_columns": ["segment", "segment"]}, ValueError),
+        ({"group_columns": ["score"]}, ValueError),
+        ({"score_columns": ["missing"]}, KeyError),
+        ({"score_columns": 3}, TypeError),
     ],
 )
 def test_invalid_options(options, error):
@@ -66,7 +77,7 @@ def test_invalid_options(options, error):
 
 
 def test_spark_cube_without_pandas(monkeypatch):
-    from pyspark.sql import DataFrame, SparkSession
+    from pyspark.sql import SparkSession
 
     from brainmodelkit.cube_analysis.pyspark import calculate_metrics as spark_cube
     from brainmodelkit.cube_analysis.pyspark import calculate_ntile as spark_ntile
@@ -86,10 +97,29 @@ def test_spark_cube_without_pandas(monkeypatch):
         )
 
         def forbidden(*args, **kwargs):
-            raise AssertionError("Cube must not convert to pandas")
+            raise AssertionError("Cube must not collect rows or convert to pandas")
 
-        monkeypatch.setattr(DataFrame, "toPandas", forbidden)
-        result = spark_cube(df, "segment", ["prediction"], "label")
+        frame_class = type(df)
+        monkeypatch.setattr(frame_class, "toPandas", forbidden)
+        # Building cubes must not collect group keys or metric values.
+        # The validation action count must be independent of group count.
+        original_count = frame_class.count
+        counts = []
+
+        def counted(frame):
+            counts.append(1)
+            return original_count(frame)
+
+        with monkeypatch.context() as guard:
+            guard.setattr(frame_class, "collect", forbidden)
+            guard.setattr(frame_class, "count", counted)
+            result = spark_cube(
+                df=df,
+                group_columns="segment",
+                score_columns=["prediction"],
+                target_column="label",
+            )
+        assert len(counts) == 1
         assert result.columns == ["segment", "KS", "AUC", "Gini", "score"]
         rows = {row.segment: row for row in result.collect()}
         assert set(rows) == {"Geral", None, "missing"}
@@ -100,7 +130,18 @@ def test_spark_cube_without_pandas(monkeypatch):
         empty = spark_cube(df.limit(0), "segment", "prediction", "label").collect()
         assert len(empty) == 1
         assert math.isnan(empty[0].KS)
-        tiles = spark_ntile(df, "segment", "prediction", "label", n_tiles=1)
+        counts.clear()
+        with monkeypatch.context() as guard:
+            guard.setattr(frame_class, "collect", forbidden)
+            guard.setattr(frame_class, "count", counted)
+            tiles = spark_ntile(
+                df=df,
+                group_columns="segment",
+                score_columns="prediction",
+                target_column="label",
+                n_tiles=1,
+            )
+        assert len(counts) == 2
         tile_rows = {row.segment: row for row in tiles.collect()}
         assert set(tile_rows) == {"Geral", None}
         for row in tile_rows.values():
@@ -112,12 +153,60 @@ def test_spark_cube_without_pandas(monkeypatch):
         assert spark_ntile(df.limit(0), "segment", "prediction", "label").count() == 0
         ascending = (
             spark_ntile(
-                df, scores="prediction", target="label", n_tiles=2, ascending=True
+                df,
+                score_columns="prediction",
+                target_column="label",
+                n_tiles=2,
+                ascending=True,
             )
             .orderBy("n_tile")
             .collect()
         )
         assert [row.total_events for row in ascending] == [0, 1]
+
+        # Compare tile approximation with existing metrics, including NaN
+        # scores (KS intentionally retains its existing handling of NaN).
+        from brainmodelkit.metrics.pyspark import auc_gini, ks_ntile
+
+        difficult = spark.createDataFrame(
+            [
+                (0.9, 1, "A"),
+                (0.7, 0, "A"),
+                (0.5, 1, "A"),
+                (0.2, 0, "A"),
+                (float("nan"), 0, "A"),
+                (0.8, 1, None),
+                (None, 0, "empty"),
+            ],
+            "score double, target int, segment string",
+        )
+        actual = spark_cube(difficult, "segment", n_tiles=2).collect()
+        for subset in [None, "segment"]:
+            expected_auc = auc_gini(df=difficult, group_by=subset, n_tiles=2).collect()
+            expected_ks = ks_ntile(
+                dataframe=difficult, group_columns=subset, n_tiles=2
+            ).collect()
+            ks_by_key = {r.segment if subset else "Geral": r.KS for r in expected_ks}
+            for row in expected_auc:
+                key = row.segment if subset else "Geral"
+                found = next(r for r in actual if r.segment == key)
+                for value, expected in [
+                    (found.AUC, row.auc),
+                    (found.Gini, row.gini),
+                    (found.KS, ks_by_key.get(key, float("nan"))),
+                ]:
+                    if math.isnan(expected):
+                        assert math.isnan(value)
+                    else:
+                        assert value == pytest.approx(round(expected, 5))
+
+        for function in [spark_cube, spark_ntile]:
+            with pytest.raises(ValueError, match="binary"):
+                function(spark.createDataFrame([(0.1, 2)], "score double, target int"))
+        with pytest.raises(ValueError, match="finite"):
+            spark_ntile(
+                spark.createDataFrame([(float("inf"), 1)], "score double, target int")
+            )
     finally:
         spark.stop()
 
@@ -164,7 +253,7 @@ def test_ntile_cube(ascending):
         ({"n_tiles": 0}, ValueError),
         ({"n_tiles": True}, TypeError),
         ({"ascending": "yes"}, TypeError),
-        ({"grupos": "n_tile"}, ValueError),
+        ({"group_columns": "n_tile"}, ValueError),
     ],
 )
 def test_ntile_validation(options, error):

@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Cube-only performance improvements: Spark computes grouped AUC and n-tile
+  tables with partitioned windows, avoids group-key collection, and validates
+  once per call. Pandas reuses grouping across scores and avoids metric merges.
+
+- Cube functions use `group_columns`, `score_columns`, and `target_column`
+  keywords in place of `grupos`, `scores`, and `target`; positional order is
+  unchanged. Grouping is optional, and README cube examples start with Spark.
+
 - Restored `auc_gini` as the primary name; `roc_auc_gini` remains an alias.
 - README Spark examples explicitly show the default `n_tiles=10`.
 

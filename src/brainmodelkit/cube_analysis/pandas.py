@@ -5,59 +5,86 @@ from collections.abc import Sequence
 import pandas as pd
 
 from brainmodelkit.metrics._risk import RISK_COLUMNS
-from brainmodelkit.metrics.pandas import auc_gini, ks, risk_table
+from brainmodelkit.metrics.pandas import _calculate_auc_gini, calculate_ks, risk_table
 
 from ._common import cube_options
 
 
 def calculate_metrics(
     df: pd.DataFrame,
-    grupos: str | Sequence[str] | None = None,
-    scores: str | Sequence[str] = ("score",),
-    target: str = "target",
+    group_columns: str | Sequence[str] | None = None,
+    score_columns: str | Sequence[str] = ("score",),
+    target_column: str = "target",
 ) -> pd.DataFrame:
     """Return KS, AUC and Gini for every score and grouping subset.
 
+    Use ``df=df``; ``group_columns=None`` (or []) gives overall results.
+    ``score_columns`` defaults to ("score",); ``target_column`` to "target".
+
     Accepts and returns Pandas DataFrames. Omitted dimensions contain
     ``Geral``; observed keys become nullable strings. Metrics are rounded to
-    five decimals. Output order is grupos + [KS, AUC, Gini, score]. Missing
+    five decimals. Output order is group_columns + [KS, AUC, Gini, score]. Missing
     pairs and undefined metrics follow the internal metric functions.
-    There are 2 ** len(grupos) calculations per score.
+    There are 2 ** len(group_columns) calculations per score.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
-    groups, score_names, subsets = cube_options(df.columns, grupos, scores, target)
-    results = []
-    for score in score_names:
-        for subset in subsets:
-            ks_result = ks(score, df, subset or None, target)
-            auc_result = auc_gini(score, df, subset or None, target)
-            if subset:
-                result = auc_result.merge(ks_result, on=subset, how="left")
-            else:
-                result = auc_result.assign(KS=ks_result["KS"])
-            result = result.rename(columns={"auc": "AUC", "gini": "Gini"})
-            for group in groups:
-                result[group] = (
-                    result[group].astype("string") if group in subset else "Geral"
+    groups, score_names, subsets = cube_options(
+        df.columns, group_columns, score_columns, target_column
+    )
+    # Group once per subset; keep score/subset/group order and concat dtypes.
+    results = {score: [] for score in score_names}
+    for subset in subsets:
+        records = {score: [] for score in score_names}
+        grouped = (
+            df.groupby(subset, dropna=False, sort=False, observed=True)
+            if subset
+            else [((), df)]
+        )
+        for keys, data in grouped:
+            keys = keys if isinstance(keys, tuple) else (keys,)
+            values = dict(zip(subset, keys, strict=True))
+            for score in score_names:
+                auc, gini = _calculate_auc_gini(data[target_column], data[score])
+                records[score].append(
+                    {
+                        **values,
+                        "KS": calculate_ks(data[target_column], data[score]),
+                        "AUC": auc,
+                        "Gini": gini,
+                    }
                 )
-            result["score"] = score
-            for metric in ["KS", "AUC", "Gini"]:
-                result[metric] = result[metric].astype(float).round(5)
-            results.append(result[[*groups, "KS", "AUC", "Gini", "score"]])
-    return pd.concat(results, ignore_index=True)
+        for score in score_names:
+            table = pd.DataFrame.from_records(
+                records[score], columns=[*subset, "KS", "AUC", "Gini"]
+            )
+            for group in groups:
+                table[group] = (
+                    table[group].astype("string") if group in subset else "Geral"
+                )
+            table["score"] = score
+            results[score].append(table[[*groups, "KS", "AUC", "Gini", "score"]])
+    result = pd.concat(
+        [table for score in score_names for table in results[score]], ignore_index=True
+    )
+    for metric in ["KS", "AUC", "Gini"]:
+        result[metric] = result[metric].astype(float).round(5)
+    return result
 
 
 def calculate_ntile(
     df: pd.DataFrame,
-    grupos: str | Sequence[str] | None = None,
-    scores: str | Sequence[str] = ("score",),
-    target: str = "target",
+    group_columns: str | Sequence[str] | None = None,
+    score_columns: str | Sequence[str] = ("score",),
+    target_column: str = "target",
     n_tiles: int = 10,
     *,
     ascending: bool = False,
 ) -> pd.DataFrame:
     """Build risk tables per score and every grouping subset.
+
+    Use ``df=df``; ``group_columns=None`` (or []) gives overall results.
+    ``score_columns`` defaults to ("score",); ``target_column`` to "target".
 
     Tiles are recalculated within each group. Tile 1 has the highest scores
     unless ascending=True. Return grouping keys, the internal risk_table
@@ -67,26 +94,31 @@ def calculate_ntile(
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
-    groups, score_names, subsets = cube_options(df.columns, grupos, scores, target)
+    groups, score_names, subsets = cube_options(
+        df.columns, group_columns, score_columns, target_column
+    )
     if set(groups) & set(RISK_COLUMNS):
         raise ValueError("Grouping columns conflict with risk table output columns")
-    results = []
-    for score in score_names:
-        # Overall calculation also validates options and data for empty inputs.
-        overall = risk_table(score, df, target, n_tiles, ascending=ascending)
-        for subset in subsets:
-            grouped = (
-                df.groupby(subset, dropna=False, sort=False, observed=True)
-                if subset
-                else [((), df)]
-            )
-            for keys, data in grouped:
-                keys = keys if isinstance(keys, tuple) else (keys,)
-                values = dict(zip(subset, keys, strict=True))
+    # Validate each score on the overall table, then reuse each group slice.
+    overall = {
+        score: risk_table(score, df, target_column, n_tiles, ascending=ascending)
+        for score in score_names
+    }
+    results = {score: [] for score in score_names}
+    for subset in subsets:
+        grouped = (
+            df.groupby(subset, dropna=False, sort=False, observed=True)
+            if subset
+            else [((), df)]
+        )
+        for keys, data in grouped:
+            keys = keys if isinstance(keys, tuple) else (keys,)
+            values = dict(zip(subset, keys, strict=True))
+            for score in score_names:
                 table = (
-                    risk_table(score, data, target, n_tiles, ascending=ascending)
+                    risk_table(score, data, target_column, n_tiles, ascending=ascending)
                     if subset
-                    else overall.copy()
+                    else overall[score].copy()
                 )
                 for group in groups:
                     table[group] = pd.Series(
@@ -95,8 +127,10 @@ def calculate_ntile(
                         dtype="string",
                     )
                 table["score"] = score
-                results.append(table[[*groups, *RISK_COLUMNS, "score"]])
-    return pd.concat(results, ignore_index=True)
+                results[score].append(table[[*groups, *RISK_COLUMNS, "score"]])
+    return pd.concat(
+        [table for score in score_names for table in results[score]], ignore_index=True
+    )
 
 
 __all__ = ["calculate_metrics", "calculate_ntile"]
