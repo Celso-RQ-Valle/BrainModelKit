@@ -345,6 +345,76 @@ inclusive score ranges can overlap and tied results may differ from Spark.
 For a segment, pass `df=df[df["segment"] == "A"]`. This function computes only
 the requested risk summary, independently of KS, AUC, and ROC.
 
+## Cube analysis
+
+Compute KS, AUC and Gini for each score across every subset of grouping
+columns, including the overall result:
+
+```python
+from brainmodelkit.cube_analysis.pandas import calculate_metrics
+
+cube = calculate_metrics(df, grupos=["segment"], scores=["score"], target="target")
+print(cube)
+```
+
+The Pandas version accepts and returns a Pandas DataFrame. For a Spark input,
+use the Spark version, which returns a Spark DataFrame:
+
+```python
+from brainmodelkit.cube_analysis.pyspark import calculate_metrics
+
+cube = calculate_metrics(
+    spark_df, grupos=["segment"], scores=["score"], target="target", n_tiles=10
+)
+cube.show()
+```
+
+Both reuse the internal metrics and return grouping columns in the requested
+order followed by `KS`, `AUC`, `Gini`, and `score`. Metrics are rounded to five
+decimal places. Group keys are strings; missing keys stay missing. Dimensions
+omitted from a grouping subset contain `Geral`. A real key named `Geral` will
+therefore be indistinguishable from a rollup in that column. `grupos=None` or
+`[]` returns overall metrics only; `scores` defaults to `["score"]` and must
+not be empty. Empty input returns one overall row per score with NaN metrics.
+
+Pandas metrics are exact; Spark uses the existing tile approximations, with
+`n_tiles >= 2`. The Spark version uses no Pandas conversion or Python UDF;
+the internal AUC function collects group keys and final metric values and
+executes jobs per group. Use modest group cardinalities and numbers of
+dimensions: each score requires `2 ** len(grupos)` grouping calculations.
+Higher scores should indicate target class 1. Missing pairs and single-class
+groups follow the existing metric behavior.
+
+### Cube by n-tile
+
+Use `calculate_ntile` for a risk-table view of every score and grouping subset:
+
+```python
+from brainmodelkit.cube_analysis.pandas import calculate_ntile
+# For a Spark DataFrame instead:
+# from brainmodelkit.cube_analysis.pyspark import calculate_ntile
+
+tile_cube = calculate_ntile(
+    df, grupos=["segment"], scores=["score"], target="target", n_tiles=10
+)
+```
+
+Output contains the grouping columns, `n_tile`, `minimum_range`,
+`maximum_range`, `total_volume`, `total_events`, `total_non_events`,
+`event_rate`, and `score`. Tiles are recalculated independently within each
+group and rollup; they are not fixed global score bands. Tile 1 contains the
+highest scores by default; pass `ascending=True` for the lowest scores first.
+`n_tiles=1` summarizes each group. Only occupied tiles are returned, and empty
+input returns an empty cube with the same columns. Missing pairs are excluded.
+Ranges and event rates preserve the internal risk table's precision.
+
+Both versions reuse their internal `risk_table` function and use the same
+`Geral` rollup and missing-key conventions as the metrics cube. Spark collects
+distinct group keys to call the internal risk table per group, without
+converting to Pandas or collecting input observations. Use modest group counts.
+Spark row order is unspecified; sort the result for display. Tied scores can
+span tiles, so ranges may overlap and Pandas/Spark results may differ for ties.
+
 ## Development
 
 Create a virtual environment and install the development dependencies:
