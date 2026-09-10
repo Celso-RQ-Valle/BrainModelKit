@@ -455,12 +455,140 @@ in that column.
 
 ## Model training
 
-Use `brainmodelkit.training.pandas.train_model` or
-`brainmodelkit.training.pyspark.train_model` to train binary classifiers,
+Use `brainmodelkit.training.pyspark.train_model` or
+`brainmodelkit.training.pandas.train_model` to train binary classifiers,
 evaluate OOT KS/AUC/Gini, and optionally score another dataset. Both accept
 logistic regression, random forest, gradient boosting, LightGBM or a custom
 estimator. Each run writes model information and feature importance to a unique
 folder. MLflow model logging and signatures are optional.
+
+### Spark
+
+Install the integration from your local clone and configure Java/Spark:
+
+```bash
+python -m pip install -e ".[pyspark]"
+```
+
+Import `train_model` and pass your Spark DataFrames. This complete example
+generates sample data and trains a random forest:
+
+```python
+from pyspark.sql import SparkSession
+
+from brainmodelkit.pyspark import simulate_credit_data
+from brainmodelkit.training.pyspark import train_model
+
+spark = SparkSession.builder.appName("BrainModelTraining").getOrCreate()
+data, features = simulate_credit_data(spark, row_count=1000, feature_count=6)
+train_df, oot_df = data.randomSplit([0.75, 0.25], seed=42)
+
+result = train_model(
+    run_name="spark_random_forest",
+    target_col="default_flag",
+    feature_cols=features,
+    train_df=train_df,
+    oot_df=oot_df,
+    model="random_forest",
+    model_params={"numTrees": 20, "maxDepth": 5, "seed": 42},
+    df_scoring=oot_df.drop("default_flag"),  # Optional, no target required.
+    output_dir="training_runs",
+    n_tiles=10,
+)
+
+print(result.metrics)  # oot_ks, oot_auc, oot_gini
+print(result.output_dir)
+result.scoring_predictions.select(*features, "score").show(5)
+
+# The fitted pipeline includes feature assembly and accepts raw features.
+result.model.transform(oot_df.drop("default_flag")).show(5)
+```
+
+Spark KS/AUC use tile approximations controlled by `n_tiles` (at least 2).
+Use numeric, non-null features. Spark LightGBM additionally requires SynapseML
+and its matching JVM packages configured in your Spark session.
+
+To execute the standalone example from the repository root:
+
+```bash
+python examples/training/spark_example.py
+```
+
+### Pandas
+
+Install the integration from your local clone:
+
+```bash
+python -m pip install -e ".[pandas]"
+```
+
+Import the Pandas version of `train_model` and pass Pandas DataFrames:
+
+```python
+import pandas as pd
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+
+from brainmodelkit.training.pandas import train_model
+
+X, y = make_classification(n_samples=500, n_features=6, random_state=42)
+features = [f"feature_{i}" for i in range(6)]
+data = pd.DataFrame(X, columns=features).assign(target=y)
+train_df, oot_df = train_test_split(
+    data, test_size=0.25, random_state=42, stratify=y,
+)
+
+result = train_model(
+    run_name="pandas_random_forest",
+    target_col="target",
+    feature_cols=features,
+    train_df=train_df,
+    oot_df=oot_df,
+    model="random_forest",
+    model_params={"n_estimators": 50, "max_depth": 5, "random_state": 42},
+    df_scoring=oot_df.drop(columns="target"),  # Optional, no target required.
+    output_dir="training_runs",
+)
+
+print(result.metrics)  # Exact oot_ks, oot_auc, oot_gini
+print(result.output_dir)
+print(result.scoring_predictions.head())
+
+# Reuse the fitted estimator with the same features in the same order.
+predicted_labels = result.model.predict(oot_df[features])
+```
+
+To execute the standalone example from the repository root:
+
+```bash
+python examples/training/pandas_example.py
+```
+
+### Model options and outputs
+
+Both backends accept `model="logistic_regression"` (default), `"random_forest"`,
+`"gradient_boosting"`, or `"lightgbm"`. Pass algorithm parameters in
+`model_params` using the backend's native names, as shown above. You may also
+pass a custom estimator instance through `model`; it must support probability
+predictions. For Pandas LightGBM, install `python -m pip install -e ".[pandas,lightgbm]"`.
+
+Training labels must contain both classes, 0 and 1, and the target must not be
+included in `feature_cols`. Preprocess your features before training. The examples
+use random holdouts for demonstration; replace `oot_df` with a later-period
+dataset for actual out-of-time evaluation.
+
+`result.oot_predictions` and optional `result.scoring_predictions` include a
+`score` column containing the probability of class 1. Each call creates a unique
+subfolder under `output_dir` with `model_info.json` and `feature_importance.csv`.
+These contain the model configuration, OOT metrics, and available native feature
+importance or linear coefficients. The fitted model is returned as `result.model`;
+the local report folder does not contain a serialized model.
+
+For optional MLflow model persistence, install `python -m pip install -e ".[mlflow]"`,
+configure your MLflow tracking URI and experiment, and add `mlflow_logging=True`
+to either training call. Add `signature=True` to log the native input/output
+signature (feature inputs and predicted labels). The MLflow run ID is available
+as `result.run_id`.
 
 See [runnable training examples and configuration](examples/training/README.md).
 
