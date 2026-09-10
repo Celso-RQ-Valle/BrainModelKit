@@ -535,7 +535,10 @@ X, y = make_classification(n_samples=500, n_features=6, random_state=42)
 features = [f"feature_{i}" for i in range(6)]
 data = pd.DataFrame(X, columns=features).assign(target=y)
 train_df, oot_df = train_test_split(
-    data, test_size=0.25, random_state=42, stratify=y,
+    data,
+    test_size=0.25,
+    random_state=42,
+    stratify=y,
 )
 
 result = train_model(
@@ -591,6 +594,113 @@ signature (feature inputs and predicted labels). The MLflow run ID is available
 as `result.run_id`.
 
 See [runnable training examples and configuration](examples/training/README.md).
+
+## Feature selection: RFE
+
+Recursive feature elimination is a separate module. It trains the initial feature
+set, removes up to `step` least important features, and refits until exactly
+`n_feat_final` remain. The final subset is also trained and evaluated.
+
+### Spark
+
+Install `python -m pip install -e ".[pyspark]"` from your local clone and configure
+Java/Spark. Using the Spark `train_df`, `oot_df`, and `features` from the training
+example above:
+
+```python
+from brainmodelkit.feature_selection.pyspark import rfe
+
+selection = rfe(
+    run_name="spark_random_forest_rfe",
+    target_col="default_flag",
+    train_df=train_df,
+    oot_df=oot_df,
+    feature_cols=features,
+    model="random_forest",
+    model_params={"numTrees": 20, "maxDepth": 5, "seed": 42},
+    step=2,
+    n_feat_final=3,
+    output_dir="feature_selection_runs",
+    df_scoring=oot_df.drop("default_flag"),
+    n_tiles=10,
+)
+
+print(selection.selected_features)
+print(selection.history)
+print(selection.output_dir)
+print(selection.training_result.metrics)
+selection.training_result.scoring_predictions.show(5)
+# The final Spark pipeline assembles only the selected features.
+selection.training_result.model.transform(oot_df).show(5)
+```
+
+Spark keeps input frames distributed and preserves caller-managed caches.
+KS/AUC use the training module's tile approximations. LightGBM requires configured
+SynapseML, including its matching JVM packages.
+
+### Pandas
+
+Install `python -m pip install -e ".[pandas]"` from your local clone. Using the
+Pandas `train_df`, `oot_df`, and `features` from the training example above:
+
+```python
+from brainmodelkit.feature_selection.pandas import rfe
+
+selection = rfe(
+    run_name="pandas_random_forest_rfe",
+    target_col="target",
+    train_df=train_df,
+    oot_df=oot_df,
+    feature_cols=features,
+    model="random_forest",
+    model_params={"n_estimators": 50, "max_depth": 5, "random_state": 42},
+    step=2,
+    n_feat_final=3,
+    output_dir="feature_selection_runs",
+    df_scoring=oot_df.drop(columns="target"),
+)
+
+print(selection.selected_features)
+print(selection.history)
+print(selection.output_dir)
+print(selection.training_result.metrics)
+print(selection.training_result.scoring_predictions.head())
+predicted_labels = selection.training_result.model.predict(
+    oot_df[selection.selected_features]
+)
+```
+
+### Supported models and reports
+
+Both versions accept `logistic_regression`, `random_forest`, `gradient_boosting`,
+and `lightgbm`, plus compatible custom estimators with native feature importance.
+Pandas LightGBM needs `python -m pip install -e ".[pandas,lightgbm]"`.
+Parameters use the same native names as `train_model`.
+
+RFE ranks tree importance or absolute linear coefficients. Scale features before
+coefficient-based selection when their units differ. Custom estimators must expose
+one finite importance value per input feature; models without compatible importance
+raise a clear error. Equal importance removes earlier input columns first, and
+retained columns stay in their original order.
+
+`step` and `n_feat_final` must be positive integers. The final count cannot exceed
+the initial count; equal counts perform one fit. Omitting `feature_cols` selects
+columns beginning with `feat_`; pass an explicit list for other naming conventions.
+The target must not be a feature. OOT metrics are diagnostics and do not choose the
+subset or stop elimination early. Only the final fit scores optional `df_scoring`.
+
+Every call creates `feature_selection_runs/<unique-id>/` containing:
+
+- `history.json`: each subset, removed features, OOT metrics, and training report path.
+- `selected_features.json`: the final ordered feature list.
+- One training report subfolder per iteration, with model information and importance.
+
+`selection.training_result` is the final `TrainingResult`, including its fitted
+model. Only this final model is retained in the returned result. For MLflow logging
+of every fitted model, install the MLflow extra and pass `mlflow_logging=True`;
+`signature=True` is optional. Local files contain reports, not serialized models.
+
+Standalone examples are in [examples/feature_selection](examples/feature_selection/README.md).
 
 ## Development
 
