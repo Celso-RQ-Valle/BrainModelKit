@@ -453,6 +453,17 @@ Both cubes cast group keys to strings, retain missing keys, and label omitted
 dimensions `Geral`. A real key named `Geral` is indistinguishable from a rollup
 in that column.
 
+## Model training
+
+Use `brainmodelkit.training.pandas.train_model` or
+`brainmodelkit.training.pyspark.train_model` to train binary classifiers,
+evaluate OOT KS/AUC/Gini, and optionally score another dataset. Both accept
+logistic regression, random forest, gradient boosting, LightGBM or a custom
+estimator. Each run writes model information and feature importance to a unique
+folder. MLflow model logging and signatures are optional.
+
+See [runnable training examples and configuration](examples/training/README.md).
+
 ## Development
 
 Create a virtual environment and install the development dependencies:
