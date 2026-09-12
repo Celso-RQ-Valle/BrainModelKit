@@ -1,7 +1,5 @@
 """Distributed binary classifier training using Spark ML pipelines."""
 
-from pathlib import Path
-
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import (
     GBTClassifier,
@@ -13,10 +11,14 @@ from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
 
 from brainmodelkit.metrics.pyspark import auc_gini, ks_ntile
-from brainmodelkit.persistence._common import SPARK_FORMATS, validate_format
-from brainmodelkit.persistence.spark import _save_spark_model
 
-from ._common import TrainingResult, finish, importance_records, validate_columns
+from ._common import (
+    TrainingResult,
+    finalize_run,
+    importance_records,
+    resolve_execution,
+    validate_columns,
+)
 
 
 def train_model(
@@ -30,11 +32,13 @@ def train_model(
     model_params=None,
     df_scoring=None,
     output_dir="training_runs",
-    mlflow_logging=False,
+    run_as: str = "local",
+    model_format: str | None = None,
+    mlflow_logging=None,
     signature=False,
     n_tiles=10,
     save_path: str | None = None,
-    save_format: str = "spark",
+    save_format: str | None = None,
     save_metadata: bool = True,
     overwrite: bool = False,
 ):
@@ -45,11 +49,14 @@ def train_model(
     Features must be numeric and non-null. The returned PipelineModel accepts raw
     feature columns. Only aggregate metrics and feature importances reach the driver.
     MLflow signatures describe native prediction labels. No Spark session is created.
-    save_path optionally persists the fitted pipeline using Spark or MLflow.
-    overwrite applies only to Spark's native writer. Metadata sidecars are written
-    to <save_path>.metadata.json for local paths; URI paths are left to Spark.
+    run_as selects local (default), mlflow, or none. Local runs own the model
+    and reports under output_dir; model_format defaults to spark.
+    signature requires MLflow. Legacy save_path, save_format and mlflow_logging
+    are deprecated. save_metadata controls only legacy external model sidecars.
     """
-    validate_format(save_format, SPARK_FORMATS)
+    run_as, model_format = resolve_execution(
+        "spark", run_as, model_format, mlflow_logging, save_path, save_format, signature
+    )
     features = validate_columns(
         feature_cols,
         target_col,
@@ -57,8 +64,6 @@ def train_model(
     )
     if not isinstance(n_tiles, int) or isinstance(n_tiles, bool) or n_tiles < 2:
         raise ValueError("n_tiles must be an integer >= 2")
-    if signature and not mlflow_logging:
-        raise ValueError("signature requires mlflow_logging=True")
     for frame in (train_df, oot_df, df_scoring):
         if frame is not None and set(frame.columns) & {
             "features",
@@ -130,21 +135,10 @@ def train_model(
         score(df_scoring),
         metrics,
         importance_records(features, values),
-        Path(output_dir),
+        None,
     )
     params = {p.name: v for p, v in estimator.extractParamMap().items()}
-    if save_path is not None:
-        _save_spark_model(
-            fitted,
-            save_path,
-            save_format,
-            overwrite=overwrite,
-            save_metadata=save_metadata,
-            target_col=target_col,
-            feature_cols=features,
-            parameters=params,
-        )
-    return finish(
+    return finalize_run(
         result,
         run_name,
         "spark",
@@ -152,7 +146,11 @@ def train_model(
         target_col,
         params,
         output_dir,
-        mlflow_logging,
+        run_as,
+        model_format,
         signature,
         train_df,
+        save_path=save_path,
+        save_metadata=save_metadata,
+        overwrite=overwrite,
     )

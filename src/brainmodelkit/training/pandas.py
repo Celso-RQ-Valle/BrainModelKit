@@ -1,17 +1,19 @@
 """Train probability-producing scikit-learn compatible binary classifiers."""
 
-from pathlib import Path
-
 import numpy as np
 from sklearn.base import clone
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
 from brainmodelkit.metrics.pandas import _calculate_auc_gini, calculate_ks
-from brainmodelkit.persistence._common import PYTHON_FORMATS, validate_format
-from brainmodelkit.persistence.python import _save_python_model
 
-from ._common import TrainingResult, finish, importance_records, validate_columns
+from ._common import (
+    TrainingResult,
+    finalize_run,
+    importance_records,
+    resolve_execution,
+    validate_columns,
+)
 
 
 def train_model(
@@ -25,10 +27,12 @@ def train_model(
     model_params=None,
     df_scoring=None,
     output_dir="training_runs",
-    mlflow_logging=False,
+    run_as: str = "local",
+    model_format: str | None = None,
+    mlflow_logging=None,
     signature=False,
     save_path: str | None = None,
-    save_format: str = "pickle",
+    save_format: str | None = None,
     save_metadata: bool = True,
 ):
     """Fit a fresh estimator and return OOT KS/AUC/Gini and class-1 scores.
@@ -38,12 +42,20 @@ def train_model(
     0/1, with both classes in training. Inputs are not modified. Preprocess
     features before calling, or pass a scikit-learn Pipeline. Signature applies
     to MLflow's native predict output (class labels), not the added score column.
-    Local reports are stored under a unique child of output_dir.
-    If save_path is provided, persist the fitted model separately using save_format
-    (pickle by default). Optional backends require their corresponding extras.
-    Metadata is written to <save_path>.metadata.json when save_metadata is true.
+    run_as selects local (default), mlflow, or none. Local runs own the model
+    and reports under output_dir; model_format defaults to pickle.
+    signature requires MLflow. Legacy save_path, save_format and mlflow_logging
+    are deprecated. save_metadata controls only legacy external model sidecars.
     """
-    validate_format(save_format, PYTHON_FORMATS)
+    run_as, model_format = resolve_execution(
+        "sklearn",
+        run_as,
+        model_format,
+        mlflow_logging,
+        save_path,
+        save_format,
+        signature,
+    )
     features = validate_columns(
         feature_cols,
         target_col,
@@ -54,8 +66,6 @@ def train_model(
             raise ValueError("Targets must be non-null binary 0/1 values")
     if train_df[target_col].nunique() != 2:
         raise ValueError("Training requires both target classes")
-    if signature and not mlflow_logging:
-        raise ValueError("signature requires mlflow_logging=True")
     if isinstance(model, str):
         choices = {
             "logistic_regression": LogisticRegression,
@@ -103,20 +113,9 @@ def train_model(
         score(df_scoring),
         metrics,
         importance_records(features, values),
-        Path(output_dir),
+        None,
     )
-    if save_path is not None:
-        _save_python_model(
-            fitted,
-            save_path,
-            save_format,
-            save_metadata=save_metadata,
-            target_col=target_col,
-            feature_cols=features,
-            parameters=fitted.get_params(deep=False),
-            input_example=train_df[features].head(1) if save_format == "onnx" else None,
-        )
-    return finish(
+    return finalize_run(
         result,
         run_name,
         "sklearn",
@@ -124,7 +123,10 @@ def train_model(
         target_col,
         fitted.get_params(deep=False),
         output_dir,
-        mlflow_logging,
+        run_as,
+        model_format,
         signature,
         train_df,
+        save_path=save_path,
+        save_metadata=save_metadata,
     )

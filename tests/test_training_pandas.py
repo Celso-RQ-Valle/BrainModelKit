@@ -14,13 +14,7 @@ from brainmodelkit.training.pandas import train_model
     "model",
     ["logistic_regression", "random_forest", "gradient_boosting", LogisticRegression()],
 )
-def test_train_score_and_report(tmp_path, model, monkeypatch):
-    def unexpected_save(*args, **kwargs):
-        pytest.fail("Training without save_path must not persist the model")
-
-    monkeypatch.setattr(
-        "brainmodelkit.training.pandas._save_python_model", unexpected_save
-    )
+def test_train_score_and_report(tmp_path, model):
     data = pd.DataFrame(
         {"x": [-3.0, -2.0, -1.0, 1.0, 2.0, 3.0], "y": [0, 0, 0, 1, 1, 1]}
     )
@@ -54,8 +48,8 @@ def test_invalid_and_empty_data(tmp_path):
         train_model("bad", "y", ["x"], data.iloc[:1], data, output_dir=tmp_path)
     result = train_model("empty", "y", ["x"], data, data.iloc[:0], output_dir=tmp_path)
     assert result.oot_predictions.empty
-    report = json.loads((result.output_dir / "model_info.json").read_text())
-    assert report["metrics"]["oot_auc"] is None
+    report = json.loads((result.output_dir / "metrics.json").read_text())
+    assert report["oot_auc"] is None
 
 
 def test_mlflow_round_trip(tmp_path, monkeypatch):
@@ -75,12 +69,14 @@ def test_mlflow_round_trip(tmp_path, monkeypatch):
             data,
             data,
             output_dir=tmp_path / "reports",
-            mlflow_logging=True,
+            run_as="mlflow",
             signature=True,
         )
         loaded = flavor.load_model(f"runs:/{result.run_id}/model")
         assert list(loaded.predict(data[["x"]])) == list(data.y)
-        assert (result.output_dir / "mlflow_run_id.txt").exists()
+        assert result.output_dir is None
+        assert result.run_as == "mlflow"
+        assert result.model_uri == f"runs:/{result.run_id}/model"
     finally:
         mlflow.set_tracking_uri(previous_uri)
 
@@ -103,15 +99,27 @@ def test_lightgbm(tmp_path):
 
 def test_training_persistence(tmp_path):
     data = pd.DataFrame({"x": [-2.0, -1.0, 1.0, 2.0], "y": [0, 0, 1, 1]})
-    path = tmp_path / "model.pkl"
     result = train_model(
-        "saved", "y", ["x"], data, data, output_dir=tmp_path / "reports", save_path=path
+        "saved", "y", ["x"], data, data, output_dir=tmp_path / "reports"
     )
-    loaded = load_model(path)
+    loaded = load_model(result.model_uri)
     assert list(loaded.predict(data[["x"]])) == list(result.model.predict(data[["x"]]))
+    assert result.run_as == "local"
+    assert result.output_dir.name == f"saved_{result.run_id}"
+    assert {p.name for p in result.output_dir.iterdir()} == {
+        "model.pkl",
+        "model_info.json",
+        "metadata.json",
+        "metrics.json",
+        "feature_importance.csv",
+    }
+    metadata = json.loads((result.output_dir / "metadata.json").read_text())
+    assert metadata["model_format"] == "pickle"
+    assert metadata["run_as"] == "local"
+    assert metadata["python_version"]
+    report = json.loads((result.output_dir / "model_info.json").read_text())
+    assert report["target_col"] == "y"
+    assert report["run_id"] == result.run_id
     assert (
-        json.loads((tmp_path / "model.pkl.metadata.json").read_text())["target_col"]
-        == "y"
+        json.loads((result.output_dir / "metrics.json").read_text()) == result.metrics
     )
-    with pytest.raises(ValueError, match="Available:"):
-        train_model("bad", "y", ["x"], data, data, save_format="spark")

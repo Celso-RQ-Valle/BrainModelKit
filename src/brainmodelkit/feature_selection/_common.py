@@ -62,7 +62,7 @@ def run_rfe(
             model_params=model_params,
             output_dir=folder,
             df_scoring=df_scoring if len(features) == n_feat_final else None,
-            mlflow_logging=mlflow_logging,
+            run_as="mlflow" if mlflow_logging else "local",
             signature=signature,
             **backend_options,
         )
@@ -91,10 +91,11 @@ def run_rfe(
                     key: value if math.isfinite(value) else None
                     for key, value in result.metrics.items()
                 },
-                "report_dir": str(result.output_dir),
+                "report_dir": str(result.output_dir) if result.output_dir else None,
                 "run_id": result.run_id,
             }
         )
+        folder.mkdir(parents=True, exist_ok=True)
         # Each completed iteration remains reviewable if a later fit fails.
         (folder / "history.json").write_text(
             json.dumps(history, indent=2, allow_nan=False), encoding="utf-8"

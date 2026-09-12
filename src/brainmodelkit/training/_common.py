@@ -3,10 +3,26 @@
 import csv
 import json
 import math
+import re
+import warnings
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from platform import python_version
+from tempfile import TemporaryDirectory
 from typing import Any
 from uuid import uuid4
+
+from brainmodelkit import __version__
+from brainmodelkit.persistence._common import (
+    PYTHON_FORMATS,
+    optional_import,
+    serializable_parameters,
+    validate_format,
+)
+from brainmodelkit.persistence.mlflow import _log_mlflow_model
+from brainmodelkit.persistence.python import _save_python_model
+from brainmodelkit.persistence.spark import _save_spark_model
 
 
 @dataclass
@@ -18,8 +34,10 @@ class TrainingResult:
     scoring_predictions: Any
     metrics: dict[str, float]
     feature_importance: list[dict]
-    output_dir: Path
+    output_dir: Path | None
     run_id: str | None = None
+    run_as: str = "local"
+    model_uri: str | None = None
 
 
 def validate_columns(feature_cols, target_col, frames):
@@ -40,7 +58,72 @@ def validate_columns(feature_cols, target_col, frames):
     return features
 
 
-def finish(
+def resolve_execution(
+    backend, run_as, model_format, mlflow_logging, save_path, save_format, signature
+):
+    """Normalize deprecated switches and validate before fitting."""
+    validate_format(run_as, ("local", "mlflow", "none"))
+    for name, value in (
+        ("mlflow_logging", mlflow_logging),
+        ("save_path", save_path),
+        ("save_format", save_format),
+    ):
+        if value is not None:
+            warnings.warn(
+                f"{name} is deprecated; use run_as, model_format and output_dir.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+    if mlflow_logging:
+        if run_as == "none":
+            raise ValueError("mlflow_logging=True conflicts with run_as='none'")
+        run_as = "mlflow"
+    if save_format == "mlflow":
+        raise ValueError(
+            "save_format='mlflow' was replaced by run_as='mlflow'; omit save_path"
+        )
+    if save_format is not None:
+        if model_format is not None and model_format != save_format:
+            raise ValueError("save_format conflicts with model_format")
+        model_format = save_format
+    available = (
+        ("spark",)
+        if backend == "spark"
+        else tuple(value for value in PYTHON_FORMATS if value != "mlflow")
+    )
+    if model_format is not None:
+        validate_format(model_format, available)
+    if run_as != "local" and (model_format is not None or save_path is not None):
+        raise ValueError("model_format and save_path require run_as='local'")
+    if signature and run_as != "mlflow":
+        raise ValueError("signature=True requires run_as='mlflow'")
+    if run_as == "mlflow":
+        optional_import("mlflow", "mlflow")
+    return run_as, (model_format or available[0]) if run_as == "local" else None
+
+
+def _write_reports(folder, result, report, metadata):
+    for name, content in (
+        ("model_info.json", report),
+        ("metrics.json", result.metrics),
+        ("metadata.json", metadata),
+    ):
+        # Undefined metrics are JSON null; other parameters remain readable.
+        if name == "metrics.json":
+            content = {k: v if math.isfinite(v) else None for k, v in content.items()}
+        (folder / name).write_text(
+            json.dumps(content, indent=2, default=str, allow_nan=False),
+            encoding="utf-8",
+        )
+    with (folder / "feature_importance.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as stream:
+        writer = csv.DictWriter(stream, fieldnames=["feature", "importance"])
+        writer.writeheader()
+        writer.writerows(result.feature_importance)
+
+
+def finalize_run(
     result,
     run_name,
     backend,
@@ -48,15 +131,34 @@ def finish(
     target,
     params,
     output_dir,
-    mlflow_logging,
+    run_as,
+    model_format,
     signature,
     train_df,
+    *,
+    save_path=None,
+    save_metadata=True,
+    overwrite=False,
 ):
-    folder = Path(output_dir) / uuid4().hex
-    folder.mkdir(parents=True, exist_ok=False)
-    result.output_dir = folder
+    """Persist a complete run through one destination."""
+    result.run_as = run_as
+    result.output_dir = None
+    if run_as == "none":
+        return result
+    result.run_id = uuid4().hex
+    metadata = {
+        "brainmodelkit_version": __version__,
+        "python_version": python_version(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "run_as": run_as,
+        "model_format": model_format,
+        "framework": type(result.model).__module__.split(".")[0],
+        "model_class": type(result.model).__name__,
+        "backend": backend,
+    }
     report = {
         "run_name": run_name,
+        "run_id": result.run_id,
         "backend": backend,
         "model_class": type(result.model).__name__,
         "estimator_class": type(
@@ -64,50 +166,86 @@ def finish(
         ).__name__,
         "feature_cols": features,
         "target_col": target,
-        "parameters": params,
-        "metrics": {
-            k: v if math.isfinite(v) else None for k, v in result.metrics.items()
-        },
+        "parameters": serializable_parameters(params),
     }
-    (folder / "model_info.json").write_text(
-        json.dumps(report, indent=2, default=str, allow_nan=False), encoding="utf-8"
-    )
-    with (folder / "feature_importance.csv").open(
-        "w", newline="", encoding="utf-8"
-    ) as stream:
-        writer = csv.DictWriter(stream, fieldnames=["feature", "importance"])
-        writer.writeheader()
-        writer.writerows(result.feature_importance)
-    if mlflow_logging:
-        import mlflow
-        from mlflow.models import infer_signature
+    if run_as == "local":
+        safe_name = (
+            re.sub(r"[^A-Za-z0-9_-]+", "_", str(run_name)).strip("_")[:80] or "run"
+        )
+        folder = Path(output_dir) / f"{safe_name}_{result.run_id}"
+        folder.mkdir(parents=True, exist_ok=False)
+        result.output_dir = folder
+        suffixes = {
+            "pickle": ".pkl",
+            "joblib": ".joblib",
+            "cloudpickle": ".pkl",
+            "skops": ".skops",
+            "onnx": ".onnx",
+            "native": "",
+            "spark": "",
+        }
+        path = (
+            save_path
+            if save_path is not None
+            else folder / ("model" + suffixes[model_format])
+        )
+        options = dict(
+            save_metadata=save_metadata if save_path is not None else False,
+            target_col=target,
+            feature_cols=features,
+            parameters=params,
+        )
+        if backend == "spark":
+            _save_spark_model(
+                result.model, path, model_format, overwrite=overwrite, **options
+            )
+        else:
+            _save_python_model(
+                result.model,
+                path,
+                model_format,
+                input_example=train_df[features].head(1)
+                if model_format == "onnx"
+                else None,
+                **options,
+            )
+        result.model_uri = str(path)
+        _write_reports(folder, result, report, metadata)
+        return result
 
-        flavor = __import__(f"mlflow.{backend}", fromlist=["log_model"])
-        with mlflow.start_run(
-            run_name=run_name, nested=mlflow.active_run() is not None
-        ):
-            result.run_id = mlflow.active_run().info.run_id
-            mlflow.log_params({k: str(v)[:500] for k, v in params.items()})
-            mlflow.log_metrics(
-                {k: v for k, v in result.metrics.items() if math.isfinite(v)}
-            )
-            model_signature = None
-            if signature:
-                if backend == "sklearn":
-                    sample = train_df[features].head(5)
-                    model_signature = infer_signature(
-                        sample, result.model.predict(sample)
-                    )
-                else:
-                    model_signature = infer_signature(
-                        train_df.select(*features),
-                        result.oot_predictions.select("prediction"),
-                    )
-            flavor.log_model(
-                result.model, artifact_path="model", signature=model_signature
-            )
-            mlflow.log_artifacts(str(folder), artifact_path="training_report")
-        (folder / "mlflow_run_id.txt").write_text(result.run_id, encoding="utf-8")
+    mlflow = optional_import("mlflow", "mlflow")
+    with mlflow.start_run(
+        run_name=run_name, nested=mlflow.active_run() is not None
+    ) as run:
+        result.run_id = run.info.run_id
+        report["run_id"] = result.run_id
+        mlflow.log_params({k: str(v)[:500] for k, v in params.items()})
+        mlflow.log_metrics(
+            {k: v for k, v in result.metrics.items() if math.isfinite(v)}
+        )
+        mlflow.set_tags(
+            {
+                **{k: str(v) for k, v in metadata.items()},
+                "target_col": target,
+                "feature_cols": json.dumps(features),
+            }
+        )
+        model_signature = None
+        if signature:
+            infer_signature = optional_import("mlflow.models", "mlflow").infer_signature
+            if backend == "sklearn":
+                sample = train_df[features].head(5)
+                model_signature = infer_signature(sample, result.model.predict(sample))
+            else:
+                model_signature = infer_signature(
+                    train_df.select(*features),
+                    result.oot_predictions.select("prediction"),
+                )
+        _log_mlflow_model(result.model, backend, model_signature)
+        result.model_uri = f"runs:/{result.run_id}/model"
+        with TemporaryDirectory(prefix="brainmodelkit-") as temporary:
+            _write_reports(Path(temporary), result, report, metadata)
+            mlflow.log_artifacts(temporary, artifact_path="training_report")
     return result
 
 

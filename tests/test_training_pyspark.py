@@ -24,13 +24,12 @@ def spark():
 @pytest.mark.parametrize(
     "model", ["logistic_regression", "random_forest", "gradient_boosting"]
 )
-def test_training(spark, tmp_path, model, monkeypatch):
-    def unexpected_save(*args, **kwargs):
-        pytest.fail("Training without save_path must not persist the model")
+@pytest.mark.parametrize("run_as", ["local", "none"])
+def test_training(spark, tmp_path, model, monkeypatch, run_as):
+    from unittest.mock import Mock
 
-    monkeypatch.setattr(
-        "brainmodelkit.training.pyspark._save_spark_model", unexpected_save
-    )
+    saver = Mock()
+    monkeypatch.setattr("brainmodelkit.training._common._save_spark_model", saver)
     data = spark.createDataFrame(
         [(-3.0, 0), (-2.0, 0), (-1.0, 0), (1.0, 1), (2.0, 1), (3.0, 1)],
         "x double, target int",
@@ -45,21 +44,36 @@ def test_training(spark, tmp_path, model, monkeypatch):
         df_scoring=data.drop("target"),
         n_tiles=6,
         output_dir=tmp_path,
+        run_as=run_as,
     )
     assert result.metrics["oot_auc"] == pytest.approx(1)
     assert result.metrics["oot_ks"] == pytest.approx(1)
     assert result.scoring_predictions.count() == 6
     assert result.model.transform(data.drop("target")).count() == 6
     assert len(result.feature_importance) == 1
+    if run_as == "none":
+        saver.assert_not_called()
+        assert result.output_dir is result.model_uri is result.run_id is None
+        assert not list(tmp_path.iterdir())
+        return
+    saver.assert_called_once()
+    assert saver.call_args.args[2] == "spark"
+    assert result.model_uri == str(result.output_dir / "model")
+    assert result.run_as == "local"
+    assert (result.output_dir / "metadata.json").exists()
+    assert (result.output_dir / "metrics.json").exists()
 
 
+@pytest.mark.skipif(
+    os.name == "nt" and not os.environ.get("HADOOP_HOME"),
+    reason="Native Spark disk writes on Windows require Hadoop/winutils configuration",
+)
 def test_training_persistence(spark, tmp_path):
     from pyspark.ml import PipelineModel
 
     data = spark.createDataFrame(
         [(-2.0, 0), (-1.0, 0), (1.0, 1), (2.0, 1)], "x double, target int"
     )
-    path = tmp_path / "pipeline"
     result = train_model(
         "saved",
         "target",
@@ -67,22 +81,24 @@ def test_training_persistence(spark, tmp_path):
         data,
         data,
         output_dir=tmp_path / "reports",
-        save_path=path,
         n_tiles=4,
     )
-    loaded = load_model(path, "spark", model_class=PipelineModel)
+    loaded = load_model(result.model_uri, "spark", model_class=PipelineModel)
     assert loaded.transform(data).select("prediction").collect() == (
         result.model.transform(data).select("prediction").collect()
     )
-    assert (tmp_path / "pipeline.metadata.json").exists()
+    assert (result.output_dir / "metadata.json").exists()
     with pytest.raises(ValueError, match="Available:"):
-        train_model("bad", "target", ["x"], data, data, save_format="pickle")
+        train_model("bad", "target", ["x"], data, data, model_format="pickle")
 
 
 @pytest.mark.parametrize(
     "model", ["logistic_regression", "random_forest", "gradient_boosting"]
 )
-def test_rfe(spark, tmp_path, model):
+def test_rfe(spark, tmp_path, model, monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr("brainmodelkit.training._common._save_spark_model", Mock())
     from brainmodelkit.feature_selection.pyspark import rfe
 
     data = spark.createDataFrame(

@@ -47,12 +47,8 @@ def local_path(path):
     return Path(path)
 
 
-def write_metadata(
-    model, path, format, *, target_col=None, feature_cols=None, parameters=None
-):
-    local = local_path(path)
-    if local is None:
-        return
+def serializable_parameters(parameters):
+    """Keep parameters that can be represented faithfully in standard JSON."""
     params = {}
     for key, value in (parameters or {}).items():
         try:
@@ -60,6 +56,15 @@ def write_metadata(
         except (TypeError, ValueError, OverflowError):
             continue
         params[key] = value
+    return params
+
+
+def write_metadata(
+    model, path, format, *, target_col=None, feature_cols=None, parameters=None
+):
+    local = local_path(path)
+    if local is None:
+        return
     metadata = {
         "model_class": type(model).__name__,
         "framework": type(model).__module__.split(".")[0],
@@ -69,7 +74,7 @@ def write_metadata(
         "save_format": format,
         "target_col": target_col,
         "feature_cols": list(feature_cols) if feature_cols is not None else None,
-        "parameters": params,
+        "parameters": serializable_parameters(parameters),
     }
     Path(str(local) + ".metadata.json").write_text(
         json.dumps(metadata, indent=2, allow_nan=False), encoding="utf-8"

@@ -21,17 +21,19 @@ column is the probability of target 1. Training requires both 0 and 1 labels;
 OOT may be single-class, producing undefined metrics. Spark KS/AUC are tiled
 approximations controlled by `n_tiles`; Pandas metrics are exact.
 
-Each call creates `training_runs/<unique-id>/model_info.json` and
-`feature_importance.csv`. Change the parent with `output_dir`. The CSV contains
-native tree importance or signed linear coefficients; unsupported custom models
-produce a header-only file. These values are not comparable across algorithms.
-The folder contains reports, not a serialized model or copies of input data.
-The fitted model is returned for prediction or native persistence.
+By default, each call creates `training_runs/<run_name>_<run_id>/` containing
+the fitted model, `model_info.json`, `metrics.json`, `metadata.json`, and
+`feature_importance.csv`. Change the parent with `output_dir`.
+Pandas defaults to `model_format="pickle"`; Spark uses `model_format="spark"`.
+The result exposes `run_as`, `run_id`, `output_dir`, and `model_uri`.
+Use `run_as="none"` for training without artifacts.
 
-For model persistence and experiment tracking, install `.[mlflow]`, configure
-your MLflow tracking URI/experiment, and pass `mlflow_logging=True`. Logging saves
-the model, parameters, finite metrics and reports. Existing runs receive a nested
-run. `signature=True` infers the native model signature: raw feature inputs and
-predicted labels, not the added probability score. Spark logs the full assembler
-pipeline so raw numeric features can be supplied again. No remote registration
-or tracking server configuration is performed by these functions.
+For experiment tracking, install `.[mlflow]`, configure your MLflow tracking
+URI/experiment, and pass `run_as="mlflow"`. Model, parameters, finite metrics,
+metadata and reports go to MLflow; `output_dir` is then `None`.
+Existing active runs receive a nested run. `signature=True` optionally infers
+raw feature inputs and predicted labels, not the added probability score.
+Spark logs the full assembler pipeline. No tracking server configuration is
+performed by these functions.
+
+See [destination, format and migration details](../../README.md#training-destinations-and-model-persistence).

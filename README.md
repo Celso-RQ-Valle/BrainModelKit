@@ -580,18 +580,11 @@ included in `feature_cols`. Preprocess your features before training. The exampl
 use random holdouts for demonstration; replace `oot_df` with a later-period
 dataset for actual out-of-time evaluation.
 
-`result.oot_predictions` and optional `result.scoring_predictions` include a
-`score` column containing the probability of class 1. Each call creates a unique
-subfolder under `output_dir` with `model_info.json` and `feature_importance.csv`.
-These contain the model configuration, OOT metrics, and available native feature
-importance or linear coefficients. The fitted model is returned as `result.model`;
-the local report folder does not contain a serialized model.
-
-For optional MLflow model persistence, install `python -m pip install -e ".[mlflow]"`,
-configure your MLflow tracking URI and experiment, and add `mlflow_logging=True`
-to either training call. Add `signature=True` to log the native input/output
-signature (feature inputs and predicted labels). The MLflow run ID is available
-as `result.run_id`.
+Result prediction frames include a `score` column with the probability of class 1.
+By default, each call saves its fitted model and reports in a unique run directory.
+Use `run_as="mlflow"` for tracking or `run_as="none"` for in-memory experiments.
+See [training destinations and model persistence](#training-destinations-and-model-persistence)
+for formats, artifacts, loading, and migration details.
 
 See [runnable training examples and configuration](examples/training/README.md).
 
@@ -698,81 +691,197 @@ Every call creates `feature_selection_runs/<unique-id>/` containing:
 `selection.training_result` is the final `TrainingResult`, including its fitted
 model. Only this final model is retained in the returned result. For MLflow logging
 of every fitted model, install the MLflow extra and pass `mlflow_logging=True`;
-`signature=True` is optional. Local files contain reports, not serialized models.
+`signature=True` is optional. Local training subfolders now include serialized models as well as reports.
 
 Standalone examples are in [examples/feature_selection](examples/feature_selection/README.md).
 
-## Optional model persistence
+## Training destinations and model persistence
 
-Training returns the same `TrainingResult` and creates the same reports as before.
-The fitted model is saved separately only when `save_path` is provided:
+From the repository root, install the Pandas training dependencies:
+
+```bash
+python -m pip install -e ".[pandas]"
+```
+
+Training uses `run_as="local"` by default. It returns the existing `TrainingResult`
+and saves a complete run under `output_dir="training_runs"`:
+
+```text
+training_runs/credit_v1_<run_id>/
+    model.pkl                 # Spark uses model/ instead
+    model_info.json
+    metrics.json
+    feature_importance.csv
+    metadata.json
+```
+
+Run names are sanitized for directory naming; the original name stays in the report.
+Each execution gets a unique ID. No input data is copied.
 
 ```python
+import pandas as pd
+
 from brainmodelkit.training.pandas import train_model
 from brainmodelkit.persistence import load_model
 
-result = train_model(
-    "baseline",
-    "target",
-    ["age", "income"],
-    train_df,
-    oot_df,
-    save_path="models/model.pkl",  # defaults to save_format="pickle"
+features = ["income"]
+train_df = pd.DataFrame(
+    {"income": [1.0, 2.0, 3.0, 7.0, 8.0, 9.0], "target": [0, 0, 0, 1, 1, 1]}
 )
-model = load_model("models/model.pkl", format="pickle")
+oot_df = pd.DataFrame({"income": [1.5, 2.5, 7.5, 8.5], "target": [0, 0, 1, 1]})
+result = train_model("credit_v1", "target", features, train_df, oot_df)
+model = load_model(result.model_uri, format="pickle")
+print(result.output_dir, result.run_as, result.run_id)
+print(model.predict(oot_df[features]))
 ```
 
-Python formats are `pickle` (standard library), `joblib`, `cloudpickle`, `skops`,
-`native`, `onnx`, and `mlflow`. Install `brainmodelkit[persistence]` for joblib and
-cloudpickle, `[secure]` for skops, `[onnx]` for ONNX conversion/runtime, or `[mlflow]`
-for MLflow. All imports are lazy; these extras are not needed for default saving.
+This small dataset demonstrates the API. For actual training, supply your prepared
+features and a separate out-of-time dataset. Set `output_dir="my_runs"` to change
+the run root; no separate model path is needed.
+
+Choose the destination independently of serialization:
+
+| Destination | Behavior | Result location |
+| --- | --- | --- |
+| `run_as="local"` | Saves the model and reports in one run directory | `output_dir` and `model_uri` |
+| `run_as="mlflow"` | Logs model, parameters, finite metrics, metadata and reports | `run_id` and `runs:/<run_id>/model` |
+| `run_as="none"` | Trains, scores and calculates metrics without filesystem work | `output_dir`, `model_uri`, `run_id` are `None` |
+
+For notebooks or repeated experiments without saved artifacts:
+
+```python
+result = train_model("experiment", "target", features, train_df, oot_df, run_as="none")
+print(result.metrics)
+print(result.model.predict(oot_df[features]))
+assert result.output_dir is None
+assert result.model_uri is None
+```
+
+For local Pandas runs, `model_format=None` means `"pickle"` (standard library).
+Alternatives are `joblib`, `cloudpickle`, `skops`, `native`, and `onnx`.
+Install `brainmodelkit[persistence]` for joblib/cloudpickle, `[secure]` for skops,
+or `[onnx]` for ONNX. Optional dependencies are imported only when requested.
+
+For example, install `python -m pip install -e ".[pandas,persistence]"`, then:
+
+```python
+result = train_model(
+    "credit_joblib", "target", features, train_df, oot_df, model_format="joblib"
+)
+model = load_model(result.model_uri, format="joblib")
+```
+
+For native LightGBM persistence, install
+`python -m pip install -e ".[pandas,lightgbm]"`, then:
+
+```python
+result = train_model(
+    "credit_native",
+    "target",
+    features,
+    train_df,
+    oot_df,
+    model="lightgbm",
+    run_as="local",
+    model_format="native",
+)
+```
 
 Native saving supports LightGBM, XGBoost and CatBoost. Load with
-`load_model(path, format="native", model_class=YourModelClass)` using the matching
-framework class. LightGBM wrappers save their underlying booster and must load with
-`model_class=lightgbm.Booster`; the sklearn wrapper is not reconstructed.
-ONNX uses skl2onnx with one training row to describe inputs, requires a supported
-converter, and loads as an `onnxruntime.InferenceSession` (use its `run` API).
-MLflow saving creates a local model directory independently of `mlflow_logging`;
-loading selects sklearn or Spark from the MLflow manifest.
+`load_model(path, format="native", model_class=YourModelClass)`.
+LightGBM native files load with `model_class=lightgbm.Booster`, including files
+saved from sklearn wrappers. ONNX requires a supported skl2onnx converter,
+uses one training row to describe inputs, and loads as an
+`onnxruntime.InferenceSession` with its `run` API.
 
-Spark training accepts `save_path`, `save_format="spark"`, `save_metadata=True`,
-and `overwrite=False`. Native persistence uses the fitted pipeline's Spark writer:
+Local Spark runs default to `model_format="spark"`, the only supported local
+Spark format. They use the native Spark ML writer and preserve the full pipeline:
+
+Install `python -m pip install -e ".[pyspark]"` and use Spark DataFrames for
+`train_df` and `oot_df`. Your application must create and configure the Spark session.
 
 ```python
 from pyspark.ml import PipelineModel
+from brainmodelkit.persistence import load_model
 from brainmodelkit.training.pyspark import train_model
 
-result = train_model(
-    "baseline",
-    "target",
-    ["age", "income"],
-    train_df,
-    oot_df,
-    save_path="models/spark_model",
-    overwrite=True,
-)
-model = load_model("models/spark_model", format="spark", model_class=PipelineModel)
+result = train_model("credit_spark", "target", features, train_df, oot_df)
+model = load_model(result.model_uri, format="spark", model_class=PipelineModel)
 ```
 
-Spark also supports `save_format="mlflow"`; `overwrite=True` is supported only by
-the native Spark writer. Loading native Spark models requires their class and an
-appropriately configured Spark environment. Spark filesystem URIs are passed to
-Spark unchanged.
+Spark `overwrite` is forwarded to the native writer; automatic run directories
+are always unique. Native Spark persistence requires a configured Spark/Hadoop
+environment.
 
-By default, local saves create `<save_path>.metadata.json`, including class,
-framework, package/Python versions, UTC timestamp, format, target, features, and
-JSON-serializable training parameters. Nonserializable parameters are omitted.
-No additional metrics are computed. Set `save_metadata=False` to skip the sidecar;
-sidecars are not written for URI paths. Format selection is explicit and never
-inferred from a filename. Python file formats can replace an existing file;
-MLflow requires a new or empty destination directory.
+For MLflow, install `brainmodelkit[mlflow]` and configure your tracking URI and
+experiment. No running tracking server is required when using a local store:
 
-Load only trusted artifacts with pickle, joblib, cloudpickle and MLflow. For skops,
-pass reviewed additional types through `load_model(..., trusted=[...])`; unknown
-types are not trusted automatically. See the
-[scikit-learn persistence guide](https://scikit-learn.org/stable/model_persistence.html)
-for format compatibility and security considerations.
+```bash
+python -m pip install -e ".[pandas,mlflow]"
+```
+
+For a local Pandas example using the data above:
+
+```python
+from pathlib import Path
+
+import mlflow
+
+from brainmodelkit.persistence import load_model
+from brainmodelkit.training.pandas import train_model
+
+mlflow.set_tracking_uri((Path.cwd() / "mlruns").as_uri())
+mlflow.set_experiment("brainmodelkit-training")
+
+result = train_model(
+    "credit_tracked",
+    "target",
+    features,
+    train_df,
+    oot_df,
+    run_as="mlflow",
+    signature=True,
+)
+model = load_model(result.model_uri, format="mlflow")
+print(result.run_id, result.model_uri)
+```
+
+Use the same `run_as="mlflow"` option with the Spark trainer and Spark DataFrames;
+install `.[pyspark,mlflow]` for that backend.
+
+MLflow logs the backend's native flavor and creates a nested run if one is active.
+It logs target/features and environment information as tags and uploads all four
+report files under `training_report/`. Temporary reports are removed after upload;
+`result.output_dir` is `None`. `signature=True` requires `run_as="mlflow"`.
+Leave `model_format=None` for MLflow or none; serialization selection applies only
+to local runs.
+
+`model_info.json` describes the model, original run name, ID, target, features,
+and JSON-serializable parameters; unsupported parameters are omitted.
+`metrics.json` holds existing training metrics (undefined values become JSON null).
+`feature_importance.csv` contains native importance or signed coefficients.
+`metadata.json` records versions, UTC timestamp, destination, format, framework,
+and model class. Persistence computes no additional metrics.
+
+Migration from the previous training API:
+
+- Default calls now save a model as well as reports. Use `run_as="none"` for
+  experiments that should create no artifacts.
+- Replace `mlflow_logging=True` with `run_as="mlflow"`. The old flag remains a
+  deprecated alias; MLflow no longer retains a separate local report directory.
+- Replace `save_format` with `model_format`. Non-MLflow values remain deprecated
+  aliases; conflicting formats raise `ValueError`.
+- Omit `save_path` and use `result.model_uri`. A deprecated explicit path remains
+  supported for local runs, saving the model there once and reports in the run
+  directory. `save_metadata` controls only this legacy path's metadata sidecar;
+  complete run metadata is always written.
+- `save_format="mlflow"` raises a migration error: use `run_as="mlflow"` and omit
+  `save_path`. Combining an external path with MLflow or none is rejected.
+- Read metrics from `metrics.json` instead of `model_info.json["metrics"]`.
+
+The standalone persistence loaders retain their existing API. Formats are never
+guessed from filename extensions. Only load trusted artifacts with pickle, joblib,
+cloudpickle or MLflow; pass reviewed additional skops types via `trusted=[...]`.
 
 ## Development
 
