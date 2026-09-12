@@ -702,6 +702,78 @@ of every fitted model, install the MLflow extra and pass `mlflow_logging=True`;
 
 Standalone examples are in [examples/feature_selection](examples/feature_selection/README.md).
 
+## Optional model persistence
+
+Training returns the same `TrainingResult` and creates the same reports as before.
+The fitted model is saved separately only when `save_path` is provided:
+
+```python
+from brainmodelkit.training.pandas import train_model
+from brainmodelkit.persistence import load_model
+
+result = train_model(
+    "baseline",
+    "target",
+    ["age", "income"],
+    train_df,
+    oot_df,
+    save_path="models/model.pkl",  # defaults to save_format="pickle"
+)
+model = load_model("models/model.pkl", format="pickle")
+```
+
+Python formats are `pickle` (standard library), `joblib`, `cloudpickle`, `skops`,
+`native`, `onnx`, and `mlflow`. Install `brainmodelkit[persistence]` for joblib and
+cloudpickle, `[secure]` for skops, `[onnx]` for ONNX conversion/runtime, or `[mlflow]`
+for MLflow. All imports are lazy; these extras are not needed for default saving.
+
+Native saving supports LightGBM, XGBoost and CatBoost. Load with
+`load_model(path, format="native", model_class=YourModelClass)` using the matching
+framework class. LightGBM wrappers save their underlying booster and must load with
+`model_class=lightgbm.Booster`; the sklearn wrapper is not reconstructed.
+ONNX uses skl2onnx with one training row to describe inputs, requires a supported
+converter, and loads as an `onnxruntime.InferenceSession` (use its `run` API).
+MLflow saving creates a local model directory independently of `mlflow_logging`;
+loading selects sklearn or Spark from the MLflow manifest.
+
+Spark training accepts `save_path`, `save_format="spark"`, `save_metadata=True`,
+and `overwrite=False`. Native persistence uses the fitted pipeline's Spark writer:
+
+```python
+from pyspark.ml import PipelineModel
+from brainmodelkit.training.pyspark import train_model
+
+result = train_model(
+    "baseline",
+    "target",
+    ["age", "income"],
+    train_df,
+    oot_df,
+    save_path="models/spark_model",
+    overwrite=True,
+)
+model = load_model("models/spark_model", format="spark", model_class=PipelineModel)
+```
+
+Spark also supports `save_format="mlflow"`; `overwrite=True` is supported only by
+the native Spark writer. Loading native Spark models requires their class and an
+appropriately configured Spark environment. Spark filesystem URIs are passed to
+Spark unchanged.
+
+By default, local saves create `<save_path>.metadata.json`, including class,
+framework, package/Python versions, UTC timestamp, format, target, features, and
+JSON-serializable training parameters. Nonserializable parameters are omitted.
+No additional metrics are computed. Set `save_metadata=False` to skip the sidecar;
+sidecars are not written for URI paths. Format selection is explicit and never
+inferred from a filename. Python file formats can replace an existing file;
+MLflow requires a new or empty destination directory.
+
+Load only trusted artifacts with pickle, joblib, cloudpickle and MLflow. For skops,
+pass reviewed additional types through `load_model(..., trusted=[...])`; unknown
+types are not trusted automatically. See the
+[scikit-learn persistence guide](https://scikit-learn.org/stable/model_persistence.html)
+for format compatibility and security considerations.
+
 ## Development
 
 Create a virtual environment and install the development dependencies:

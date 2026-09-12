@@ -6,6 +6,7 @@ import sys
 import pytest
 from pyspark.sql import SparkSession
 
+from brainmodelkit.persistence import load_model
 from brainmodelkit.training.pyspark import train_model
 
 
@@ -23,7 +24,13 @@ def spark():
 @pytest.mark.parametrize(
     "model", ["logistic_regression", "random_forest", "gradient_boosting"]
 )
-def test_training(spark, tmp_path, model):
+def test_training(spark, tmp_path, model, monkeypatch):
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Training without save_path must not persist the model")
+
+    monkeypatch.setattr(
+        "brainmodelkit.training.pyspark._save_spark_model", unexpected_save
+    )
     data = spark.createDataFrame(
         [(-3.0, 0), (-2.0, 0), (-1.0, 0), (1.0, 1), (2.0, 1), (3.0, 1)],
         "x double, target int",
@@ -44,6 +51,32 @@ def test_training(spark, tmp_path, model):
     assert result.scoring_predictions.count() == 6
     assert result.model.transform(data.drop("target")).count() == 6
     assert len(result.feature_importance) == 1
+
+
+def test_training_persistence(spark, tmp_path):
+    from pyspark.ml import PipelineModel
+
+    data = spark.createDataFrame(
+        [(-2.0, 0), (-1.0, 0), (1.0, 1), (2.0, 1)], "x double, target int"
+    )
+    path = tmp_path / "pipeline"
+    result = train_model(
+        "saved",
+        "target",
+        ["x"],
+        data,
+        data,
+        output_dir=tmp_path / "reports",
+        save_path=path,
+        n_tiles=4,
+    )
+    loaded = load_model(path, "spark", model_class=PipelineModel)
+    assert loaded.transform(data).select("prediction").collect() == (
+        result.model.transform(data).select("prediction").collect()
+    )
+    assert (tmp_path / "pipeline.metadata.json").exists()
+    with pytest.raises(ValueError, match="Available:"):
+        train_model("bad", "target", ["x"], data, data, save_format="pickle")
 
 
 @pytest.mark.parametrize(

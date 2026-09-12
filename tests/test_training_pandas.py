@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import LogisticRegression
 
+from brainmodelkit.persistence import load_model
 from brainmodelkit.training.pandas import train_model
 
 
@@ -13,7 +14,13 @@ from brainmodelkit.training.pandas import train_model
     "model",
     ["logistic_regression", "random_forest", "gradient_boosting", LogisticRegression()],
 )
-def test_train_score_and_report(tmp_path, model):
+def test_train_score_and_report(tmp_path, model, monkeypatch):
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Training without save_path must not persist the model")
+
+    monkeypatch.setattr(
+        "brainmodelkit.training.pandas._save_python_model", unexpected_save
+    )
     data = pd.DataFrame(
         {"x": [-3.0, -2.0, -1.0, 1.0, 2.0, 3.0], "y": [0, 0, 0, 1, 1, 1]}
     )
@@ -92,3 +99,19 @@ def test_lightgbm(tmp_path):
         output_dir=tmp_path,
     )
     assert result.metrics["oot_auc"] == 1
+
+
+def test_training_persistence(tmp_path):
+    data = pd.DataFrame({"x": [-2.0, -1.0, 1.0, 2.0], "y": [0, 0, 1, 1]})
+    path = tmp_path / "model.pkl"
+    result = train_model(
+        "saved", "y", ["x"], data, data, output_dir=tmp_path / "reports", save_path=path
+    )
+    loaded = load_model(path)
+    assert list(loaded.predict(data[["x"]])) == list(result.model.predict(data[["x"]]))
+    assert (
+        json.loads((tmp_path / "model.pkl.metadata.json").read_text())["target_col"]
+        == "y"
+    )
+    with pytest.raises(ValueError, match="Available:"):
+        train_model("bad", "y", ["x"], data, data, save_format="spark")

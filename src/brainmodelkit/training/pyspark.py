@@ -13,6 +13,8 @@ from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
 
 from brainmodelkit.metrics.pyspark import auc_gini, ks_ntile
+from brainmodelkit.persistence._common import SPARK_FORMATS, validate_format
+from brainmodelkit.persistence.spark import _save_spark_model
 
 from ._common import TrainingResult, finish, importance_records, validate_columns
 
@@ -31,6 +33,10 @@ def train_model(
     mlflow_logging=False,
     signature=False,
     n_tiles=10,
+    save_path: str | None = None,
+    save_format: str = "spark",
+    save_metadata: bool = True,
+    overwrite: bool = False,
 ):
     """Fit assembler + classifier; return distributed scores and tiled OOT metrics.
 
@@ -39,7 +45,11 @@ def train_model(
     Features must be numeric and non-null. The returned PipelineModel accepts raw
     feature columns. Only aggregate metrics and feature importances reach the driver.
     MLflow signatures describe native prediction labels. No Spark session is created.
+    save_path optionally persists the fitted pipeline using Spark or MLflow.
+    overwrite applies only to Spark's native writer. Metadata sidecars are written
+    to <save_path>.metadata.json for local paths; URI paths are left to Spark.
     """
+    validate_format(save_format, SPARK_FORMATS)
     features = validate_columns(
         feature_cols,
         target_col,
@@ -123,6 +133,17 @@ def train_model(
         Path(output_dir),
     )
     params = {p.name: v for p, v in estimator.extractParamMap().items()}
+    if save_path is not None:
+        _save_spark_model(
+            fitted,
+            save_path,
+            save_format,
+            overwrite=overwrite,
+            save_metadata=save_metadata,
+            target_col=target_col,
+            feature_cols=features,
+            parameters=params,
+        )
     return finish(
         result,
         run_name,

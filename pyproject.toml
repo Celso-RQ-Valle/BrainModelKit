@@ -40,6 +40,9 @@ dependencies = []
 pandas = ["pandas>=2.0", "scikit-learn>=1.2"]
 pyspark = ["pyspark>=3.5"]
 mlflow = ["mlflow>=2.12"]
+persistence = ["joblib>=1.2", "cloudpickle>=2.2"]
+secure = ["skops>=0.10"]
+onnx = ["skl2onnx>=1.16", "onnx>=1.16", "onnxruntime>=1.17"]
 lightgbm = ["lightgbm>=4.0"]
 dataframes = [
     "pandas>=2.0",

@@ -8,6 +8,8 @@ from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
 from brainmodelkit.metrics.pandas import _calculate_auc_gini, calculate_ks
+from brainmodelkit.persistence._common import PYTHON_FORMATS, validate_format
+from brainmodelkit.persistence.python import _save_python_model
 
 from ._common import TrainingResult, finish, importance_records, validate_columns
 
@@ -25,6 +27,9 @@ def train_model(
     output_dir="training_runs",
     mlflow_logging=False,
     signature=False,
+    save_path: str | None = None,
+    save_format: str = "pickle",
+    save_metadata: bool = True,
 ):
     """Fit a fresh estimator and return OOT KS/AUC/Gini and class-1 scores.
 
@@ -34,7 +39,11 @@ def train_model(
     features before calling, or pass a scikit-learn Pipeline. Signature applies
     to MLflow's native predict output (class labels), not the added score column.
     Local reports are stored under a unique child of output_dir.
+    If save_path is provided, persist the fitted model separately using save_format
+    (pickle by default). Optional backends require their corresponding extras.
+    Metadata is written to <save_path>.metadata.json when save_metadata is true.
     """
+    validate_format(save_format, PYTHON_FORMATS)
     features = validate_columns(
         feature_cols,
         target_col,
@@ -96,6 +105,17 @@ def train_model(
         importance_records(features, values),
         Path(output_dir),
     )
+    if save_path is not None:
+        _save_python_model(
+            fitted,
+            save_path,
+            save_format,
+            save_metadata=save_metadata,
+            target_col=target_col,
+            feature_cols=features,
+            parameters=fitted.get_params(deep=False),
+            input_example=train_df[features].head(1) if save_format == "onnx" else None,
+        )
     return finish(
         result,
         run_name,
