@@ -36,4 +36,4 @@ raw feature inputs and predicted labels, not the added probability score.
 Spark logs the full assembler pipeline. No tracking server configuration is
 performed by these functions.
 
-See [destination, format and migration details](../../README.md#training-destinations-and-model-persistence).
+See [destination, format and migration details](../../README.md#saving-and-tracking-with-train_model).
