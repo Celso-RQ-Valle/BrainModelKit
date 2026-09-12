@@ -20,6 +20,65 @@ def data():
     return pd.DataFrame({"x": [-2.0, -1.0, 1.0, 2.0], "y": [0, 0, 1, 1]})
 
 
+@pytest.mark.parametrize("backend", ["pandas", "pyspark"])
+@pytest.mark.parametrize("destination", ["local", "mlflow", "none"])
+def test_runs_as_routes_to_existing_execution(backend, destination, monkeypatch):
+    import importlib
+
+    module = importlib.import_module(f"brainmodelkit.training.{backend}")
+    monkeypatch.setattr("brainmodelkit.training._common.optional_import", Mock())
+
+    def stop_after_validation(*args):
+        raise RuntimeError("validated")
+
+    resolver = Mock(wraps=module.resolve_execution)
+    monkeypatch.setattr(module, "resolve_execution", resolver)
+    monkeypatch.setattr(module, "validate_columns", stop_after_validation)
+    with pytest.raises(RuntimeError, match="validated"):
+        module.train_model("test", "y", ["x"], None, None, runs_as=destination)
+    assert resolver.call_args.kwargs["runs_as"] == destination
+    assert (
+        module.resolve_execution._mock_wraps(
+            "spark" if backend == "pyspark" else "sklearn",
+            "local",
+            None,
+            None,
+            None,
+            None,
+            False,
+            runs_as=destination,
+        )[0]
+        == destination
+    )
+
+
+@pytest.mark.parametrize("destination", ["local", "none"])
+def test_runs_as_pandas_persistence(data, tmp_path, destination):
+    result = train_model(
+        "alias", "y", ["x"], data, data, runs_as=destination, output_dir=tmp_path
+    )
+    assert result.run_as == destination
+    if destination == "local":
+        assert Path(result.model_uri).is_file()
+        assert list(load_model(result.model_uri).predict(data[["x"]])) == list(data.y)
+    else:
+        assert result.model_uri is None
+        assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"runs_as": "invalid"},
+        {"runs_as": "local", "run_as": "none"},
+        {"runs_as": "local", "mlflow_logging": True},
+    ],
+)
+def test_runs_as_invalid_or_conflicting(options):
+    with pytest.raises(ValueError):
+        train_model("bad", "y", ["x"], None, None, **options)
+
+
 def test_none_has_no_filesystem_or_serialization(data, tmp_path, monkeypatch):
     def unexpected(*args, **kwargs):
         pytest.fail("none must not perform filesystem operations or serialization")

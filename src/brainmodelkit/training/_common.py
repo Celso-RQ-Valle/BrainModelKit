@@ -59,10 +59,25 @@ def validate_columns(feature_cols, target_col, frames):
 
 
 def resolve_execution(
-    backend, run_as, model_format, mlflow_logging, save_path, save_format, signature
+    backend,
+    run_as,
+    model_format,
+    mlflow_logging,
+    save_path,
+    save_format,
+    signature,
+    *,
+    runs_as=None,
 ):
     """Normalize deprecated switches and validate before fitting."""
     validate_format(run_as, ("local", "mlflow", "none"))
+    if runs_as is not None:
+        validate_format(runs_as, ("local", "mlflow", "none"))
+        if run_as != "local" and run_as != runs_as:
+            raise ValueError("runs_as conflicts with run_as; pass only one spelling")
+        if mlflow_logging and runs_as != "mlflow":
+            raise ValueError("runs_as conflicts with mlflow_logging=True")
+        run_as = runs_as
     for name, value in (
         ("mlflow_logging", mlflow_logging),
         ("save_path", save_path),

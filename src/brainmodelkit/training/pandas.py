@@ -28,6 +28,7 @@ def train_model(
     df_scoring=None,
     output_dir="training_runs",
     run_as: str = "local",
+    runs_as: str | None = None,
     model_format: str | None = None,
     mlflow_logging=None,
     signature=False,
@@ -43,6 +44,8 @@ def train_model(
     features before calling, or pass a scikit-learn Pipeline. Signature applies
     to MLflow's native predict output (class labels), not the added score column.
     run_as selects local (default), mlflow, or none. Local runs own the model
+    and reports. runs_as is an equivalent spelling that overrides the default
+    run_as value; pass only one spelling per call. Local runs save the model
     and reports under output_dir; model_format defaults to pickle.
     signature requires MLflow. Legacy save_path, save_format and mlflow_logging
     are deprecated. save_metadata controls only legacy external model sidecars.
@@ -55,6 +58,7 @@ def train_model(
         save_path,
         save_format,
         signature,
+        runs_as=runs_as,
     )
     features = validate_columns(
         feature_cols,

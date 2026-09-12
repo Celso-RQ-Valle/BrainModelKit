@@ -33,6 +33,7 @@ def train_model(
     df_scoring=None,
     output_dir="training_runs",
     run_as: str = "local",
+    runs_as: str | None = None,
     model_format: str | None = None,
     mlflow_logging=None,
     signature=False,
@@ -50,12 +51,21 @@ def train_model(
     feature columns. Only aggregate metrics and feature importances reach the driver.
     MLflow signatures describe native prediction labels. No Spark session is created.
     run_as selects local (default), mlflow, or none. Local runs own the model
+    and reports. runs_as is an equivalent spelling that overrides the default
+    run_as value; pass only one spelling per call. Local runs save the model
     and reports under output_dir; model_format defaults to spark.
     signature requires MLflow. Legacy save_path, save_format and mlflow_logging
     are deprecated. save_metadata controls only legacy external model sidecars.
     """
     run_as, model_format = resolve_execution(
-        "spark", run_as, model_format, mlflow_logging, save_path, save_format, signature
+        "spark",
+        run_as,
+        model_format,
+        mlflow_logging,
+        save_path,
+        save_format,
+        signature,
+        runs_as=runs_as,
     )
     features = validate_columns(
         feature_cols,

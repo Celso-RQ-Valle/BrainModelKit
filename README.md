@@ -741,6 +741,27 @@ the run root; no separate model path is needed.
 
 Choose the destination independently of serialization:
 
+Both training modules also accept `runs_as` as an equivalent spelling of
+`run_as`. Pass one spelling per call. For example:
+
+```python
+result = train_model(
+    "credit_v1",
+    "target",
+    features,
+    train_df,
+    oot_df,
+    runs_as="local",
+    output_dir="training_runs",
+    model_format="pickle",
+)
+print(result.model_uri)
+```
+
+`runs_as="local"` saves the fitted model and reports automatically;
+`runs_as="mlflow"` logs them to MLflow; `runs_as="none"` saves nothing.
+The selected destination is returned in `result.run_as`.
+
 | Destination | Behavior | Result location |
 | --- | --- | --- |
 | `run_as="local"` | Saves the model and reports in one run directory | `output_dir` and `model_uri` |
