@@ -1,8 +1,7 @@
 """Native distributed Spark feature selection and backward-compatible OOT RFE.
 
-See the complete [Feature Selection Guide](../../docs/feature_selection.md) for
-method assumptions, Spark-specific behavior, scalability notes, and runnable
-examples. Each public function below links to its corresponding guide section.
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
 """
 
 from brainmodelkit.training.pyspark import train_model
@@ -12,9 +11,14 @@ from ._selection import resolve_frame
 from ._spark_iv import information_value
 from ._spark_model import feature_importance_selection, l1_selection
 from ._spark_quality import cardinality, completeness, variance_filter
+from ._spark_robustness import boruta, stability_selection
+from ._spark_search import permutation_importance_selection, rfecv, sequential_selection
 from ._spark_statistics import chi_square, correlation_filter
+from ._spark_univariate import anova, mutual_information
 
 __all__ = [
+    "anova",
+    "boruta",
     "cardinality",
     "chi_square",
     "completeness",
@@ -22,7 +26,12 @@ __all__ = [
     "feature_importance_selection",
     "information_value",
     "l1_selection",
+    "mutual_information",
+    "permutation_importance_selection",
     "rfe",
+    "rfecv",
+    "sequential_selection",
+    "stability_selection",
     "variance_filter",
 ]
 
@@ -59,7 +68,17 @@ def rfe(
     selected_features, history and output_dir. SynapseML must be configured for
     LightGBM. Custom models must expose one finite importance per input feature.
 
-    Documentation: [RFE guide](../../docs/feature_selection.md#rfe).
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
+
+        result = fs.rfe(
+            "demo", "target", train_df, oot_df, ["income", "age"], n_feat_final=1
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/rfe.md
     """
     oot_df = resolve_frame(oot_df, df_oot, "oot_df", "df_oot")
     return run_rfe(

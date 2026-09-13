@@ -1,4 +1,8 @@
-"""Shared selection-to-training orchestration, with backend-injected trainers."""
+"""Shared selection-to-training orchestration, with backend-injected trainers.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 from collections.abc import Callable, Sequence
 from typing import Any

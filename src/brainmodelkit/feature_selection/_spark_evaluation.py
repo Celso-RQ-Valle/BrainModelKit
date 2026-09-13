@@ -1,4 +1,8 @@
-"""Native Spark validation for optional final-model OOT evaluation."""
+"""Native Spark validation for optional final-model OOT evaluation.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 from collections.abc import Sequence
 

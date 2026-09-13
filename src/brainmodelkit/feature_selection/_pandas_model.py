@@ -1,4 +1,8 @@
-"""Estimator-based Pandas selection, without training persistence side effects."""
+"""Estimator-based Pandas selection, without training persistence side effects.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 from collections.abc import Sequence
 from typing import Any
@@ -60,8 +64,17 @@ def feature_importance_selection(
 ) -> SelectionResult:
     """Fit a classifier and rank native importance magnitudes.
 
-    See [Feature Importance](../../docs/feature_selection.md#feature-importance)
-    for supported models and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.feature_importance_selection(
+            train_df, "target", ["income", "age"], top_k=1
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/feature_importance_selection.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
@@ -121,8 +134,17 @@ def l1_selection(
 ) -> SelectionResult:
     """Select non-zero L1 logistic coefficients; scale features first.
 
-    See [L1 Selection](../../docs/feature_selection.md#l1-selection) for
-    regularization semantics and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.l1_selection(
+            train_df, "target", ["income", "age"]
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/l1_selection.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
@@ -176,8 +198,17 @@ def permutation_importance_selection(
 ) -> SelectionResult:
     """Evaluate a fitted model by repeatedly permuting each feature.
 
-    See [Permutation Importance](../../docs/feature_selection.md#permutation-importance)
-    for held-out evaluation and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.permutation_importance_selection(
+            model, validation_df, "target", ["income", "age"]
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/permutation_importance_selection.md
     """
     features = supervised(df, target_col, feature_cols)
     values = permutation_importance(

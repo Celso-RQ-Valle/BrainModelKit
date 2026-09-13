@@ -1,4 +1,8 @@
-"""Pandas-only cross-validation wrappers and all-relevant selection."""
+"""Pandas-only cross-validation wrappers and all-relevant selection.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 import importlib
 from collections.abc import Sequence
@@ -38,8 +42,17 @@ def rfecv(
 ) -> SelectionResult:
     """Choose the feature count by cross-validated recursive elimination.
 
-    See [RFECV](../../docs/feature_selection.md#rfecv) for configuration and
-    examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.rfecv(
+            train_df, "target", ["income", "age"], cv=3
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/rfecv.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
@@ -104,9 +117,17 @@ def sequential_selection(
 ) -> SelectionResult:
     """Perform greedy forward or backward cross-validated subset selection.
 
-    See [Sequential Selection](
-    ../../docs/feature_selection.md#sequential-feature-selection) for direction
-    options and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.sequential_selection(
+            train_df, "target", ["income", "age"], cv=3
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/sequential_selection.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
@@ -164,8 +185,17 @@ def stability_selection(
     Each group receives n_iterations fits and equal weight. This is a robustness
     diagnostic, not a formal false-discovery-controlled stability estimator.
 
-    See [Stability Selection](../../docs/feature_selection.md#stability-selection)
-    for grouping and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.stability_selection(
+            train_df, "target", ["income", "age"], n_iterations=5
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/stability_selection.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
@@ -287,8 +317,17 @@ def boruta(
 ) -> SelectionResult:
     """Run optional Boruta shadow-feature selection.
 
-    See [Boruta](../../docs/feature_selection.md#boruta) for installation,
-    statuses, and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.boruta(
+            train_df, "target", ["income", "age"], n_estimators=30, max_iter=30
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/boruta.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)

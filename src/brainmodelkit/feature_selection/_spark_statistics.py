@@ -1,4 +1,8 @@
-"""Spark ML statistics; dataset rows never leave Spark."""
+"""Spark ML statistics; dataset rows never leave Spark.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 import math
 from collections.abc import Sequence
@@ -68,8 +72,17 @@ def correlation_filter(
 ) -> SelectionResult:
     """Run native Spark Pearson or Spearman correlation filtering.
 
-    See [Correlation](../../docs/feature_selection.md#correlation) for the
-    driver-memory limit and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
+
+        result = fs.correlation_filter(
+            train_df, feature_cols=["income", "age"], threshold=0.9
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/correlation_filter.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
@@ -104,8 +117,17 @@ def chi_square(
 
     Unlike sklearn count-based chi2, Spark treats each distinct code as a category.
 
-    See [Chi-Square](../../docs/feature_selection.md#chi-square) for input
-    semantics, limits, and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
+
+        result = fs.chi_square(
+            train_df, "target", ["count", "indicator"], max_p_value=0.05
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/chi_square.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)

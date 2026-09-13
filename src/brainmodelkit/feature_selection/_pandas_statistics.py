@@ -1,4 +1,8 @@
-"""Pandas/scikit-learn classification statistics; no Spark dependencies."""
+"""Pandas/scikit-learn classification statistics; no Spark dependencies.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 from collections.abc import Sequence
 
@@ -50,8 +54,17 @@ def correlation_filter(
 ) -> SelectionResult:
     """Greedy absolute-correlation filter; earlier retained columns win ties.
 
-    See [Correlation](../../docs/feature_selection.md#correlation) for method
-    semantics and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.correlation_filter(
+            train_df, feature_cols=["income", "age"], threshold=0.9
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/correlation_filter.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
@@ -80,8 +93,17 @@ def mutual_information(
 ) -> SelectionResult:
     """Estimate classification mutual information in nats.
 
-    See [Mutual Information](../../docs/feature_selection.md#mutual-information)
-    for discrete-input handling and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.mutual_information(
+            train_df, "target", ["income", "age"], top_k=1
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/mutual_information.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)
@@ -111,8 +133,17 @@ def chi_square(
 ) -> SelectionResult:
     """Run chi-square selection for nonnegative integer count features.
 
-    See [Chi-Square](../../docs/feature_selection.md#chi-square) for Pandas
-    semantics, p-value filtering, and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.chi_square(
+            train_df, "target", ["count", "indicator"], max_p_value=0.05
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/chi_square.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)
@@ -168,8 +199,17 @@ def anova(
 ) -> SelectionResult:
     """Run a one-way classification ANOVA F-test.
 
-    See [ANOVA](../../docs/feature_selection.md#anova--f-test) for assumptions
-    and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.anova(
+            train_df, "target", ["income", "age"], max_p_value=0.05
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/anova.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)
@@ -194,8 +234,17 @@ def information_value(
 ) -> SelectionResult:
     """Compute smoothed binary Information Value with a missing bin.
 
-    See [Information Value](../../docs/feature_selection.md#information-value)
-    for binning, WoE diagnostics, and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.information_value(
+            train_df, "target", ["income", "age"], min_iv=0.02
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/information_value.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(

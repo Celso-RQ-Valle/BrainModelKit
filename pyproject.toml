@@ -38,7 +38,7 @@ dependencies = []
 
 [project.optional-dependencies]
 pandas = ["pandas>=2.0", "scikit-learn>=1.2"]
-pyspark = ["pyspark>=3.5", "numpy>=1.23"]
+pyspark = ["pyspark>=3.5", "numpy>=1.23", "scipy>=1.9"]
 mlflow = ["mlflow>=2.12"]
 persistence = ["joblib>=1.2", "cloudpickle>=2.2"]
 secure = ["skops>=0.10"]
@@ -49,6 +49,8 @@ dataframes = [
     "pandas>=2.0",
     "scikit-learn>=1.2",
     "pyspark>=3.5",
+    "scipy>=1.9",
+    "scipy>=1.9",
 ]
 dev = [
     "build>=1.2",
@@ -63,6 +65,7 @@ dev = [
 
 [project.urls]
 Repository = "https://github.com/Celso-RQ-Valle/BrainModelKit"
+Documentation = "https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md"
 Issues = "https://github.com/Celso-RQ-Valle/BrainModelKit/issues"
 Changelog = "https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/CHANGELOG.md"
 

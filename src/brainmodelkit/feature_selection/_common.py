@@ -1,4 +1,8 @@
-"""Backend-independent recursive feature elimination."""
+"""Backend-independent recursive feature elimination.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 import json
 import math

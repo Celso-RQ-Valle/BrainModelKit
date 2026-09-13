@@ -3,6 +3,23 @@
 For method explanations, assumptions, and the backend matrix, see the
 [Feature Selection Guide](../../docs/feature_selection.md).
 
+Run any of the sixteen selectors with a self-contained dataset:
+
+```bash
+python examples/feature_selection/method_example.py --backend pandas --method completeness
+python examples/feature_selection/method_example.py --backend spark --method rfecv
+python examples/feature_selection/method_example.py --backend spark --method boruta --quick
+```
+
+Replace `--method` with any public function name in the
+[method index](../../docs/feature_selection.md#api-quick-reference). `--quick`
+reduces permutation, bootstrap, and Boruta budgets for a smoke run. Boruta often
+remains tentative with that budget; use the normal run for inference exploration.
+Only the `rfe` example writes model/report files under `feature_selection_runs/`.
+The [shared notebook setup](../../docs/feature_selection/setup.md) prepares the
+variables used in individual Pandas guide snippets. The
+[Spark guide](../../docs/feature_selection/spark.md) covers all new Spark methods.
+
 - `pandas_workflow.py`: completeness → correlation → IV → existing RFE.
 - `pyspark_workflow.py`: native completeness → variance → correlation → IV → importance.
 - `pandas_example.py` and `spark_example.py`: original RFE examples, retained unchanged.

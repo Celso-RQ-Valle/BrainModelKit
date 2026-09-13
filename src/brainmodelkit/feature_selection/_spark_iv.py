@@ -1,4 +1,8 @@
-"""Distributed binary Information Value and WoE diagnostics."""
+"""Distributed binary Information Value and WoE diagnostics.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 from collections.abc import Sequence
 from functools import reduce
@@ -33,8 +37,17 @@ def information_value(
 ) -> SelectionResult:
     """Compute native Spark binned and smoothed binary Information Value.
 
-    See [Information Value](../../docs/feature_selection.md#information-value)
-    for binning, distributed diagnostics, and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
+
+        result = fs.information_value(
+            train_df, "target", ["income", "age"], min_iv=0.02
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/information_value.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols, numeric_features=False)

@@ -1,4 +1,8 @@
-"""Pandas-native data quality filters."""
+"""Pandas-native data quality filters.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 from collections.abc import Sequence
 
@@ -41,8 +45,17 @@ def completeness(
 ) -> SelectionResult:
     """Select by global non-missing fraction; group diagnostics are opt-in gates.
 
-    See [Completeness](../../docs/feature_selection.md#completeness) for inputs,
-    grouped diagnostics, and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.completeness(
+            train_df, feature_cols=["income", "age"], min_completeness=0.7
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/completeness.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
@@ -99,8 +112,17 @@ def variance_filter(
 ) -> SelectionResult:
     """Select population variance strictly above ``min_variance``.
 
-    See [Variance](../../docs/feature_selection.md#variance) for assumptions and
-    examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.variance_filter(
+            train_df, feature_cols=["income", "age"]
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/variance_filter.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
@@ -131,8 +153,17 @@ def cardinality(
 ) -> SelectionResult:
     """Select using exact distinct counts and the all-row unique ratio.
 
-    See [Cardinality](../../docs/feature_selection.md#cardinality) for options
-    and examples.
+    Usage
+    -----
+    Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
+
+        result = fs.cardinality(
+            train_df, feature_cols=["category"], max_unique=100
+        )
+        print(result.selected_features)
+
+    Parameters, return fields, algorithm, assumptions, and complete examples:
+    https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/cardinality.md
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)

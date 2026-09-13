@@ -1,8 +1,7 @@
 """Feature selection with optional Spark and Pandas backends.
 
-Start with the [Feature Selection Guide](../../docs/feature_selection.md), then
-import selectors from :mod:`brainmodelkit.feature_selection.pandas` or
-:mod:`brainmodelkit.feature_selection.pyspark`.
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
 """
 
 from ._common import RFEResult

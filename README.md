@@ -765,29 +765,145 @@ folder persistence. Read metrics from `metrics.json`.
 
 ## Feature selection
 
-BrainModelKit provides composable quality, statistical, model-based, wrapper,
-and robustness selectors through explicit Pandas and native PySpark namespaces.
+Start here to choose features, inspect the reasons, and evaluate a final model.
+All sixteen methods are available in both Pandas and Spark. Backend algorithms
+and arguments can differ; each method link below explains the actual computation,
+assumptions, decision rules, diagnostics, and examples.
+
+### Pandas quickstart
+
+Install `python -m pip install "BrainModelKit[pandas]"`. This complete example
+creates data, splits before selection, removes a constant, selects two features,
+and evaluates on held-out rows without writing files.
 
 ```python
-from brainmodelkit.feature_selection.pandas import completeness
+import pandas as pd
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+from brainmodelkit.feature_selection import pandas as fs
+from brainmodelkit.training.pandas import train_model
 
-result = completeness(df, feature_cols=features, min_completeness=0.70)
-features = result.selected_features
+x, y = make_classification(
+    n_samples=400, n_features=4, n_informative=2, n_redundant=0, random_state=42
+)
+features = ["income", "balance", "age", "tenure"]
+data = pd.DataFrame(x, columns=features).assign(constant=1.0, target=y)
+train, test = train_test_split(data, test_size=0.25, stratify=y, random_state=42)
+
+quality = fs.variance_filter(train, feature_cols=features + ["constant"])
+selection = fs.feature_importance_selection(
+    train,
+    "target",
+    quality.selected_features,
+    model="random_forest",
+    model_params={"n_estimators": 30},
+    top_k=2,
+)
+print(pd.DataFrame(selection.feature_table))
+print("Selected:", selection.selected_features)
+print("Rejected:", selection.rejected_features)
+
+if not selection.selected_features:
+    raise ValueError("No feature survived; inspect diagnostics before training.")
+final = train_model(
+    run_name="selected_features_demo",
+    target_col="target",
+    feature_cols=selection.selected_features,
+    train_df=train,
+    oot_df=test,
+    model="random_forest",
+    model_params={"n_estimators": 30, "random_state": 42},
+    save_model_to="none",
+)
+print(final.metrics)
 ```
 
-| Methods | Pandas | Native PySpark |
-| --- | --- | --- |
-| Completeness, Variance, Cardinality, Correlation | Yes | Yes |
-| Chi-Square, Information Value | Yes | Yes |
-| Feature Importance, L1 Selection, existing RFE | Yes | Yes |
-| Mutual Information, ANOVA / F-test, Permutation Importance | Yes | ? |
-| RFECV, Sequential Feature Selection, Stability Selection | Yes | ? |
-| Boruta | Optional `boruta` extra | ? |
+The constant is rejected by the quality filter; the importance selector retains
+two remaining features. Scores measure the fitted model's importance, not causal
+effects. In real projects use a later-period or group-separated test set where
+appropriate. Fit encoders and imputers on training rows only, and inside CV folds
+when using CV-based selection.
 
-Existing `rfe` imports and behavior are preserved. For API examples, assumptions,
-backend differences, formulas, and workflows, see the
-[Feature Selection Guide](docs/feature_selection.md) and
-[examples](examples/feature_selection/README.md).
+### Spark quickstart
+
+Install `python -m pip install "BrainModelKit[pyspark]"` and configure Java.
+This example builds data in Spark and runs RFECV with explicit binary-balanced
+folds. It intentionally has a perfect synthetic signal to make the mechanics easy
+to inspect; it is not a performance benchmark.
+
+```python
+from pyspark.sql import SparkSession, functions as F
+from brainmodelkit.feature_selection import pyspark as fs
+
+spark = SparkSession.builder.master("local[2]").appName("selection-demo").getOrCreate()
+try:
+    train = (
+        spark.range(240)
+        .withColumn("target", (F.col("id") % 2).cast("int"))
+        .withColumn("signal", F.col("target").cast("double"))
+        .withColumn("constant", F.lit(1.0))
+        .withColumn("fold", (F.floor(F.col("id") / 2) % 3).cast("int"))
+    )
+    result = fs.rfecv(
+        train,
+        "target",
+        ["signal", "constant"],
+        model="decision_tree",
+        cv=3,
+        fold_col="fold",
+    )
+    print(result.selected_features)  # ["signal"]
+    print(result.cv_results)
+finally:
+    spark.stop()
+```
+
+Spark selectors keep source rows distributed. The new permutation and Boruta
+methods require classic Spark Python workers and use distributed sorting/indexing;
+they do not support Spark Connect. MI uses binned counts in Spark, while Pandas
+uses sklearn estimation. Read the
+[Spark algorithm and execution guide](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/spark.md)
+for fold semantics, bootstrap differences, model schemas, and compute costs.
+
+### Choose a method and read its algorithm
+
+| Method | Question answered | Detailed guide (Pandas and Spark) |
+| --- | --- | --- |
+| `completeness` | Is the feature sufficiently available, globally and by group? | [Completeness](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/completeness.md) |
+| `variance_filter` | Is there variation beyond a chosen floor? | [Variance](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/variance_filter.md) |
+| `cardinality` | Does the distinct-value count fit the intended use? | [Cardinality](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/cardinality.md) |
+| `correlation_filter` | Which numeric features are redundant with earlier retained ones? | [Correlation](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/correlation_filter.md) |
+| `mutual_information` | Is there univariate dependence on the target? | [Mutual information](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/mutual_information.md) |
+| `chi_square` | Do count/category features show target association? | [Chi-square](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/chi_square.md) |
+| `anova` | Do numeric class means differ? | [ANOVA](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/anova.md) |
+| `information_value` | How different are event/non-event bin distributions? | [IV and WoE](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/information_value.md) |
+| `feature_importance_selection` | Which features have high native model importance? | [Importance](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/feature_importance_selection.md) |
+| `l1_selection` | Which penalized logistic coefficients remain nonzero? | [L1](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/l1_selection.md) |
+| `permutation_importance_selection` | How much does held-out performance drop after shuffling? | [Permutation](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/permutation_importance_selection.md) |
+| `rfe` | Which features survive elimination to a fixed count? | [RFE](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/rfe.md) |
+| `rfecv` | Which visited feature count maximizes CV performance? | [RFECV](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/rfecv.md) |
+| `sequential_selection` | Which greedy additions/removals improve CV score? | [Sequential](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/sequential_selection.md) |
+| `stability_selection` | Which features recur across resamples/groups? | [Stability](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/stability_selection.md) |
+| `boruta` | Which real features consistently beat shuffled shadows? | [Boruta hypotheses and decisions](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/boruta.md) |
+
+Pandas Boruta requires `BrainModelKit[pandas,boruta]`; Spark Boruta uses the
+native forest with the Spark extra. Its guide explains shadow construction,
+binomial hit tests, multiple-testing corrections, and why an unresolved
+hypothesis is not a validated null.
+
+Except for historical RFE (`RFEResult`), selectors return `SelectionResult`.
+Inspect `feature_table` and carry `selected_features` into the next step.
+Ranked methods do not invent a cutoff: set `top_k` or a threshold intentionally.
+RFE writes iteration reports; the other selection calls in these examples do not
+write models or start MLflow runs.
+
+Read the
+[full feature-selection guide](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md)
+and
+[runnable examples](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/examples/feature_selection/README.md).
+Documentation links are absolute so they also work when this README is rendered
+on PyPI. New Spark methods described here are in the source tree; install the
+checkout with `pip install -e ".[pyspark]"` until a release containing them is published.
 
 ## Development
 

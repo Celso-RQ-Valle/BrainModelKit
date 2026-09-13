@@ -22,6 +22,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Complete Spark feature-selection namespace: binned mutual information, ANOVA,
+  permutation importance, fold-local RFECV, forward/backward sequential selection,
+  Poisson-bootstrap stability, and native forest Boruta with corrected hit tests.
+- Per-method algorithm/parameter guides, Boruta inference documentation, complete
+  README quickstarts, and a standalone selector example runner for both backends.
+- Spark extra now includes SciPy for scalar F/binomial probability calculations;
+  distributed datasets are not converted to Pandas or passed to sklearn.
+
 - Pandas and Spark `cube_analysis.calculate_ntile` functions for risk tables
   within every grouping subset and score.
 

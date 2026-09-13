@@ -1,4 +1,8 @@
-"""Dependency-free result and validation helpers for composable selectors."""
+"""Dependency-free result and validation helpers for composable selectors.
+
+Usage, method algorithms, parameters, and examples:
+https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
+"""
 
 import math
 from collections.abc import Sequence

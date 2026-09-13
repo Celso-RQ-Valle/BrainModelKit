@@ -202,7 +202,7 @@ def test_invalid_inputs(spark):
 
 
 def test_spark_namespace_isolated():
-    absent = {
+    available = {
         "mutual_information",
         "anova",
         "rfecv",
@@ -211,7 +211,7 @@ def test_spark_namespace_isolated():
         "permutation_importance_selection",
         "boruta",
     }
-    assert all(not hasattr(fs, name) for name in absent)
+    assert all(hasattr(fs, name) for name in available)
     code = """
 import importlib.abc
 import sys
@@ -229,3 +229,149 @@ from brainmodelkit.feature_selection.pyspark import completeness, information_va
         cwd=Path(__file__).resolve().parents[1],
         check=True,
     )
+
+
+def test_new_univariate_statistics(spark):
+    import math
+
+    from scipy.stats import f_oneway
+
+    rows = [(float(i % 4), float(i % 2), 1.0, i % 2) for i in range(40)]
+    df = spark.createDataFrame(
+        rows, "x double, signal double, constant double, target int"
+    )
+    result = fs.mutual_information(
+        df, "target", ["signal", "constant"], discrete_features=True
+    )
+    assert result.feature_table[0]["mutual_information"] == pytest.approx(math.log(2))
+    assert result.feature_table[1]["mutual_information"] == 0
+    binned = fs.mutual_information(df, "target", ["x"], n_bins=4, relative_error=0)
+    assert binned.metadata["estimator"] == "binned"
+    result = fs.anova(df, "target", ["x", "signal", "constant"])
+    expected = f_oneway(
+        [r[0] for r in rows if r[-1] == 0], [r[0] for r in rows if r[-1] == 1]
+    )
+    assert result.feature_table[0]["f_statistic"] == pytest.approx(expected.statistic)
+    assert result.feature_table[0]["p_value"] == pytest.approx(expected.pvalue)
+    assert result.feature_table[1]["f_statistic"] == float("inf")
+    assert result.feature_table[2]["selected"] is False
+    with pytest.raises(ValueError, match="mask"):
+        fs.mutual_information(df, "target", ["x"], discrete_features=[])
+
+
+@pytest.fixture
+def search_data(spark):
+    before = spark.sparkContext._jsc.getPersistentRDDs().size()
+    yield spark.createDataFrame(
+        [(float(i % 2), 0.0, i % 2, (i // 2) % 2) for i in range(40)],
+        "signal double, constant double, target int, fold int",
+    )
+    assert spark.sparkContext._jsc.getPersistentRDDs().size() == before
+
+
+def test_distributed_permutation(search_data):
+    from brainmodelkit.feature_selection._spark_search import indexed, shuffled
+
+    with indexed(search_data) as frame:
+        permuted = shuffled(frame, "signal", 42)
+        assert permuted.count() == search_data.count()
+        assert (
+            permuted.groupBy("signal").count().orderBy("signal").collect()
+            == search_data.groupBy("signal").count().orderBy("signal").collect()
+        )
+    model = fs.feature_importance_selection(
+        search_data, "target", ["signal", "constant"], model="decision_tree"
+    ).model
+    result = fs.permutation_importance_selection(
+        model, search_data, "target", ["signal", "constant"], n_repeats=1
+    )
+    assert result.feature_table[0]["importance_mean"] > 0
+    assert result.feature_table[1]["importance_mean"] == 0
+
+
+def test_spark_rfecv(search_data):
+    result = fs.rfecv(
+        search_data,
+        "target",
+        ["signal", "constant"],
+        model="decision_tree",
+        cv=2,
+        fold_col="fold",
+    )
+    assert result.selected_features == ["signal"]
+    assert result.cv_results["n_features"] == [1, 2]
+    assert result.model.numFeatures == 1
+
+
+@pytest.mark.parametrize("direction", ["forward", "backward"])
+def test_spark_sequential(search_data, direction):
+    result = fs.sequential_selection(
+        search_data,
+        "target",
+        ["signal", "constant"],
+        model="decision_tree",
+        cv=2,
+        fold_col="fold",
+        direction=direction,
+    )
+    assert result.selected_features == ["signal"]
+    assert len(result.history[0]["candidates"]) == 2
+
+
+def test_spark_stability(search_data):
+    result = fs.stability_selection(
+        search_data,
+        "target",
+        ["signal", "constant"],
+        n_iterations=2,
+        group_by="fold",
+        selector_kwargs={"model": "decision_tree", "top_k": 1},
+    )
+    assert result.selected_features == ["signal"]
+    assert result.metadata["n_fits"] == 4
+    assert result.feature_table[0]["selection_frequency"] == 1
+
+
+def test_spark_boruta(search_data):
+    result = fs.boruta(
+        search_data,
+        "target",
+        ["signal", "constant"],
+        n_estimators=3,
+        max_iter=1,
+        model_params={"maxDepth": 2},
+    )
+    assert result.selected_features == []
+    assert all(r["status"] == "tentative" for r in result.feature_table)
+    assert result.history[0]["shadow_threshold"] >= 0
+    assert result.feature_table[1]["hits"] == 0
+
+
+def test_shadow_hypothesis_decisions():
+    from brainmodelkit.feature_selection._spark_robustness import decisions
+
+    pa, pr, accept, reject = decisions([20, 0, 10], 20, 0.05, True, 3)
+    assert accept.tolist() == [True, False, False]
+    assert reject.tolist() == [False, True, False]
+    assert pa[0] == pytest.approx(2**-20)
+    assert pr[1] == pytest.approx(2**-20)
+
+
+def test_owned_cache_releases_on_error(search_data):
+    from brainmodelkit.feature_selection._spark_search import owned_cache
+
+    search_data.persist()
+    search_data.count()
+    context = search_data.sparkSession.sparkContext
+    before = context._jsc.getPersistentRDDs().size()
+    try:
+        with (
+            pytest.raises(RuntimeError, match="test failure"),
+            owned_cache(search_data) as cached,
+        ):
+            assert cached.count() == 40
+            raise RuntimeError("test failure")
+        assert search_data.is_cached
+        assert context._jsc.getPersistentRDDs().size() == before
+    finally:
+        search_data.unpersist(blocking=True)

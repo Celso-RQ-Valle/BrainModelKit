@@ -14,7 +14,8 @@ session and Java installation. Boruta additionally needs
 `pip install "BrainModelKit[pandas,boruta]"`.
 
 Core installation remains dependency-free. The Spark extra includes NumPy for
-Spark ML's native vector/statistics APIs, without adding Pandas or sklearn.
+feature-sized arrays and SciPy for scalar statistical tails, without adding Pandas
+or sklearn.
 See [Spark's dependency requirements](https://spark.apache.org/docs/3.5.7/api/python/getting_started/install.html).
 
 Except for the existing RFE, selectors return a lightweight `SelectionResult`:
@@ -28,13 +29,14 @@ Except for the existing RFE, selectors return a lightweight `SelectionResult`:
 | `grouped_table` | Completeness diagnostics: Pandas or distributed Spark DataFrame |
 | `correlation_pairs` | List of high-correlation feature pairs and coefficients |
 | `bin_details` | WoE diagnostics: Pandas or distributed Spark DataFrame |
-| `cv_results` | RFECV's sklearn CV result dictionary |
+| `cv_results` | RFECV CV scores/counts; backend-specific dictionaries |
 | `history` | Stability fit/group diagnostics; RFE has its own history contract |
 | `model` | Fitted estimator when the method returns one |
 
 For Pandas presentation, `pd.DataFrame(result.feature_table)` is convenient.
 Spark never converts the source dataset to Pandas: only bounded model/statistic
-summaries reach Python. New selectors do not persist files or start MLflow runs.
+summaries reach Python. New selectors do not persist files or start MLflow runs. Spark search methods
+own temporary executor caches and release them afterward.
 Existing RFE retains its original `RFEResult` and persistence behavior.
 
 All methods require an explicit, nonempty `feature_cols` list, except historical
@@ -62,22 +64,22 @@ below opens the detailed section with parameter guidance and a runnable example.
 
 | Function | Pandas | PySpark |
 | --- | --- | --- |
-| `completeness` | [guide](#completeness) | [guide](#completeness) |
-| `variance_filter` | [guide](#variance) | [guide](#variance) |
-| `cardinality` | [guide](#cardinality) | [guide](#cardinality) |
-| `correlation_filter` | [guide](#correlation) | [guide](#correlation) |
-| `mutual_information` | [guide](#mutual-information) | — |
-| `chi_square` | [guide](#chi-square) | [guide](#chi-square) |
-| `anova` | [guide](#anova--f-test) | — |
-| `information_value` | [guide](#information-value) | [guide](#information-value) |
-| `feature_importance_selection` | [guide](#feature-importance) | [guide](#feature-importance) |
-| `l1_selection` | [guide](#l1-selection) | [guide](#l1-selection) |
-| `permutation_importance_selection` | [guide](#permutation-importance) | — |
-| `rfe` | [guide](#rfe) | [guide](#rfe) |
-| `rfecv` | [guide](#rfecv) | — |
-| `sequential_selection` | [guide](#sequential-feature-selection) | — |
-| `stability_selection` | [guide](#stability-selection) | — |
-| `boruta` | [guide](#boruta) | — |
+| `completeness` | [guide](feature_selection/completeness.md) | [guide](feature_selection/completeness.md) |
+| `variance_filter` | [guide](feature_selection/variance_filter.md) | [guide](feature_selection/variance_filter.md) |
+| `cardinality` | [guide](feature_selection/cardinality.md) | [guide](feature_selection/cardinality.md) |
+| `correlation_filter` | [guide](feature_selection/correlation_filter.md) | [guide](feature_selection/correlation_filter.md) |
+| `mutual_information` | [guide](feature_selection/mutual_information.md) | [guide](feature_selection/mutual_information.md) |
+| `chi_square` | [guide](feature_selection/chi_square.md) | [guide](feature_selection/chi_square.md) |
+| `anova` | [guide](feature_selection/anova.md) | [guide](feature_selection/anova.md) |
+| `information_value` | [guide](feature_selection/information_value.md) | [guide](feature_selection/information_value.md) |
+| `feature_importance_selection` | [guide](feature_selection/feature_importance_selection.md) | [guide](feature_selection/feature_importance_selection.md) |
+| `l1_selection` | [guide](feature_selection/l1_selection.md) | [guide](feature_selection/l1_selection.md) |
+| `permutation_importance_selection` | [guide](feature_selection/permutation_importance_selection.md) | [guide](feature_selection/permutation_importance_selection.md) |
+| `rfe` | [guide](feature_selection/rfe.md) | [guide](feature_selection/rfe.md) |
+| `rfecv` | [guide](feature_selection/rfecv.md) | [guide](feature_selection/rfecv.md) |
+| `sequential_selection` | [guide](feature_selection/sequential_selection.md) | [guide](feature_selection/sequential_selection.md) |
+| `stability_selection` | [guide](feature_selection/stability_selection.md) | [guide](feature_selection/stability_selection.md) |
+| `boruta` | [guide](feature_selection/boruta.md) | [guide](feature_selection/boruta.md#spark-example-and-parameters) |
 
 Basic usage follows the same pattern for all composable selectors:
 
@@ -92,6 +94,18 @@ diagnostics = result.feature_table
 The public modules also expose this guide from their module and function
 docstrings. RFE is retained as the training-integrated API and returns its
 backward-compatible `RFEResult`; all other selectors return `SelectionResult`.
+
+## Evaluation outputs
+
+Importance and L1 in both backends, and Pandas RFECV, sequential, stability, and
+Boruta accept `oot_df` (alias `df_oot`). Selection uses training data only. With a
+nonempty selection the final classifier is refitted on selected training columns,
+evaluated on OOT, and optionally scores `df_scoring`. Read `training_result`,
+`metrics`, and predictions from the result; no persistence is requested. If no
+feature survives, evaluation is skipped and `metadata['evaluation_status']` is
+`no_selected_features`. The original selection estimator is kept in
+`selection_model` when present. The new Spark wrappers accept selection data only;
+pass their selected list to `training.pyspark.train_model` for final evaluation.
 
 ## How to choose a feature-selection method
 
@@ -231,7 +245,7 @@ See the [Spark correlation API](https://spark.apache.org/docs/3.5.7/api/python/r
 
 ### Mutual Information
 
-**Supervised classification; Pandas only.** MI measures departure from independence:
+**Supervised classification; both backends with different estimators.** MI measures departure from independence:
 `I(X; Y) = sum p(x,y) log(p(x,y)/(p(x)p(y)))`, with the analogous integral for
 continuous variables. Scores are in nats. Zero estimated MI means no detected
 univariate dependence, not proof of independence.
@@ -254,8 +268,9 @@ mean report/select all defined estimates.
 Useful for nonlinear univariate screening. It needs adequate sample sizes and
 can be noisy for sparse categories; arbitrary ordinal encoding of nominal
 categories as continuous values is inappropriate. It does not account for
-redundancy or interactions. There is no Spark export because a scalable native
-equivalent is not included. See [sklearn MI](https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.mutual_info_classif.html).
+redundancy or interactions. Spark uses distributed binned counts; see the
+[Spark MI contract](feature_selection/spark.md#mutual_information).
+See [sklearn MI](https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.mutual_info_classif.html).
 
 ### Chi-Square
 
@@ -290,7 +305,7 @@ and [Spark ChiSquareTest](https://spark.apache.org/docs/latest/api/java/org/apac
 
 ### ANOVA / F-test
 
-**Supervised classification; Pandas only (`anova`).** One-way ANOVA compares
+**Supervised classification; Pandas and Spark (`anova`).** One-way ANOVA compares
 between-class and within-class variation: `F = MS_between / MS_within`. It tests
 whether class means differ, not arbitrary dependence. The classical p-value
 assumes independent observations, approximately normal within-class errors, and
@@ -309,7 +324,8 @@ a perfect class separation can legitimately produce an infinite F-statistic
 with a zero p-value. Useful for inexpensive numerical screening. Avoid relying
 on its p-values under severe heteroskedasticity or dependent observations, and
 do not expect it to find symmetric/nonlinear relationships with equal means.
-No Spark implementation is exposed.
+Spark computes equivalent F statistics from distributed class summaries;
+see [Spark ANOVA](feature_selection/spark.md#anova).
 
 ### Information Value
 
@@ -399,7 +415,8 @@ caller's responsibility. Pandas LightGBM needs its optional extra. Spark LightGB
 requires SynapseML and matching JVM packages configured outside BrainModelKit.
 
 Outputs include `feature`, `importance`, `ranking`, and `selected`, plus `model`.
-No persistence or OOT scoring is performed here. Spark returns the fitted native
+Without oot_df, this is selection only. Supplying oot_df refits the selected
+features for final OOT evaluation; see [evaluation outputs](#evaluation-outputs). Spark returns the fitted native
 classifier expecting an assembled `features` vector, not a raw-column pipeline.
 Models must expose one finite native importance per feature; arbitrary pipelines
 without a compatible importance attribute are not implicitly unwrapped.
@@ -435,7 +452,7 @@ nonlinear interactions. Strong regularization can validly select no features.
 
 ### Permutation Importance
 
-**Supervised evaluation; Pandas only.** For an already fitted model, permute one
+**Supervised evaluation; both backends.** For an already fitted model, permute one
 feature repeatedly and measure the decrease in a chosen score. Larger decreases
 indicate stronger model reliance. This function does not refit the model.
 
@@ -461,7 +478,8 @@ Use genuinely held-out data and preserve the fitted model's feature order.
 If using that set to choose features, it becomes a selection set, not final test
 data. Correlated features can substitute for one another and depress individual
 importance. Repeats increase runtime; the standard deviation measures permutation
-variation, not a confidence interval over new datasets. No Spark export is provided.
+variation, not a confidence interval over new datasets. Spark implements distributed
+permutations; see the [Spark contract](feature_selection/spark.md#permutation_importance_selection).
 
 ## Wrapper methods
 
@@ -519,7 +537,7 @@ but can be costly and inherits the model's importance biases and scaling issues.
 
 ### RFECV
 
-**Supervised; Pandas only.** RFECV means RFE plus cross-validation used to choose
+**Supervised; both backends (see their method pages for differences).** RFECV means RFE plus cross-validation used to choose
 the feature count. It is a separate sklearn-based selector, not a change to
 BrainModelKit's OOT RFE or its persistence contract.
 
@@ -554,7 +572,7 @@ See [sklearn RFECV](https://scikit-learn.org/stable/modules/generated/sklearn.fe
 
 ### Sequential Feature Selection
 
-**Supervised; Pandas only.** Forward selection adds the candidate with the best
+**Supervised; both backends (see their method pages for differences).** Forward selection adds the candidate with the best
 cross-validated score to the current subset. Backward selection removes the
 candidate whose removal gives the best score. Unlike RFE, it does not require
 native importance attributes.
@@ -589,7 +607,7 @@ cautions as RFECV. See [sklearn sequential selection](https://scikit-learn.org/s
 
 ### Stability Selection
 
-**Supervised robustness diagnostic; Pandas only.** Repeated stratified bootstrap
+**Supervised robustness diagnostic; both backends.** Pandas uses repeated stratified bootstrap
 samples run a base selector. `selection_frequency = selection_count / n_fits`;
 selection requires frequency at least `min_frequency` (default 0.80). This utility
 does not claim the formal error bounds of specialized stability-selection methods.
@@ -634,10 +652,12 @@ coefficients across periods requires consistent scaling.
 
 ### Boruta
 
-**Supervised all-relevant selection; Pandas only, optional dependency.** Boruta
+**Supervised all-relevant selection; both backends.** Boruta
 compares real feature importances with randomized shadow features over repeated
 fits. It aims to identify all relevant variables rather than a minimal subset.
-BrainModelKit delegates to BorutaPy and reports its decisions directly.
+Pandas delegates to BorutaPy; Spark implements native forest/shadow fitting and
+corrected hit tests. Read the [detailed Boruta inference guide](feature_selection/boruta.md)
+for the hypotheses, multiplicity rules, and backend differences.
 
 ```python
 from brainmodelkit.feature_selection.pandas import boruta
@@ -727,18 +747,18 @@ and needs a working native persistence environment.
 | `variance_filter` | Yes | Native population variance |
 | `cardinality` | Yes | Native exact distinct counts |
 | `correlation_filter` | Pearson/Spearman | Native Spark ML, bounded matrix |
-| `mutual_information` | Yes | Not exposed |
+| `mutual_information` | sklearn estimation | Distributed binned counts |
 | `chi_square` | Counts/indicators | Native categorical test |
-| `anova` | Yes | Not exposed |
+| `anova` | sklearn F-test | Distributed class summaries |
 | `information_value` | Yes | Native binning/aggregations |
 | `feature_importance_selection` | Yes | Native Spark estimators |
 | `l1_selection` | sklearn logistic | Spark ML logistic |
-| `permutation_importance_selection` | Yes | Not exposed |
+| `permutation_importance_selection` | sklearn permutation | Distributed sort/join permutations |
 | `rfe` | Existing API | Existing native API |
-| `rfecv` | Yes | Not exposed |
-| `sequential_selection` | Forward/backward | Not exposed |
-| `stability_selection` | Bootstrap/groups | Not exposed |
-| `boruta` | Optional BorutaPy | Not exposed |
+| `rfecv` | sklearn RFECV | Fold-local native elimination paths |
+| `sequential_selection` | Forward/backward | Native CV candidate search |
+| `stability_selection` | Stratified bootstrap/groups | Poisson bootstrap/groups |
+| `boruta` | Optional BorutaPy | Native forests and shadow hit tests |
 
 ## Scalability considerations
 
@@ -753,7 +773,9 @@ also bounds category count. IV performs per-feature aggregations and numeric
 quantile estimation; its category/bin tables remain distributed. Very wide datasets
 still generate large query plans and require screening or batches. No method
 collects the original training data, creates a local replica, calls `toPandas()`,
-or uses Python UDFs to replace Spark SQL expressions.
+or uses Python UDFs to replace Spark SQL expressions. Spark permutation/Boruta
+use distributed RDD indexing in addition to SQL sorts/joins; they require classic
+Spark rather than Spark Connect. See the [Spark execution guide](feature_selection/spark.md).
 
 Callers control caching: persist a frequently reused, preprocessed Spark frame
 when appropriate and unpersist it afterward. These functions do not create Spark
