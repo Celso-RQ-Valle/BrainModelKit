@@ -1,4 +1,9 @@
-"""Native distributed Spark feature selection and backward-compatible OOT RFE."""
+"""Native distributed Spark feature selection and backward-compatible OOT RFE.
+
+See the complete [Feature Selection Guide](../../docs/feature_selection.md) for
+method assumptions, Spark-specific behavior, scalability notes, and runnable
+examples. Each public function below links to its corresponding guide section.
+"""
 
 from brainmodelkit.training.pyspark import train_model
 
@@ -53,6 +58,8 @@ def rfe(
     only the final fit scores df_scoring. Returns the final training result,
     selected_features, history and output_dir. SynapseML must be configured for
     LightGBM. Custom models must expose one finite importance per input feature.
+
+    Documentation: [RFE guide](../../docs/feature_selection.md#rfe).
     """
     oot_df = resolve_frame(oot_df, df_oot, "oot_df", "df_oot")
     return run_rfe(

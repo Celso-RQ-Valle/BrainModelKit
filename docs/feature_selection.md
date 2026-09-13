@@ -55,6 +55,44 @@ analysis-only call does not invent a cutoff. Undefined scores are rejected.
 Statistical tests instead use `max_p_value=0.05` by default. Their `top_k` constraint
 is intersected with the p-value gate, not used to refill rejected positions.
 
+## API quick reference
+
+Use the backend-specific namespace that matches your DataFrame type. Every link
+below opens the detailed section with parameter guidance and a runnable example.
+
+| Function | Pandas | PySpark |
+| --- | --- | --- |
+| `completeness` | [guide](#completeness) | [guide](#completeness) |
+| `variance_filter` | [guide](#variance) | [guide](#variance) |
+| `cardinality` | [guide](#cardinality) | [guide](#cardinality) |
+| `correlation_filter` | [guide](#correlation) | [guide](#correlation) |
+| `mutual_information` | [guide](#mutual-information) | — |
+| `chi_square` | [guide](#chi-square) | [guide](#chi-square) |
+| `anova` | [guide](#anova--f-test) | — |
+| `information_value` | [guide](#information-value) | [guide](#information-value) |
+| `feature_importance_selection` | [guide](#feature-importance) | [guide](#feature-importance) |
+| `l1_selection` | [guide](#l1-selection) | [guide](#l1-selection) |
+| `permutation_importance_selection` | [guide](#permutation-importance) | — |
+| `rfe` | [guide](#rfe) | [guide](#rfe) |
+| `rfecv` | [guide](#rfecv) | — |
+| `sequential_selection` | [guide](#sequential-feature-selection) | — |
+| `stability_selection` | [guide](#stability-selection) | — |
+| `boruta` | [guide](#boruta) | — |
+
+Basic usage follows the same pattern for all composable selectors:
+
+```python
+from brainmodelkit.feature_selection.pandas import completeness
+
+result = completeness(df, feature_cols=["income", "age"])
+selected = result.selected_features
+diagnostics = result.feature_table
+```
+
+The public modules also expose this guide from their module and function
+docstrings. RFE is retained as the training-integrated API and returns its
+backward-compatible `RFEResult`; all other selectors return `SelectionResult`.
+
 ## How to choose a feature-selection method
 
 Start with availability and constant-feature checks. Inspect cardinality before

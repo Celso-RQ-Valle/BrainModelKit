@@ -58,7 +58,11 @@ def feature_importance_selection(
     top_k: int | None = None,
     random_state: int = 42,
 ) -> SelectionResult:
-    """Fit a classifier; rank magnitude and retain signed coefficients."""
+    """Fit a classifier and rank native importance magnitudes.
+
+    See [Feature Importance](../../docs/feature_selection.md#feature-importance)
+    for supported models and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
@@ -115,7 +119,11 @@ def l1_selection(
     random_state: int = 42,
     max_iter: int = 1000,
 ) -> SelectionResult:
-    """L1 logistic selection; scale features first. C is inverse regularization."""
+    """Select non-zero L1 logistic coefficients; scale features first.
+
+    See [L1 Selection](../../docs/feature_selection.md#l1-selection) for
+    regularization semantics and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
@@ -166,7 +174,11 @@ def permutation_importance_selection(
     top_k: int | None = None,
     n_jobs: int | None = None,
 ) -> SelectionResult:
-    """Evaluate a fitted model on held-out data by repeated feature permutation."""
+    """Evaluate a fitted model by repeatedly permuting each feature.
+
+    See [Permutation Importance](../../docs/feature_selection.md#permutation-importance)
+    for held-out evaluation and examples.
+    """
     features = supervised(df, target_col, feature_cols)
     values = permutation_importance(
         model,

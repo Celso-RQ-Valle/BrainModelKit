@@ -1,4 +1,9 @@
-"""Pandas-native feature selection and backward-compatible OOT RFE."""
+"""Pandas-native feature selection and backward-compatible OOT RFE.
+
+See the complete [Feature Selection Guide](../../docs/feature_selection.md) for
+method assumptions, parameter semantics, result fields, and runnable examples.
+Each public function below links to its corresponding section in that guide.
+"""
 
 from brainmodelkit.training.pandas import train_model
 
@@ -69,6 +74,8 @@ def rfe(
     Only the final fit scores df_scoring. Returns selected_features, the final
     training_result, history and output_dir. Inputs and estimators are not mutated.
     Custom models must expose one finite importance per input feature.
+
+    Documentation: [RFE guide](../../docs/feature_selection.md#rfe).
     """
     oot_df = resolve_frame(oot_df, df_oot, "oot_df", "df_oot")
     return run_rfe(

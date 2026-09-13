@@ -66,7 +66,11 @@ def correlation_filter(
     method: str = "pearson",
     max_features: int = 256,
 ) -> SelectionResult:
-    """Native Spark Pearson/Spearman; bound the driver-side p-by-p summary."""
+    """Run native Spark Pearson or Spearman correlation filtering.
+
+    See [Correlation](../../docs/feature_selection.md#correlation) for the
+    driver-memory limit and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
     number(threshold, "threshold", maximum=1)
@@ -96,9 +100,12 @@ def chi_square(
     top_k: int | None = None,
     max_categories: int = 1000,
 ) -> SelectionResult:
-    """Spark categorical independence tests on nonnegative integer category codes.
+    """Run Spark categorical independence tests on integer category codes.
 
     Unlike sklearn count-based chi2, Spark treats each distinct code as a category.
+
+    See [Chi-Square](../../docs/feature_selection.md#chi-square) for input
+    semantics, limits, and examples.
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)

@@ -45,7 +45,11 @@ def completeness(
     group_by: str | Sequence[str] | None = None,
     require_all_groups: bool = False,
 ) -> SelectionResult:
-    """Native global/grouped non-null fractions; floating NaN also counts as missing."""
+    """Select native global/grouped non-null fractions.
+
+    See [Completeness](../../docs/feature_selection.md#completeness) for
+    grouped diagnostics and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
     names = groups(train_df, group_by)
@@ -126,7 +130,11 @@ def variance_filter(
     df: DataFrame | None = None,
     min_variance: float = 0.0,
 ) -> SelectionResult:
-    """Native population variance over non-missing observations; strict threshold."""
+    """Select native population variance strictly above the threshold.
+
+    See [Variance](../../docs/feature_selection.md#variance) for assumptions and
+    examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
     number(min_variance, "min_variance")
@@ -158,7 +166,11 @@ def cardinality(
     max_unique: int | None = None,
     max_unique_ratio: float | None = None,
 ) -> SelectionResult:
-    """Exact native distinct non-missing counts; ratio denominator includes all rows."""
+    """Select using native distinct counts and an all-row unique ratio.
+
+    See [Cardinality](../../docs/feature_selection.md#cardinality) for options
+    and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
     integer(min_unique, "min_unique", 0)

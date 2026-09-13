@@ -48,7 +48,11 @@ def correlation_filter(
     threshold: float = 0.9,
     method: str = "pearson",
 ) -> SelectionResult:
-    """Greedy absolute-correlation filter; earlier retained input columns win ties."""
+    """Greedy absolute-correlation filter; earlier retained columns win ties.
+
+    See [Correlation](../../docs/feature_selection.md#correlation) for method
+    semantics and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = columns(train_df, feature_cols)
     number(threshold, "threshold", maximum=1)
@@ -74,7 +78,11 @@ def mutual_information(
     discrete_features: bool | Sequence[bool] = False,
     n_neighbors: int = 3,
 ) -> SelectionResult:
-    """Estimate classification MI in nats; explicitly mark discrete encoded inputs."""
+    """Estimate classification mutual information in nats.
+
+    See [Mutual Information](../../docs/feature_selection.md#mutual-information)
+    for discrete-input handling and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)
     integer(n_neighbors, "n_neighbors")
@@ -101,7 +109,11 @@ def chi_square(
     max_p_value: float | None = 0.05,
     top_k: int | None = None,
 ) -> SelectionResult:
-    """Scikit-learn chi-square for nonnegative integer counts/indicator features."""
+    """Run chi-square selection for nonnegative integer count features.
+
+    See [Chi-Square](../../docs/feature_selection.md#chi-square) for Pandas
+    semantics, p-value filtering, and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)
     x = train_df[features].to_numpy(dtype=float)
@@ -154,7 +166,11 @@ def anova(
     max_p_value: float | None = 0.05,
     top_k: int | None = None,
 ) -> SelectionResult:
-    """One-way classification ANOVA F-test; undefined constant scores are rejected."""
+    """Run a one-way classification ANOVA F-test.
+
+    See [ANOVA](../../docs/feature_selection.md#anova--f-test) for assumptions
+    and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols)
     if len(train_df) <= train_df[target_col].nunique():
@@ -176,7 +192,11 @@ def information_value(
     smoothing: float = 0.5,
     binning: str = "quantile",
 ) -> SelectionResult:
-    """Smoothed binary IV with a separate missing bin and quantile/uniform bins."""
+    """Compute smoothed binary Information Value with a missing bin.
+
+    See [Information Value](../../docs/feature_selection.md#information-value)
+    for binning, WoE diagnostics, and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(
         train_df, target_col, feature_cols, binary=True, numeric_features=False

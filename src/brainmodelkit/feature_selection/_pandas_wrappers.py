@@ -36,7 +36,11 @@ def rfecv(
     n_jobs: int | None = None,
     random_state: int = 42,
 ) -> SelectionResult:
-    """Sklearn RFECV chooses feature count by CV, independently of existing OOT RFE."""
+    """Choose the feature count by cross-validated recursive elimination.
+
+    See [RFECV](../../docs/feature_selection.md#rfecv) for configuration and
+    examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
@@ -98,7 +102,12 @@ def sequential_selection(
     n_jobs: int | None = None,
     random_state: int = 42,
 ) -> SelectionResult:
-    """Greedy forward/backward cross-validated subset selection using sklearn."""
+    """Perform greedy forward or backward cross-validated subset selection.
+
+    See [Sequential Selection](
+    ../../docs/feature_selection.md#sequential-feature-selection) for direction
+    options and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
@@ -150,10 +159,13 @@ def stability_selection(
     group_by: str | Sequence[str] | None = None,
     selector_kwargs: dict | None = None,
 ) -> SelectionResult:
-    """Stratified bootstrap selection frequencies, optionally within each group.
+    """Estimate selection frequencies with stratified bootstrap resampling.
 
     Each group receives n_iterations fits and equal weight. This is a robustness
     diagnostic, not a formal false-discovery-controlled stability estimator.
+
+    See [Stability Selection](../../docs/feature_selection.md#stability-selection)
+    for grouping and examples.
     """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
@@ -273,7 +285,11 @@ def boruta(
     alpha: float = 0.05,
     random_state: int = 42,
 ) -> SelectionResult:
-    """Optional BorutaPy shadow-feature selection; only confirmed features selected."""
+    """Run optional Boruta shadow-feature selection.
+
+    See [Boruta](../../docs/feature_selection.md#boruta) for installation,
+    statuses, and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)

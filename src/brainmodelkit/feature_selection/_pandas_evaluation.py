@@ -37,7 +37,7 @@ def evaluate_fitted(
     target_col: str,
     features: list[str],
 ) -> Any:
-    """Score permutation's supplied model without refitting it or changing its schema."""
+    """Score the supplied model without refitting or changing its schema."""
     import numpy as np
 
     from brainmodelkit.metrics.pandas import _calculate_auc_gini, calculate_ks

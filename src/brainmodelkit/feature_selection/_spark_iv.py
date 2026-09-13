@@ -31,7 +31,11 @@ def information_value(
     binning: str = "quantile",
     relative_error: float = 0.001,
 ) -> SelectionResult:
-    """Native quantile/uniform binning and smoothed IV; bin_details is a Spark frame."""
+    """Compute native Spark binned and smoothed binary Information Value.
+
+    See [Information Value](../../docs/feature_selection.md#information-value)
+    for binning, distributed diagnostics, and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(train_df, target_col, feature_cols, numeric_features=False)
     integer(n_bins, "n_bins", 2)

@@ -38,7 +38,11 @@ def feature_importance_selection(
     top_k: int | None = None,
     random_state: int = 42,
 ) -> SelectionResult:
-    """Fit a fresh Spark classifier and collect only its native importance vector."""
+    """Fit a Spark classifier and rank its native importance vector.
+
+    See [Feature Importance](../../docs/feature_selection.md#feature-importance)
+    for supported models and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
@@ -119,7 +123,11 @@ def l1_selection(
     coefficient_tolerance: float = 1e-8,
     max_iter: int = 100,
 ) -> SelectionResult:
-    """Native L1 logistic selection; reg_param is Spark regularization strength."""
+    """Select non-zero coefficients from native Spark L1 logistic regression.
+
+    See [L1 Selection](../../docs/feature_selection.md#l1-selection) for Spark
+    regularization semantics and examples.
+    """
     train_df = resolve_frame(train_df, df, "train_df", "df")
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
