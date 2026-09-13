@@ -8,9 +8,10 @@ from contextlib import contextmanager
 from uuid import uuid4
 
 import numpy as np
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.sql import functions as F
 from pyspark.sql.types import LongType, StructField, StructType
+
+from brainmodelkit.model_selection.pyspark import _assign_folds
 
 from ._selection import SelectionResult, integer, ranked, resolve_frame
 from ._spark_model import feature_importance_selection
@@ -22,6 +23,8 @@ def score(model, frame, target, features, scoring):
     names = {"roc_auc": "areaUnderROC", "average_precision": "areaUnderPR"}
     if scoring not in names:
         raise ValueError("scoring must be roc_auc or average_precision (Spark PR area)")
+    from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
     value = BinaryClassificationEvaluator(
         labelCol="label",
         rawPredictionCol=model.getRawPredictionCol(),
@@ -147,15 +150,10 @@ def folds(frame, target, features, cv, fold_col, seed):
     integer(cv, "cv", 2)
     if "__bmk_fold" in frame.columns:
         raise ValueError("Column __bmk_fold is reserved")
-    if fold_col is not None:
-        if fold_col not in frame.columns or fold_col in [*features, target]:
-            raise ValueError("fold_col must exist and exclude features and target")
-        value = col(fold_col)
-        if frame.filter(value.isNull() | ~value.isin(list(range(cv)))).limit(1).count():
-            raise ValueError("fold_col must contain integer fold IDs in [0, cv)")
-    else:
-        value = F.floor(F.rand(seed) * cv)
-    with owned_cache(frame.withColumn("__bmk_fold", value)) as assigned:
+    assigned_frame = _assign_folds(
+        frame, target, features, cv, "stratified", fold_col, None, None, seed
+    )
+    with owned_cache(assigned_frame) as assigned:
         counts = assigned.groupBy("__bmk_fold", col(target)).count().collect()
         if len(counts) != 2 * cv:
             raise ValueError(

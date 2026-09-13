@@ -10,8 +10,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.feature_selection import RFECV, SequentialFeatureSelector
 
+from brainmodelkit.model_selection.pandas import cross_validate
 from brainmodelkit.training.pandas import train_model
 
 from ._evaluation import evaluation_frame, finalize_selection
@@ -62,26 +62,60 @@ def rfecv(
     integer(min_features_to_select, "min_features_to_select")
     if min_features_to_select > len(features):
         raise ValueError("min_features_to_select exceeds feature count")
-    selector = RFECV(
-        estimator(model, model_params, random_state),
-        step=step,
-        cv=cv,
-        scoring=scoring,
-        min_features_to_select=min_features_to_select,
-        n_jobs=n_jobs,
-    ).fit(train_df[features], train_df[target_col])
-    rows = [
-        {"feature": f, "ranking": int(rank), "selected": bool(keep)}
-        for f, rank, keep in zip(
-            features, selector.ranking_, selector.support_, strict=True
+    current = features.copy()
+    paths = []
+    while True:
+        fitted = estimator(model, model_params, random_state).fit(
+            train_df[current], train_df[target_col]
         )
+        cv_result = cross_validate(
+            train_df,
+            target_col,
+            current,
+            model,
+            model_params=model_params,
+            cv=cv,
+            metrics=("auc",),
+            random_state=random_state,
+        )
+        score_values = cv_result.fold_metrics["AUC"].to_numpy()
+        paths.append(
+            (
+                current.copy(),
+                float(np.nanmean(score_values)),
+                float(np.nanstd(score_values)),
+            )
+        )
+        if len(current) == min_features_to_select:
+            break
+        values = getattr(fitted, "feature_importances_", None)
+        if values is None and hasattr(fitted, "coef_"):
+            values = np.abs(np.asarray(fitted.coef_)).ravel()
+        if values is None:
+            raise ValueError("model must expose native importances for rfecv")
+        remove = sorted(zip(current, np.abs(values), strict=True), key=lambda x: x[1])[
+            : min(step, len(current) - min_features_to_select)
+        ]
+        current = [f for f in current if f not in {name for name, _ in remove}]
+    best = max(paths, key=lambda x: (x[1], -len(x[0])))
+    selected = set(best[0])
+    ranks = {f: 1 if f in selected else 2 for f in features}
+    rows = [
+        {"feature": f, "ranking": ranks[f], "selected": f in selected} for f in features
     ]
+    selector_model = estimator(model, model_params, random_state).fit(
+        train_df[best[0]], train_df[target_col]
+    )
     result = SelectionResult(
         rows,
         "rfecv",
-        {"optimal_feature_count": int(selector.n_features_)},
-        cv_results=selector.cv_results_,
-        model=selector.estimator_,
+        {"optimal_feature_count": len(best[0])},
+        cv_results={
+            "n_features": [len(p[0]) for p in paths],
+            "mean_test_score": [p[1] for p in paths],
+            "std_test_score": [p[2] for p in paths],
+        },
+        model=selector_model,
     )
     return finalize_selection(
         result,
@@ -90,7 +124,7 @@ def rfecv(
         oot_df=oot_df,
         target_col=target_col,
         feature_cols=features,
-        model=selector.estimator_,
+        model=selector_model,
         df_scoring=df_scoring,
         run_name=run_name,
     )
@@ -133,21 +167,47 @@ def sequential_selection(
     oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
     validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
     features = supervised(train_df, target_col, feature_cols)
-    selector = SequentialFeatureSelector(
-        estimator(model, model_params, random_state),
-        direction=direction,
-        n_features_to_select=n_features_to_select,
-        scoring=scoring,
-        cv=cv,
-        n_jobs=n_jobs,
-    ).fit(train_df[features], train_df[target_col])
+    if direction not in ("forward", "backward"):
+        raise ValueError("direction must be forward or backward")
+    if (
+        not isinstance(n_features_to_select, int)
+        or n_features_to_select < 1
+        or n_features_to_select > len(features)
+    ):
+        raise ValueError("n_features_to_select must be between 1 and feature count")
+    current = [] if direction == "forward" else features.copy()
+    while len(current) != n_features_to_select:
+        candidates = []
+        for feature in features:
+            if (direction == "forward") == (feature in current):
+                continue
+            subset = (
+                [*current, feature]
+                if direction == "forward"
+                else [f for f in current if f != feature]
+            )
+            cv_result = cross_validate(
+                train_df,
+                target_col,
+                subset,
+                model,
+                model_params=model_params,
+                cv=cv,
+                metrics=("auc",),
+                random_state=random_state,
+            )
+            candidates.append(
+                (float(cv_result.fold_metrics["AUC"].mean()), feature, subset)
+            )
+        _, _, current = max(candidates, key=lambda x: x[0])
+    selector_model = estimator(model, model_params, random_state).fit(
+        train_df[current], train_df[target_col]
+    )
     result = SelectionResult(
-        [
-            {"feature": f, "selected": bool(v)}
-            for f, v in zip(features, selector.get_support(), strict=True)
-        ],
+        [{"feature": f, "selected": f in current} for f in features],
         "sequential_selection",
         {"direction": direction},
+        model=selector_model,
     )
     return finalize_selection(
         result,
@@ -156,7 +216,7 @@ def sequential_selection(
         oot_df=oot_df,
         target_col=target_col,
         feature_cols=features,
-        model=selector.estimator,
+        model=selector_model,
         df_scoring=df_scoring,
         run_name=run_name,
     )

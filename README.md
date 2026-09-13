@@ -942,3 +942,18 @@ pyproject.toml           Build and tool configuration
 ## License
 
 BrainModelKit is distributed under the MIT License. See [LICENSE](LICENSE).
+## Cross-validation
+
+Use centralized CV on development data; it returns fold metrics and a summary.
+Keep OOT data separate from fold creation and model selection.
+
+```python
+from brainmodelkit.model_selection.pandas import cross_validate
+
+result = cross_validate(train_df, "target", features, "logistic_regression", cv=5)
+print(result.fold_metrics)
+print(result.summary)
+```
+
+See the [cross-validation guide](docs/model_selection.md) for K-Fold,
+stratification, groups, time ordering, Spark folds, and leakage guidance.
