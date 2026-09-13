@@ -38,12 +38,13 @@ dependencies = []
 
 [project.optional-dependencies]
 pandas = ["pandas>=2.0", "scikit-learn>=1.2"]
-pyspark = ["pyspark>=3.5"]
+pyspark = ["pyspark>=3.5", "numpy>=1.23"]
 mlflow = ["mlflow>=2.12"]
 persistence = ["joblib>=1.2", "cloudpickle>=2.2"]
 secure = ["skops>=0.10"]
 onnx = ["skl2onnx>=1.16", "onnx>=1.16", "onnxruntime>=1.17"]
 lightgbm = ["lightgbm>=4.0"]
+boruta = ["Boruta>=0.4.3"]
 dataframes = [
     "pandas>=2.0",
     "scikit-learn>=1.2",

@@ -1,18 +1,53 @@
-"""Recursive feature elimination for Pandas binary classifiers."""
+"""Pandas-native feature selection and backward-compatible OOT RFE."""
 
 from brainmodelkit.training.pandas import train_model
 
 from ._common import RFEResult, run_rfe
+from ._pandas_model import (
+    feature_importance_selection,
+    l1_selection,
+    permutation_importance_selection,
+)
+from ._pandas_quality import cardinality, completeness, variance_filter
+from ._pandas_statistics import (
+    anova,
+    chi_square,
+    correlation_filter,
+    information_value,
+    mutual_information,
+)
+from ._pandas_wrappers import boruta, rfecv, sequential_selection, stability_selection
+from ._selection import resolve_frame
+
+__all__ = [
+    "anova",
+    "boruta",
+    "cardinality",
+    "chi_square",
+    "completeness",
+    "correlation_filter",
+    "feature_importance_selection",
+    "information_value",
+    "l1_selection",
+    "mutual_information",
+    "permutation_importance_selection",
+    "rfe",
+    "rfecv",
+    "sequential_selection",
+    "stability_selection",
+    "variance_filter",
+]
 
 
 def rfe(
     run_name,
     target_col,
     train_df,
-    oot_df,
+    oot_df=None,
     feature_cols=None,
     model="logistic_regression",
     *,
+    df_oot=None,
     step=1,
     n_feat_final=1,
     model_params=None,
@@ -35,6 +70,7 @@ def rfe(
     training_result, history and output_dir. Inputs and estimators are not mutated.
     Custom models must expose one finite importance per input feature.
     """
+    oot_df = resolve_frame(oot_df, df_oot, "oot_df", "df_oot")
     return run_rfe(
         train_model,
         run_name,

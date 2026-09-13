@@ -1,18 +1,36 @@
-"""Recursive feature elimination for Spark binary classifiers."""
+"""Native distributed Spark feature selection and backward-compatible OOT RFE."""
 
 from brainmodelkit.training.pyspark import train_model
 
 from ._common import RFEResult, run_rfe
+from ._selection import resolve_frame
+from ._spark_iv import information_value
+from ._spark_model import feature_importance_selection, l1_selection
+from ._spark_quality import cardinality, completeness, variance_filter
+from ._spark_statistics import chi_square, correlation_filter
+
+__all__ = [
+    "cardinality",
+    "chi_square",
+    "completeness",
+    "correlation_filter",
+    "feature_importance_selection",
+    "information_value",
+    "l1_selection",
+    "rfe",
+    "variance_filter",
+]
 
 
 def rfe(
     run_name,
     target_col,
     train_df,
-    oot_df,
+    oot_df=None,
     feature_cols=None,
     model="logistic_regression",
     *,
+    df_oot=None,
     step=1,
     n_feat_final=1,
     model_params=None,
@@ -36,6 +54,7 @@ def rfe(
     selected_features, history and output_dir. SynapseML must be configured for
     LightGBM. Custom models must expose one finite importance per input feature.
     """
+    oot_df = resolve_frame(oot_df, df_oot, "oot_df", "df_oot")
     return run_rfe(
         train_model,
         run_name,

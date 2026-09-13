@@ -6,4 +6,6 @@ include SECURITY.md
 include pyproject.toml
 recursive-include src *.py py.typed
 recursive-include tests *.py
+recursive-include docs *.md
+recursive-include examples/feature_selection *.py *.md
 global-exclude __pycache__ *.py[cod]

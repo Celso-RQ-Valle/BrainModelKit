@@ -9,15 +9,48 @@ from uuid import uuid4
 from brainmodelkit.training import TrainingResult
 from brainmodelkit.training._common import validate_columns
 
+from ._selection import TrainingOutputs
+
 
 @dataclass
-class RFEResult:
+class RFEResult(TrainingOutputs):
     """Selected columns, final fitted training result and iteration reports."""
 
     selected_features: list[str]
     training_result: TrainingResult
     history: list[dict]
     output_dir: Path
+
+    @property
+    def model(self):
+        return self.training_result.model
+
+    @property
+    def rejected_features(self) -> list[str]:
+        initial = (
+            self.history[0]["features"] if self.history else self.selected_features
+        )
+        return [f for f in initial if f not in self.selected_features]
+
+    @property
+    def feature_table(self) -> list[dict]:
+        initial = (
+            self.history[0]["features"] if self.history else self.selected_features
+        )
+        return [
+            {"feature": f, "selected": f in self.selected_features} for f in initial
+        ]
+
+    @property
+    def method(self) -> str:
+        return "rfe"
+
+    @property
+    def metadata(self) -> dict:
+        return {
+            "evaluation_status": "evaluated",
+            "model_feature_cols": self.selected_features,
+        }
 
 
 def run_rfe(
