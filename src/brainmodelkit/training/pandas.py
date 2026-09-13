@@ -1,5 +1,7 @@
 """Train probability-producing scikit-learn compatible binary classifiers."""
 
+from typing import Literal
+
 import numpy as np
 from sklearn.base import clone
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
@@ -8,6 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from brainmodelkit.metrics.pandas import _calculate_auc_gini, calculate_ks
 
 from ._common import (
+    DEFAULT_DESTINATION,
     TrainingResult,
     finalize_run,
     importance_records,
@@ -27,7 +30,8 @@ def train_model(
     model_params=None,
     df_scoring=None,
     output_dir="training_runs",
-    run_as: str = "local",
+    save_model_to: Literal["folder", "mlflow", "none"] = DEFAULT_DESTINATION,
+    run_as: str | None = None,
     runs_as: str | None = None,
     model_format: str | None = None,
     mlflow_logging=None,
@@ -43,21 +47,22 @@ def train_model(
     0/1, with both classes in training. Inputs are not modified. Preprocess
     features before calling, or pass a scikit-learn Pipeline. Signature applies
     to MLflow's native predict output (class labels), not the added score column.
-    run_as selects local (default), mlflow, or none. Local runs own the model
-    and reports. runs_as is an equivalent spelling that overrides the default
-    run_as value; pass only one spelling per call. Local runs save the model
-    and reports under output_dir; model_format defaults to pickle.
+    save_model_to selects folder (default), mlflow, or none. Folder runs save
+    the model and reports under output_dir. model_format independently selects
+    folder serialization (pickle for Pandas, spark for PySpark by default).
+    run_as and runs_as are deprecated aliases for save_model_to.
     signature requires MLflow. Legacy save_path, save_format and mlflow_logging
     are deprecated. save_metadata controls only legacy external model sidecars.
     """
-    run_as, model_format = resolve_execution(
+    save_model_to, model_format = resolve_execution(
         "sklearn",
-        run_as,
+        save_model_to,
         model_format,
         mlflow_logging,
         save_path,
         save_format,
         signature,
+        run_as=run_as,
         runs_as=runs_as,
     )
     features = validate_columns(
@@ -127,7 +132,7 @@ def train_model(
         target_col,
         fitted.get_params(deep=False),
         output_dir,
-        run_as,
+        save_model_to,
         model_format,
         signature,
         train_df,

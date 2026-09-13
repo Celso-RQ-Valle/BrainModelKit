@@ -69,13 +69,13 @@ def test_mlflow_round_trip(tmp_path, monkeypatch):
             data,
             data,
             output_dir=tmp_path / "reports",
-            run_as="mlflow",
+            save_model_to="mlflow",
             signature=True,
         )
         loaded = flavor.load_model(f"runs:/{result.run_id}/model")
         assert list(loaded.predict(data[["x"]])) == list(data.y)
         assert result.output_dir is None
-        assert result.run_as == "mlflow"
+        assert result.save_model_to == "mlflow"
         assert result.model_uri == f"runs:/{result.run_id}/model"
     finally:
         mlflow.set_tracking_uri(previous_uri)
@@ -104,7 +104,7 @@ def test_training_persistence(tmp_path):
     )
     loaded = load_model(result.model_uri)
     assert list(loaded.predict(data[["x"]])) == list(result.model.predict(data[["x"]]))
-    assert result.run_as == "local"
+    assert result.save_model_to == "folder"
     assert result.output_dir.name == f"saved_{result.run_id}"
     assert {p.name for p in result.output_dir.iterdir()} == {
         "model.pkl",
@@ -115,7 +115,7 @@ def test_training_persistence(tmp_path):
     }
     metadata = json.loads((result.output_dir / "metadata.json").read_text())
     assert metadata["model_format"] == "pickle"
-    assert metadata["run_as"] == "local"
+    assert metadata["save_model_to"] == "folder"
     assert metadata["python_version"]
     report = json.loads((result.output_dir / "model_info.json").read_text())
     assert report["target_col"] == "y"

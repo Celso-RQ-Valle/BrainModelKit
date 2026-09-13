@@ -21,49 +21,70 @@ def data():
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
-@pytest.mark.parametrize("destination", ["local", "mlflow", "none"])
-def test_runs_as_routes_to_existing_execution(backend, destination, monkeypatch):
+@pytest.mark.parametrize("alias", ["run_as", "runs_as"])
+@pytest.mark.parametrize("legacy", ["local", "mlflow", "none"])
+def test_legacy_destinations(backend, alias, legacy, data, tmp_path, monkeypatch):
     import importlib
 
     module = importlib.import_module(f"brainmodelkit.training.{backend}")
     monkeypatch.setattr("brainmodelkit.training._common.optional_import", Mock())
+    destination = "folder" if legacy == "local" else legacy
 
-    def stop_after_validation(*args):
+    # Exercise each public entry point without requiring Spark fitting.
+    def stop(*args):
         raise RuntimeError("validated")
 
     resolver = Mock(wraps=module.resolve_execution)
     monkeypatch.setattr(module, "resolve_execution", resolver)
-    monkeypatch.setattr(module, "validate_columns", stop_after_validation)
-    with pytest.raises(RuntimeError, match="validated"):
-        module.train_model("test", "y", ["x"], None, None, runs_as=destination)
-    assert resolver.call_args.kwargs["runs_as"] == destination
-    assert (
-        module.resolve_execution._mock_wraps(
-            "spark" if backend == "pyspark" else "sklearn",
-            "local",
-            None,
-            None,
-            None,
-            None,
-            False,
-            runs_as=destination,
-        )[0]
-        == destination
-    )
+    monkeypatch.setattr(module, "validate_columns", stop)
+    with (
+        pytest.warns(DeprecationWarning, match="save_model_to"),
+        pytest.raises(RuntimeError, match="validated"),
+    ):
+        module.train_model("alias", "y", ["x"], data, data, **{alias: legacy})
+    with pytest.warns(DeprecationWarning, match="save_model_to"):
+        assert (
+            resolver._mock_wraps(*resolver.call_args.args, **resolver.call_args.kwargs)[
+                0
+            ]
+            == destination
+        )
 
 
-@pytest.mark.parametrize("destination", ["local", "none"])
-def test_runs_as_pandas_persistence(data, tmp_path, destination):
-    result = train_model(
-        "alias", "y", ["x"], data, data, runs_as=destination, output_dir=tmp_path
-    )
-    assert result.run_as == destination
-    if destination == "local":
-        assert Path(result.model_uri).is_file()
-        assert list(load_model(result.model_uri).predict(data[["x"]])) == list(data.y)
-    else:
-        assert result.model_uri is None
-        assert not list(tmp_path.iterdir())
+@pytest.mark.parametrize("alias", ["run_as", "runs_as"])
+@pytest.mark.parametrize("destination", ["folder", "mlflow", "none"])
+@pytest.mark.parametrize("legacy", ["local", "mlflow", "none"])
+def test_alias_conflicts(alias, destination, legacy, monkeypatch):
+    from brainmodelkit.training._common import resolve_execution
+
+    monkeypatch.setattr("brainmodelkit.training._common.optional_import", Mock())
+    compatible = destination == ("folder" if legacy == "local" else legacy)
+    with pytest.warns(DeprecationWarning, match="save_model_to"):
+        if compatible:
+            assert (
+                resolve_execution(
+                    "sklearn",
+                    destination,
+                    None,
+                    None,
+                    None,
+                    None,
+                    False,
+                    **{alias: legacy},
+                )[0]
+                == destination
+            )
+        else:
+            with pytest.raises(ValueError, match="conflicts"):
+                train_model(
+                    "bad",
+                    "y",
+                    ["x"],
+                    None,
+                    None,
+                    save_model_to=destination,
+                    **{alias: legacy},
+                )
 
 
 @pytest.mark.parametrize(
@@ -74,8 +95,8 @@ def test_runs_as_pandas_persistence(data, tmp_path, destination):
         {"runs_as": "local", "mlflow_logging": True},
     ],
 )
-def test_runs_as_invalid_or_conflicting(options):
-    with pytest.raises(ValueError):
+def test_legacy_invalid_or_conflicting(options):
+    with pytest.warns(DeprecationWarning), pytest.raises(ValueError):
         train_model("bad", "y", ["x"], None, None, **options)
 
 
@@ -84,11 +105,14 @@ def test_none_has_no_filesystem_or_serialization(data, tmp_path, monkeypatch):
         pytest.fail("none must not perform filesystem operations or serialization")
 
     monkeypatch.setattr(Path, "mkdir", unexpected)
+    monkeypatch.setattr("brainmodelkit.training._common.optional_import", unexpected)
     monkeypatch.setattr("brainmodelkit.training._common._save_python_model", unexpected)
-    result = train_model("none", "y", ["x"], data, data, run_as="none", output_dir=None)
+    result = train_model(
+        "none", "y", ["x"], data, data, save_model_to="none", output_dir=None
+    )
     assert result.model is not None
     assert result.metrics["oot_auc"] == 1
-    assert result.run_as == "none"
+    assert result.save_model_to == "none"
     assert result.output_dir is result.model_uri is result.run_id is None
     assert not list(tmp_path.iterdir())
 
@@ -97,12 +121,15 @@ def test_none_has_no_filesystem_or_serialization(data, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "options,match",
     [
-        ({"run_as": "invalid"}, "Available:"),
+        ({"save_model_to": "invalid"}, "Available:"),
         ({"model_format": "invalid"}, "Available:"),
         ({"model_format": "mlflow"}, "Available:"),
-        ({"signature": True}, "requires run_as='mlflow'"),
-        ({"run_as": "none", "signature": True}, "requires run_as='mlflow'"),
-        ({"run_as": "mlflow", "model_format": "onnx"}, "require|Available:"),
+        ({"signature": True}, "requires save_model_to='mlflow'"),
+        (
+            {"save_model_to": "none", "signature": True},
+            "requires save_model_to='mlflow'",
+        ),
+        ({"save_model_to": "mlflow", "model_format": "onnx"}, "require|Available:"),
     ],
 )
 def test_validation_before_fit(backend, options, match):
@@ -131,8 +158,10 @@ def test_default_local_needs_no_optional_persistence(data, tmp_path, monkeypatch
         "brainmodelkit.persistence._common.importlib.import_module",
         Mock(side_effect=AssertionError("optional dependency import")),
     )
-    result = train_model("local", "y", ["x"], data, data, output_dir=tmp_path)
+    result = train_model("folder", "y", ["x"], data, data, output_dir=tmp_path)
     assert Path(result.model_uri).exists()
+    assert result.save_model_to == "folder"
+    assert result.model_format == "pickle"
 
 
 @pytest.mark.parametrize("overwrite", [False, True])
@@ -150,7 +179,7 @@ def test_spark_local_writer(tmp_path, overwrite):
         "y",
         {"bad": float("nan"), "depth": 2},
         tmp_path,
-        "local",
+        "folder",
         "spark",
         False,
         None,
@@ -181,7 +210,7 @@ def test_missing_mlflow_before_fit(monkeypatch):
         Mock(side_effect=ImportError("missing")),
     )
     with pytest.raises(ImportError, match=r"brainmodelkit\[mlflow\]"):
-        train_model("bad", "y", ["x"], None, None, run_as="mlflow")
+        train_model("bad", "y", ["x"], None, None, save_model_to="mlflow")
 
 
 @pytest.mark.parametrize("backend", ["sklearn", "spark"])
@@ -227,7 +256,7 @@ def test_mlflow_complete_run(backend, tmp_path, monkeypatch):
         None,
     )
     assert result.run_id == "abc"
-    assert result.run_as == "mlflow"
+    assert result.save_model_to == "mlflow"
     assert result.model_uri == "runs:/abc/model"
     assert result.output_dir is None
     assert not list(tmp_path.iterdir())
@@ -301,6 +330,58 @@ def test_spark_none_without_runtime(monkeypatch):
         result, "none", "spark", ["x"], "y", {}, None, "none", None, False, None
     )
     assert result.model is model
-    assert result.run_as == "none"
+    assert result.save_model_to == "none"
     assert result.output_dir is result.model_uri is result.run_id is None
     model.write.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "backend,expected", [("sklearn", "pickle"), ("spark", "spark")]
+)
+def test_backend_default_format(backend, expected):
+    from brainmodelkit.training._common import DEFAULT_DESTINATION, resolve_execution
+
+    assert resolve_execution(
+        backend, DEFAULT_DESTINATION, None, None, None, None, False
+    ) == ("folder", expected)
+
+
+@pytest.mark.parametrize("destination", ["folder", "mlflow", "none"])
+def test_result_legacy_property(destination):
+    result = TrainingResult(None, None, None, {}, [], None, save_model_to=destination)
+    with pytest.warns(DeprecationWarning, match="save_model_to"):
+        assert result.run_as == ("local" if destination == "folder" else destination)
+
+
+@pytest.mark.parametrize("destination", ["local", "invalid", None])
+def test_invalid_destination(destination):
+    with pytest.raises(ValueError, match="save_model_to"):
+        train_model("bad", "y", ["x"], None, None, save_model_to=destination)
+
+
+@pytest.mark.parametrize("alias", ["run_as", "runs_as"])
+@pytest.mark.parametrize("legacy", ["local", "none"])
+def test_legacy_persistence(alias, legacy, data, tmp_path):
+    with pytest.warns(DeprecationWarning, match="save_model_to"):
+        result = train_model(
+            "legacy", "y", ["x"], data, data, output_dir=tmp_path, **{alias: legacy}
+        )
+    assert result.save_model_to == ("folder" if legacy == "local" else "none")
+    if legacy == "local":
+        assert Path(result.model_uri).is_file()
+        assert list(load_model(result.model_uri).predict(data[["x"]])) == list(data.y)
+    else:
+        assert result.model_uri is None
+        assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("backend", ["pandas", "pyspark"])
+def test_public_defaults(backend):
+    import importlib
+    import inspect
+
+    trainer = importlib.import_module(f"brainmodelkit.training.{backend}").train_model
+    parameters = inspect.signature(trainer).parameters
+    assert parameters["save_model_to"].default == "folder"
+    assert parameters["model_format"].default is None
+    assert parameters["output_dir"].default == "training_runs"

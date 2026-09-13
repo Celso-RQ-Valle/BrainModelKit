@@ -62,7 +62,7 @@ def run_rfe(
             model_params=model_params,
             output_dir=folder,
             df_scoring=df_scoring if len(features) == n_feat_final else None,
-            run_as="mlflow" if mlflow_logging else "local",
+            save_model_to="mlflow" if mlflow_logging else "folder",
             signature=signature,
             **backend_options,
         )

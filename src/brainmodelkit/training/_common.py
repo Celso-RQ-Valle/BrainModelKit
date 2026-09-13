@@ -1,4 +1,4 @@
-"""Shared training results and local run reports."""
+"""Shared training results, destination validation and persistence orchestration."""
 
 import csv
 import json
@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from platform import python_version
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from brainmodelkit import __version__
@@ -25,9 +25,16 @@ from brainmodelkit.persistence.python import _save_python_model
 from brainmodelkit.persistence.spark import _save_spark_model
 
 
+class _DefaultDestination(str):
+    """Distinguish omitted destination from an explicitly supplied folder."""
+
+
+DEFAULT_DESTINATION = _DefaultDestination("folder")
+
+
 @dataclass
 class TrainingResult:
-    """Fitted model, scored frames, OOT metrics and local report location."""
+    """Fitted model, scored frames, OOT metrics and persistence details."""
 
     model: Any
     oot_predictions: Any
@@ -36,8 +43,19 @@ class TrainingResult:
     feature_importance: list[dict]
     output_dir: Path | None
     run_id: str | None = None
-    run_as: str = "local"
+    save_model_to: Literal["folder", "mlflow", "none"] = "folder"
     model_uri: str | None = None
+    model_format: str | None = None
+
+    @property
+    def run_as(self):
+        """Deprecated destination spelling, retaining the historical values."""
+        warnings.warn(
+            "'run_as' is deprecated; use 'save_model_to' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return "local" if self.save_model_to == "folder" else self.save_model_to
 
 
 def validate_columns(feature_cols, target_col, frames):
@@ -60,24 +78,30 @@ def validate_columns(feature_cols, target_col, frames):
 
 def resolve_execution(
     backend,
-    run_as,
+    save_model_to,
     model_format,
     mlflow_logging,
     save_path,
     save_format,
     signature,
     *,
+    run_as=None,
     runs_as=None,
 ):
     """Normalize deprecated switches and validate before fitting."""
-    validate_format(run_as, ("local", "mlflow", "none"))
-    if runs_as is not None:
-        validate_format(runs_as, ("local", "mlflow", "none"))
-        if run_as != "local" and run_as != runs_as:
-            raise ValueError("runs_as conflicts with run_as; pass only one spelling")
-        if mlflow_logging and runs_as != "mlflow":
-            raise ValueError("runs_as conflicts with mlflow_logging=True")
-        run_as = runs_as
+    if save_model_to not in ("folder", "mlflow", "none"):
+        raise ValueError("Invalid save_model_to. Available: folder, mlflow, none")
+    destinations = [] if save_model_to is DEFAULT_DESTINATION else [save_model_to]
+    for name, value in (("run_as", run_as), ("runs_as", runs_as)):
+        if value is not None:
+            warnings.warn(
+                f"'{name}' is deprecated and will be removed in a future "
+                "BrainModelKit release. Use 'save_model_to' instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            validate_format(value, ("local", "mlflow", "none"))
+            destinations.append("folder" if value == "local" else value)
     for name, value in (
         ("mlflow_logging", mlflow_logging),
         ("save_path", save_path),
@@ -85,17 +109,23 @@ def resolve_execution(
     ):
         if value is not None:
             warnings.warn(
-                f"{name} is deprecated; use run_as, model_format and output_dir.",
+                f"{name} is deprecated; use save_model_to, "
+                "model_format and output_dir.",
                 DeprecationWarning,
                 stacklevel=3,
             )
     if mlflow_logging:
-        if run_as == "none":
-            raise ValueError("mlflow_logging=True conflicts with run_as='none'")
-        run_as = "mlflow"
+        destinations.append("mlflow")
+    if len(set(destinations)) > 1:
+        raise ValueError(
+            "save_model_to conflicts with legacy aliases "
+            "(run_as, runs_as or mlflow_logging); use save_model_to only"
+        )
+    destination = destinations[0] if destinations else "folder"
     if save_format == "mlflow":
         raise ValueError(
-            "save_format='mlflow' was replaced by run_as='mlflow'; omit save_path"
+            "save_format='mlflow' was replaced by save_model_to='mlflow'; "
+            "omit save_path"
         )
     if save_format is not None:
         if model_format is not None and model_format != save_format:
@@ -108,13 +138,15 @@ def resolve_execution(
     )
     if model_format is not None:
         validate_format(model_format, available)
-    if run_as != "local" and (model_format is not None or save_path is not None):
-        raise ValueError("model_format and save_path require run_as='local'")
-    if signature and run_as != "mlflow":
-        raise ValueError("signature=True requires run_as='mlflow'")
-    if run_as == "mlflow":
+    if destination != "folder" and (model_format is not None or save_path is not None):
+        raise ValueError("model_format and save_path require save_model_to='folder'")
+    if signature and destination != "mlflow":
+        raise ValueError("signature=True requires save_model_to='mlflow'")
+    if destination == "mlflow":
         optional_import("mlflow", "mlflow")
-    return run_as, (model_format or available[0]) if run_as == "local" else None
+    return destination, (
+        model_format or available[0]
+    ) if destination == "folder" else None
 
 
 def _write_reports(folder, result, report, metadata):
@@ -146,7 +178,7 @@ def finalize_run(
     target,
     params,
     output_dir,
-    run_as,
+    save_model_to,
     model_format,
     signature,
     train_df,
@@ -156,16 +188,17 @@ def finalize_run(
     overwrite=False,
 ):
     """Persist a complete run through one destination."""
-    result.run_as = run_as
+    result.save_model_to = save_model_to
+    result.model_format = model_format
     result.output_dir = None
-    if run_as == "none":
+    if save_model_to == "none":
         return result
     result.run_id = uuid4().hex
     metadata = {
         "brainmodelkit_version": __version__,
         "python_version": python_version(),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "run_as": run_as,
+        "save_model_to": save_model_to,
         "model_format": model_format,
         "framework": type(result.model).__module__.split(".")[0],
         "model_class": type(result.model).__name__,
@@ -183,7 +216,7 @@ def finalize_run(
         "target_col": target,
         "parameters": serializable_parameters(params),
     }
-    if run_as == "local":
+    if save_model_to == "folder":
         safe_name = (
             re.sub(r"[^A-Za-z0-9_-]+", "_", str(run_name)).strip("_")[:80] or "run"
         )

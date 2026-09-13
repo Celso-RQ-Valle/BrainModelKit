@@ -24,8 +24,8 @@ def spark():
 @pytest.mark.parametrize(
     "model", ["logistic_regression", "random_forest", "gradient_boosting"]
 )
-@pytest.mark.parametrize("run_as", ["local", "none"])
-def test_training(spark, tmp_path, model, monkeypatch, run_as):
+@pytest.mark.parametrize("save_model_to", ["folder", "none"])
+def test_training(spark, tmp_path, model, monkeypatch, save_model_to):
     from unittest.mock import Mock
 
     saver = Mock()
@@ -44,14 +44,14 @@ def test_training(spark, tmp_path, model, monkeypatch, run_as):
         df_scoring=data.drop("target"),
         n_tiles=6,
         output_dir=tmp_path,
-        run_as=run_as,
+        save_model_to=save_model_to,
     )
     assert result.metrics["oot_auc"] == pytest.approx(1)
     assert result.metrics["oot_ks"] == pytest.approx(1)
     assert result.scoring_predictions.count() == 6
     assert result.model.transform(data.drop("target")).count() == 6
     assert len(result.feature_importance) == 1
-    if run_as == "none":
+    if save_model_to == "none":
         saver.assert_not_called()
         assert result.output_dir is result.model_uri is result.run_id is None
         assert not list(tmp_path.iterdir())
@@ -59,7 +59,7 @@ def test_training(spark, tmp_path, model, monkeypatch, run_as):
     saver.assert_called_once()
     assert saver.call_args.args[2] == "spark"
     assert result.model_uri == str(result.output_dir / "model")
-    assert result.run_as == "local"
+    assert result.save_model_to == "folder"
     assert (result.output_dir / "metadata.json").exists()
     assert (result.output_dir / "metrics.json").exists()
 
