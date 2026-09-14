@@ -27,6 +27,17 @@ python -m pip install "BrainModelKit[pandas]"
 python -m pip install "BrainModelKit[pyspark]"
 ```
 
+Add the integrations you use to one command when setting up a complete
+workflow:
+
+```bash
+python -m pip install "BrainModelKit[pandas,mlflow,persistence]"
+```
+
+The `mlflow`, `persistence`, `optimization`, and model-specific extras install
+their third-party dependencies only when requested. To install the common
+development stack, use `BrainModelKit[full]`.
+
 Install both integrations:
 
 ```bash
@@ -491,6 +502,26 @@ result = train_model(
 
 This implicitly uses `save_model_to="folder"` and saves a pickle model.
 
+Pass `analysis_cube=["size", "segment", "date"]` to calculate grouped KS,
+AUC, and Gini diagnostics from the OOT predictions. The cube is optional and
+is kept separate from the scalar OOT metrics:
+
+```python
+result = train_model(
+    "credit_model_v1",
+    "target",
+    features,
+    train_df,
+    oot_df,
+    analysis_cube=["size", "segment", "date"],
+    save_model_to="none",
+)
+print(result.analysis_cube)
+```
+
+Pandas returns a Pandas DataFrame; PySpark returns a Spark DataFrame. Breakdown
+columns must exist in the OOT frame and are never used to train the model.
+
 ### Pandas
 
 Install the integration from your local clone:
@@ -637,8 +668,15 @@ print(result.output_dir, result.model_uri)
 
 #### MLflow
 
-Install `brainmodelkit[mlflow]` and configure a tracking URI and experiment.
-Local tracking works without a remote server:
+Install the MLflow extra together with the backend you use:
+
+```bash
+python -m pip install "BrainModelKit[pandas,mlflow]"
+# or: python -m pip install "BrainModelKit[pyspark,mlflow]"
+```
+
+Configure a tracking URI and experiment. Local file tracking works without a
+remote server:
 
 ```python
 from pathlib import Path

@@ -12,6 +12,7 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
 
+from brainmodelkit.cube_analysis.pyspark import calculate_metrics as calculate_cube
 from brainmodelkit.metrics.pyspark import auc_gini, ks_ntile
 
 from ._common import (
@@ -46,6 +47,7 @@ def train_model(
     save_format: str | None = None,
     save_metadata: bool = True,
     overwrite: bool = False,
+    analysis_cube=None,
 ):
     """Fit assembler + classifier; return distributed scores and tiled OOT metrics.
 
@@ -138,6 +140,16 @@ def train_model(
         "oot_auc": float(auc["auc"]),
         "oot_gini": float(auc["gini"]),
     }
+    cube = (
+        calculate_cube(
+            df=oot,
+            group_columns=analysis_cube,
+            target_column=target_col,
+            n_tiles=n_tiles,
+        )
+        if analysis_cube is not None
+        else None
+    )
     classifier = fitted.stages[-1]
     values = getattr(classifier, "featureImportances", None)
     if values is None:
@@ -151,6 +163,7 @@ def train_model(
         metrics,
         importance_records(features, values),
         None,
+        analysis_cube=cube,
     )
     params = {p.name: v for p, v in estimator.extractParamMap().items()}
     return finalize_run(

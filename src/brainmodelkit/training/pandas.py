@@ -7,6 +7,7 @@ from sklearn.base import clone
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
+from brainmodelkit.cube_analysis.pandas import calculate_metrics as calculate_cube
 from brainmodelkit.metrics.pandas import _calculate_auc_gini, calculate_ks
 
 from ._common import (
@@ -39,6 +40,7 @@ def train_model(
     save_path: str | None = None,
     save_format: str | None = None,
     save_metadata: bool = True,
+    analysis_cube=None,
 ):
     """Fit a fresh estimator and return OOT KS/AUC/Gini and class-1 scores.
 
@@ -113,6 +115,15 @@ def train_model(
         "oot_auc": auc,
         "oot_gini": gini,
     }
+    cube = (
+        calculate_cube(
+            df=oot,
+            group_columns=analysis_cube,
+            target_column=target_col,
+        )
+        if analysis_cube is not None
+        else None
+    )
     values = getattr(fitted, "feature_importances_", None)
     if values is None and hasattr(fitted, "coef_"):
         values = fitted.coef_[0]
@@ -123,6 +134,7 @@ def train_model(
         metrics,
         importance_records(features, values),
         None,
+        analysis_cube=cube,
     )
     return finalize_run(
         result,

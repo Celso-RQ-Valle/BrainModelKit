@@ -53,6 +53,17 @@ dataframes = [
     "scipy>=1.9",
     "scipy>=1.9",
 ]
+full = [
+    "pandas>=2.0",
+    "scikit-learn>=1.2",
+    "pyspark>=3.5",
+    "numpy>=1.23",
+    "scipy>=1.9",
+    "mlflow>=2.12",
+    "joblib>=1.2",
+    "cloudpickle>=2.2",
+    "optuna>=3.0",
+]
 dev = [
     "build>=1.2",
     "pandas>=2.0",

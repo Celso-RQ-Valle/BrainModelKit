@@ -46,6 +46,7 @@ class TrainingResult:
     save_model_to: Literal["folder", "mlflow", "none"] = "folder"
     model_uri: str | None = None
     model_format: str | None = None
+    analysis_cube: Any = None
 
     @property
     def run_as(self):

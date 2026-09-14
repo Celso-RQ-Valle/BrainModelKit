@@ -52,6 +52,36 @@ def test_invalid_and_empty_data(tmp_path):
     assert report["oot_auc"] is None
 
 
+def test_training_analysis_cube_is_optional_and_oot_based(tmp_path):
+    data = pd.DataFrame(
+        {
+            "x": [-3.0, -2.0, -1.0, 1.0, 2.0, 3.0],
+            "y": [0, 0, 0, 1, 1, 1],
+            "size": ["S", "S", "M", "M", "L", "L"],
+            "segment": ["A", "B", "A", "B", "A", "B"],
+        }
+    )
+    result = train_model(
+        "cube",
+        "y",
+        ["x"],
+        data,
+        data,
+        analysis_cube=["size", "segment"],
+        save_model_to="none",
+        output_dir=tmp_path,
+    )
+    assert result.analysis_cube is not None
+    assert set(result.analysis_cube.columns) == {
+        "size",
+        "segment",
+        "KS",
+        "AUC",
+        "Gini",
+        "score",
+    }
+
+
 def test_mlflow_round_trip(tmp_path, monkeypatch):
     mlflow = pytest.importorskip("mlflow")
     flavor = pytest.importorskip("mlflow.sklearn")
