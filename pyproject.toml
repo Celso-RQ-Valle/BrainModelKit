@@ -45,6 +45,7 @@ secure = ["skops>=0.10"]
 onnx = ["skl2onnx>=1.16", "onnx>=1.16", "onnxruntime>=1.17"]
 lightgbm = ["lightgbm>=4.0"]
 boruta = ["Boruta>=0.4.3"]
+optimization = ["optuna>=3.0"]
 dataframes = [
     "pandas>=2.0",
     "scikit-learn>=1.2",

@@ -35,6 +35,7 @@ def _validate(df, target_col, feature_cols):
 def _pipeline(features, target, model, params, seed):
     from pyspark.ml import Pipeline
     from pyspark.ml.classification import (
+        DecisionTreeClassifier,
         GBTClassifier,
         LogisticRegression,
         RandomForestClassifier,
@@ -43,6 +44,7 @@ def _pipeline(features, target, model, params, seed):
 
     choices = {
         "logistic_regression": LogisticRegression,
+        "decision_tree": DecisionTreeClassifier,
         "random_forest": RandomForestClassifier,
         "gradient_boosting": GBTClassifier,
     }

@@ -957,3 +957,21 @@ print(result.summary)
 
 See the [cross-validation guide](docs/model_selection.md) for K-Fold,
 stratification, groups, time ordering, Spark folds, and leakage guidance.
+
+## Optimization
+
+Optuna optimization uses CV on `train_df`; OOT is reported separately and never
+drives the default objective. Install the optional dependency with
+`pip install "BrainModelKit[optimization]"`.
+
+```python
+from brainmodelkit.optimization.pandas import optimize
+
+result = optimize(
+    train_df, oot_df, "target", features, "logistic_regression",
+    {"C": {"type": "float", "low": 0.01, "high": 10.0, "log": True}},
+    n_trials=10,
+)
+print(result.best_params, result.best_value)
+print(result.trials)
+```

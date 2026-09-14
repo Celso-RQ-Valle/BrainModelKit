@@ -11,7 +11,7 @@ import numpy as np
 from pyspark.sql import functions as F
 from pyspark.sql.types import LongType, StructField, StructType
 
-from brainmodelkit.model_selection.pyspark import _assign_folds
+from brainmodelkit.model_selection.pyspark import cross_validate
 
 from ._selection import SelectionResult, integer, ranked, resolve_frame
 from ._spark_model import feature_importance_selection
@@ -145,29 +145,6 @@ def permutation_importance_selection(
     return result
 
 
-@contextmanager
-def folds(frame, target, features, cv, fold_col, seed):
-    integer(cv, "cv", 2)
-    if "__bmk_fold" in frame.columns:
-        raise ValueError("Column __bmk_fold is reserved")
-    assigned_frame = _assign_folds(
-        frame, target, features, cv, "stratified", fold_col, None, None, seed
-    )
-    with owned_cache(assigned_frame) as assigned:
-        counts = assigned.groupBy("__bmk_fold", col(target)).count().collect()
-        if len(counts) != 2 * cv:
-            raise ValueError(
-                "Each CV fold must contain both classes; supply fold_col or reduce cv"
-            )
-        yield [
-            (
-                assigned.filter(F.col("__bmk_fold") != i),
-                assigned.filter(F.col("__bmk_fold") == i),
-            )
-            for i in range(cv)
-        ]
-
-
 def fit(frame, target, features, model, params, seed):
     return feature_importance_selection(
         frame, target, features, model=model, model_params=params, random_state=seed
@@ -223,22 +200,33 @@ def rfecv(
     integer(min_features_to_select, "min_features_to_select")
     if min_features_to_select > len(features):
         raise ValueError("min_features_to_select exceeds feature count")
+    if scoring != "roc_auc":
+        raise ValueError("rfecv uses Spark cross_validate metrics and requires roc_auc")
     scores = {}
-    with folds(train_df, target_col, features, cv, fold_col, random_state) as splits:
-        for training, validation in splits:
-            for subset, fitted in path(
-                training,
-                target_col,
-                features,
-                model,
-                model_params,
-                random_state,
-                step,
-                min_features_to_select,
-            ):
-                scores.setdefault(len(subset), []).append(
-                    score(fitted.model, validation, target_col, subset, scoring)
-                )
+    subsets = []
+    for subset, _ in path(
+        train_df,
+        target_col,
+        features,
+        model,
+        model_params,
+        random_state,
+        step,
+        min_features_to_select,
+    ):
+        subsets.append(subset)
+        cv_result = cross_validate(
+            train_df,
+            target_col,
+            subset,
+            model,
+            model_params=model_params,
+            cv=cv,
+            metrics=("auc",),
+            fold_col=fold_col,
+            random_state=random_state,
+        )
+        scores[len(subset)] = [row["AUC"] for row in cv_result.fold_metrics]
     best = max(sorted(scores), key=lambda n: np.mean(scores[n]))
     history = []
     for subset, fitted in path(  # noqa: B007 - final fit is returned below
@@ -319,39 +307,44 @@ def sequential_selection(
         raise ValueError("direction must be forward or backward")
     current = [] if direction == "forward" else features.copy()
     history = []
-    with folds(train_df, target_col, features, cv, fold_col, random_state) as splits:
-        while len(current) != n_features_to_select:
-            candidates = []
-            for feature in features:
-                if (direction == "forward") == (feature in current):
-                    continue
-                subset = (
-                    [f for f in features if (f in current or f == feature)]
-                    if direction == "forward"
-                    else [f for f in current if f != feature]
-                )
-                values = [
-                    score(
-                        fit(
-                            tr, target_col, subset, model, model_params, random_state
-                        ).model,
-                        va,
-                        target_col,
-                        subset,
-                        scoring,
-                    )
-                    for tr, va in splits
-                ]
-                candidates.append(
-                    {
-                        "feature": feature,
-                        "features": subset,
-                        "mean_test_score": float(np.mean(values)),
-                    }
-                )
-            winner = max(candidates, key=lambda entry: entry["mean_test_score"])
-            current = winner["features"]
-            history.append({**winner, "candidates": candidates})
+    if scoring != "roc_auc":
+        raise ValueError(
+            "sequential_selection uses Spark cross_validate metrics and "
+            "requires roc_auc"
+        )
+    while len(current) != n_features_to_select:
+        candidates = []
+        for feature in features:
+            if (direction == "forward") == (feature in current):
+                continue
+            subset = (
+                [f for f in features if (f in current or f == feature)]
+                if direction == "forward"
+                else [f for f in current if f != feature]
+            )
+            cv_result = cross_validate(
+                train_df,
+                target_col,
+                subset,
+                model,
+                model_params=model_params,
+                cv=cv,
+                metrics=("auc",),
+                fold_col=fold_col,
+                random_state=random_state,
+            )
+            candidates.append(
+                {
+                    "feature": feature,
+                    "features": subset,
+                    "mean_test_score": float(
+                        np.mean([row["AUC"] for row in cv_result.fold_metrics])
+                    ),
+                }
+            )
+        winner = max(candidates, key=lambda entry: entry["mean_test_score"])
+        current = winner["features"]
+        history.append({**winner, "candidates": candidates})
     fitted = fit(train_df, target_col, current, model, model_params, random_state)
     return SelectionResult(
         [{"feature": f, "selected": f in current} for f in features],
