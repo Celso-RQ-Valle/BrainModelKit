@@ -84,17 +84,26 @@ def _default_probability(
 
 def _generate_features(
     generator: random.Random,
-    default_probability: float,
+    default_flag: int,
     feature_count: int,
+    informative_indices: set[int],
+    signal_directions: dict[int, int],
+    signal_strength: float,
 ) -> tuple[float, ...]:
-    return tuple(
-        round(
-            default_probability * (1 + index / feature_count)
-            + generator.gauss(0, 0.15),
-            6,
-        )
-        for index in range(feature_count)
-    )
+    """Generate noisy features, with moderate signal in selected columns.
+
+    The baseline columns are independent standard-noise variables. Informative
+    columns add a noisy, randomly oriented target effect; the noise is larger
+    than the effect so the signal is useful for demonstrations without being a
+    direct copy of the target.
+    """
+    features = []
+    for index in range(feature_count):
+        value = generator.gauss(0, 1)
+        if index in informative_indices:
+            value += signal_directions[index] * (default_flag - 0.5) * signal_strength
+        features.append(round(value, 6))
+    return tuple(features)
 
 
 def simulate_credit_data(
@@ -104,6 +113,8 @@ def simulate_credit_data(
     feature_count: int = 20,
     max_days: int = 30,
     seed: int = 42,
+    informative_fraction: float = 1 / 6,
+    signal_strength: float = 0.75,
 ) -> tuple[DataFrame, list[str]]:
     """Create a synthetic credit DataFrame and return its numeric feature names.
 
@@ -119,6 +130,14 @@ def simulate_credit_data(
         Maximum number of days after today for the reference date.
     seed:
         Random seed used to make generated values reproducible.
+    informative_fraction:
+        Fraction of features with a weak target-related signal. Selected
+        columns are chosen reproducibly from the seed; at least one is used
+        when the fraction is greater than zero. The default is approximately
+        one in six features.
+    signal_strength:
+        Strength of the noisy target effect. It is deliberately smaller than
+        the feature noise scale by default to avoid trivially predictive data.
     """
     if row_count < 1:
         raise ValueError("row_count must be at least 1")
@@ -126,6 +145,10 @@ def simulate_credit_data(
         raise ValueError("feature_count must be at least 1")
     if max_days < 1:
         raise ValueError("max_days must be at least 1")
+    if not 0 <= informative_fraction <= 1:
+        raise ValueError("informative_fraction must be between 0 and 1")
+    if signal_strength <= 0:
+        raise ValueError("signal_strength must be greater than 0")
 
     if spark_session is None:
         try:
@@ -141,6 +164,15 @@ def simulate_credit_data(
 
     generator = random.Random(seed)
     rows: list[tuple[Any, ...]] = []
+    informative_count = (
+        max(1, int(feature_count * informative_fraction))
+        if informative_fraction > 0
+        else 0
+    )
+    informative_indices = set(generator.sample(range(feature_count), informative_count))
+    signal_directions = {
+        index: generator.choice((-1, 1)) for index in informative_indices
+    }
 
     for _ in range(row_count):
         status = generator.choice(STATUS_OPTIONS)
@@ -151,17 +183,21 @@ def simulate_credit_data(
             industry_section,
             company_size,
         )
+        default_flag = int(generator.random() < probability)
         features = _generate_features(
             generator,
-            probability,
+            default_flag,
             feature_count,
+            informative_indices,
+            signal_directions,
+            signal_strength,
         )
         rows.append(
             (
                 _generate_company_id(generator),
                 _generate_reference_date(generator, max_days),
                 status,
-                int(generator.random() < probability),
+                default_flag,
                 industry_section,
                 company_size,
                 *features,

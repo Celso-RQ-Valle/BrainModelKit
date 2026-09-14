@@ -101,6 +101,12 @@ The returned DataFrame contains `company_id`, `reference_date`, `status`,
 Use `default_flag` as the binary training label. `feature_columns` contains the
 numeric input column names for a Spark ML `VectorAssembler`:
 
+By default, approximately one sixth of the numeric features contain a weak,
+noisy target signal and the remaining features are independent noise. Control
+this with `informative_fraction` and `signal_strength`; the signal is noisy and
+does not directly copy the target, making the data useful for feature-selection
+examples without creating trivially perfect predictors.
+
 ```python
 from pyspark.ml.feature import VectorAssembler
 
