@@ -968,7 +968,11 @@ drives the default objective. Install the optional dependency with
 from brainmodelkit.optimization.pandas import optimize
 
 result = optimize(
-    train_df, oot_df, "target", features, "logistic_regression",
+    train_df,
+    oot_df,
+    "target",
+    features,
+    "logistic_regression",
     {"C": {"type": "float", "low": 0.01, "high": 10.0, "log": True}},
     n_trials=10,
 )

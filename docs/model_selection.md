@@ -9,8 +9,13 @@ runs, mutate the input frame, or use an OOT frame.
 from brainmodelkit.model_selection.pandas import cross_validate
 
 result = cross_validate(
-    train_df, "target", features, "logistic_regression", cv=5,
-    strategy="stratified", random_state=42,
+    train_df,
+    "target",
+    features,
+    "logistic_regression",
+    cv=5,
+    strategy="stratified",
+    random_state=42,
 )
 print(result.fold_metrics)
 print(result.summary)
