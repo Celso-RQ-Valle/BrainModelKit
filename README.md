@@ -27,6 +27,13 @@ python -m pip install "BrainModelKit[pandas]"
 python -m pip install "BrainModelKit[pyspark]"
 ```
 
+The `pyspark` extra installs PySpark and the compatible SynapseML 1.1.3 Python
+wrapper automatically. The base `BrainModelKit` install intentionally does not
+install Spark dependencies; use `BrainModelKit[pyspark]` when using Spark.
+Spark LightGBM also needs its JVM package attached before the Spark session is
+created; pip cannot install Maven/JAR packages into an already running JVM.
+See the Spark LightGBM setup below for the required coordinate.
+
 Add the integrations you use to one command when setting up a complete
 workflow:
 
@@ -620,8 +627,32 @@ result.model.transform(oot_df.drop("default_flag")).show(5)
 ```
 
 Spark KS/AUC use tile approximations controlled by `n_tiles` (at least 2).
-Use numeric, non-null features. Spark LightGBM additionally requires SynapseML
-and its matching JVM packages configured in your Spark session.
+Use numeric, non-null features. Spark LightGBM requires both the Python
+`synapseml` wrapper and the matching JVM package loaded before the Spark session
+starts. For Spark 4.0.x, create the session as follows:
+
+```python
+from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder
+    .appName("BrainModelLightGBM")
+    .config(
+        "spark.jars.repositories",
+        "https://mmlspark.blob.core.windows.net/maven",
+    )
+    .config(
+        "spark.jars.packages",
+        "com.microsoft.azure:synapseml_2.13:1.1.3-spark4.0",
+    )
+    .getOrCreate()
+)
+```
+
+For Spark 3.5.x, use the compatible SynapseML `_2.12` coordinate documented by
+[SynapseML](https://microsoft.github.io/SynapseML/docs/Get%20Started/InstallSynapseML/).
+If the Python wrapper imports but the JVM package is missing, training now raises
+an actionable error instead of the opaque `JavaPackage object is not callable`.
 To save this model, choose `save_model_to="folder"` or `"mlflow"` after
 configuring persistence; see [Spark on Windows](#spark-on-windows).
 

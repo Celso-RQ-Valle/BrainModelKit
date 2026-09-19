@@ -67,6 +67,25 @@ def test_training(spark, tmp_path, model, monkeypatch, save_model_to):
     assert (result.output_dir / "metrics.json").exists()
 
 
+def test_lightgbm_reports_missing_jvm_package(monkeypatch, spark):
+    class MissingJvmLightGBM:
+        def __init__(self, **kwargs):
+            raise TypeError("'JavaPackage' object is not callable")
+
+    monkeypatch.setattr("synapse.ml.lightgbm.LightGBMClassifier", MissingJvmLightGBM)
+    data = spark.createDataFrame([(-1.0, 0), (1.0, 1)], "x double, target int")
+    with pytest.raises(RuntimeError, match="matching SynapseML Maven package"):
+        train_model(
+            "lightgbm",
+            "target",
+            ["x"],
+            data,
+            data,
+            model="lightgbm",
+            save_model_to="none",
+        )
+
+
 @pytest.mark.skipif(
     os.name == "nt" and not os.environ.get("HADOOP_HOME"),
     reason="Native Spark disk writes on Windows require Hadoop/winutils configuration",

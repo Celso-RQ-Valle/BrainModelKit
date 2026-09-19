@@ -110,7 +110,21 @@ def train_model(
             choices[model] = LightGBMClassifier
         if model not in choices:
             raise ValueError(f"Unknown model: {model}")
-        estimator = choices[model](**(model_params or {}))
+        try:
+            estimator = choices[model](**(model_params or {}))
+        except TypeError as exc:
+            if model != "lightgbm" or "JavaPackage" not in str(exc):
+                raise
+            raise RuntimeError(
+                "Spark LightGBM is not available in the JVM. The Python "
+                "'synapseml' package only provides wrappers; Spark must also "
+                "load the matching SynapseML Maven package before the session "
+                "starts. For Spark 4.0.x use "
+                "com.microsoft.azure:synapseml_2.13:1.1.3-spark4.0 and the "
+                "repository https://mmlspark.blob.core.windows.net/maven. "
+                "For Spark 3.5.x use the matching _2.12 coordinate. Restart "
+                "the notebook kernel after changing Spark packages."
+            ) from exc
     else:
         estimator = model.copy({})
         estimator.setParams(**(model_params or {}))

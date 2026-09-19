@@ -35,14 +35,28 @@ def _save_spark_model(
 ):
     validate_format(format, SPARK_FORMATS)
     path = str(path)
-    if format == "spark":
-        writer = model.write()
-        if overwrite:
-            writer = writer.overwrite()
-        writer.save(path)
-    else:
-        if overwrite:
-            raise ValueError("overwrite=True is supported only for save_format='spark'")
-        optional_import("mlflow.spark", "mlflow").save_model(model, path)
+    try:
+        if format == "spark":
+            writer = model.write()
+            if overwrite:
+                writer = writer.overwrite()
+            writer.save(path)
+        else:
+            if overwrite:
+                raise ValueError(
+                    "overwrite=True is supported only for save_format='spark'"
+                )
+            optional_import("mlflow.spark", "mlflow").save_model(model, path)
+    except Exception as exc:
+        message = str(exc)
+        if "HADOOP_HOME" in message or "winutils" in message:
+            raise RuntimeError(
+                "Spark could not save the model because Windows Hadoop is not "
+                "configured. Set HADOOP_HOME to a compatible Hadoop directory "
+                "containing bin/winutils.exe, restart the notebook kernel, and "
+                "retry. Use save_model_to='none' to train without persistence, "
+                "or run Spark on Linux/WSL."
+            ) from exc
+        raise
     if save_metadata:
         write_metadata(model, path, format, **metadata)

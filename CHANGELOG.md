@@ -9,6 +9,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Spark LightGBM now reports a clear setup error when the Python SynapseML
+  wrapper is installed without its matching JVM package. The PySpark extra now
+  includes the SynapseML Python wrapper; the Spark JVM package still must be
+  attached before creating the Spark session.
+
 - Training ignores persistence options that do not apply to the selected
   destination. Folder formats/paths are unused for MLflow and none; signatures
   are unused outside MLflow. Conflicting destination aliases remain errors.
@@ -27,6 +32,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Restored `auc_gini` as the primary name; `roc_auc_gini` remains an alias.
 - README Spark examples explicitly show the default `n_tiles=10`.
+
+## [0.2.1] - 2026-09-18
+
+### Added
+
+- SynapseML 1.1.3 is installed automatically by the `pyspark`, `dataframes`,
+  and `full` extras for Spark LightGBM support.
 
 ### Added
 

@@ -12,8 +12,11 @@ Model names: `logistic_regression` (default), `random_forest`,
 `gradient_boosting`, `lightgbm`. Parameters use each backend's native names.
 You can also pass an estimator instance through `model`. Pandas clones it; Spark
 copies it. Both train fresh models. Pandas LightGBM needs `.[pandas,lightgbm]`;
-Spark LightGBM needs SynapseML installed with matching JVM packages in your Spark
-session. Installing the Python LightGBM extra does not configure SynapseML.
+Spark LightGBM needs the Python `synapseml` wrapper and matching JVM package
+loaded before creating the Spark session. Installing a Python package alone does
+not configure the JVM. For Spark 4.0.x use
+`com.microsoft.azure:synapseml_2.13:1.1.3-spark4.0` with the SynapseML Maven
+repository; use the matching `_2.12` coordinate for Spark 3.5.x.
 
 Results expose `model`, `oot_predictions`, `scoring_predictions`, `metrics`,
 `feature_importance`, `output_dir`, and optional MLflow `run_id`. The `score`

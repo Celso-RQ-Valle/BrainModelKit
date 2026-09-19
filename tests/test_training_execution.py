@@ -450,6 +450,17 @@ def test_hadoop_preflight_uses_driver_os():
     session._jvm.org.apache.hadoop.util.Shell.getWinUtilsPath.assert_not_called()
 
 
+def test_spark_save_reports_windows_hadoop_error():
+    from brainmodelkit.persistence.spark import _save_spark_model
+
+    model = Mock()
+    model.write.return_value.save.side_effect = RuntimeError(
+        "HADOOP_HOME and hadoop.home.dir are unset"
+    )
+    with pytest.raises(RuntimeError, match="Windows Hadoop is not configured"):
+        _save_spark_model(model, "model", "spark")
+
+
 @pytest.mark.parametrize("destination", ["folder", "mlflow"])
 def test_spark_preflight_precedes_fit_and_tracking(destination, monkeypatch):
     from brainmodelkit.training import pyspark as trainer
