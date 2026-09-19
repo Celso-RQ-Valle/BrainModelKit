@@ -86,10 +86,15 @@ def test_mlflow_round_trip(tmp_path, monkeypatch):
     mlflow = pytest.importorskip("mlflow")
     flavor = pytest.importorskip("mlflow.sklearn")
 
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", (tmp_path / "mlruns").as_uri())
     previous_uri = mlflow.get_tracking_uri()
-    mlflow.set_tracking_uri((tmp_path / "mlruns").as_uri())
+    tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking_uri)
+    monkeypatch.setenv("MLFLOW_REGISTRY_URI", tracking_uri)
+    mlflow.set_tracking_uri(tracking_uri)
     try:
+        mlflow.create_experiment(
+            "training-test", artifact_location=(tmp_path / "artifacts").as_uri()
+        )
         mlflow.set_experiment("training-test")
         data = pd.DataFrame({"x": [-2.0, -1.0, 1.0, 2.0], "y": [0, 0, 1, 1]})
         result = train_model(
