@@ -607,9 +607,7 @@ result = train_model(
     model="random_forest",
     model_params={"numTrees": 20, "maxDepth": 5, "seed": 42},
     df_scoring=oot_df.drop("default_flag"),  # Optional, no target required.
-    save_model_to="folder",
-    model_format="spark",
-    output_dir="training_runs",
+    save_model_to="none",  # First run: train/evaluate without model persistence.
     n_tiles=10,
 )
 
@@ -624,6 +622,8 @@ result.model.transform(oot_df.drop("default_flag")).show(5)
 Spark KS/AUC use tile approximations controlled by `n_tiles` (at least 2).
 Use numeric, non-null features. Spark LightGBM additionally requires SynapseML
 and its matching JVM packages configured in your Spark session.
+To save this model, choose `save_model_to="folder"` or `"mlflow"` after
+configuring persistence; see [Spark on Windows](#spark-on-windows).
 
 To execute the standalone example from the repository root:
 
@@ -646,7 +646,31 @@ dataset for actual out-of-time evaluation.
 
 ### Saving Trained Models
 
+The calls below use the Pandas quickstart's data and `target` label. For the
+Spark quickstart, use its import and replace `"target"` with `"default_flag"`.
+Choose one mode:
+
+| `save_model_to` | Equivalent deprecated alias | Setup | Result location |
+| --- | --- | --- | --- |
+| `"folder"` (default) | `run_as="local"` | Writable folder; configured Hadoop for Spark writes | `output_dir`, `model_uri` |
+| `"mlflow"` | `run_as="mlflow"` | MLflow extra and tracking/artifact access; Hadoop for Spark writes | `run_id`, `model_uri` |
+| `"none"` | `run_as="none"` | Training backend only | All locations and run ID are `None` |
+
+Options specific to another destination are ignored. In particular, MLflow
+does not use `output_dir`, `model_format`, `save_path`, `save_format`,
+`save_metadata` or Spark `overwrite`. `signature` is used only by MLflow.
+Contradictory destination arguments still raise an error.
+
 #### Folder
+
+##### How to execute `run_as="local"`
+
+Use `save_model_to="folder"` in the example below (recommended), or replace it
+with `run_as="local"` in an existing notebook. Both perform the same operation.
+Relative paths start at your script/notebook's working directory. `output_dir`
+is a parent directory, not a model filename. Each execution gets a new run ID,
+so rerunning does not replace the previous run. Read `result.model_uri` to
+locate the actual saved model.
 
 `save_model_to="folder"` saves under `output_dir` in a unique directory named
 `<sanitized_run_name>_<run_id>`. The default root is `training_runs`.
@@ -668,6 +692,16 @@ print(result.output_dir, result.model_uri)
 
 #### MLflow
 
+##### How to execute `run_as="mlflow"`
+
+Use `save_model_to="mlflow"` below, or replace it with `run_as="mlflow"`.
+First install the dependencies and configure tracking. For a remote server,
+use `mlflow.set_tracking_uri("http://localhost:5000")` with your actual server
+address and credentials. The example below uses local SQLite tracking.
+Run `mlflow ui --backend-store-uri sqlite:///mlflow.db` in the same working
+directory to inspect it, then open the URL printed by MLflow. SQLite stores
+metadata; model files go to the experiment's artifact location.
+
 Install the MLflow extra together with the backend you use:
 
 ```bash
@@ -675,14 +709,12 @@ python -m pip install "BrainModelKit[pandas,mlflow]"
 # or: python -m pip install "BrainModelKit[pyspark,mlflow]"
 ```
 
-Configure a tracking URI and experiment. Local file tracking works without a
-remote server:
+Configure a tracking URI and experiment in a writable working directory:
 
 ```python
-from pathlib import Path
 import mlflow
 
-mlflow.set_tracking_uri((Path.cwd() / "mlruns").as_uri())
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("brainmodelkit-training")
 result = train_model(
     "credit_tracked",
@@ -701,6 +733,13 @@ An existing active run causes a nested run. Temporary reports are removed after
 upload. `result.model_uri` is `runs:/<run_id>/model`; `result.output_dir` is `None`.
 
 #### No Persistence
+
+##### How to execute `run_as="none"`
+
+Use `save_model_to="none"` below, or replace it with `run_as="none"`.
+Inspect `result.metrics` and use `result.model` for subsequent predictions.
+The model exists only in the current session. All persistence options are
+ignored, including `signature=True`; this mode does not import MLflow.
 
 ```python
 result = train_model(
@@ -741,9 +780,8 @@ Native serialization supports LightGBM, XGBoost, and CatBoost. ONNX requires a
 supported skl2onnx converter and uses one training row to describe inputs.
 Spark persistence requires a configured Spark/Hadoop environment.
 
-Leave `model_format=None` for MLflow and no persistence: MLflow manages its own
-serialization, while no persistence does not serialize. Explicit formats are
-rejected for these destinations to avoid silently ignoring the choice.
+`model_format` is used and validated only for folder persistence. MLflow manages
+its own serialization; `none` does not serialize. Both ignore folder options.
 
 ### Training Outputs
 
@@ -783,12 +821,81 @@ unlabeled data through `df_scoring`. Pandas custom estimators must be cloneable
 and implement `predict_proba`; Spark estimators must expose standard probabilistic
 classifier columns. Inputs are not modified.
 
-`signature=True` requires MLflow and describes native prediction labels, not the
+`signature=True` applies only to MLflow and describes native prediction labels, not the
 added score column. Spark `n_tiles` controls metric approximation and must be at
 least 2. Spark `overwrite` is forwarded to its native writer; automatic run
 directories remain unique.
 
-### Migration
+### Training parameter reference
+
+Both backends accept the following arguments unless marked Spark-only.
+Arguments after `model` must be passed by keyword.
+
+| Parameter | Default | Meaning and usage |
+| --- | --- | --- |
+| `run_name` | Required | Human-readable name. Folder names are sanitized and receive a unique ID; MLflow uses this as the run name. |
+| `target_col` | Required | Label column in training/OOT, with non-null 0/1 values. Training must contain both classes. Never include it in features. |
+| `feature_cols` | Required | Nonempty sequence of unique column names, in model input order. Must exist in all supplied frames. Preprocess before training; Spark requires numeric, non-null inputs. |
+| `train_df` | Required | Labeled development DataFrame used to fit. Its backend must match the import. |
+| `oot_df` | Required | Separate labeled evaluation frame. Prefer a later period for real OOT. Single-class metrics are undefined (NaN). |
+| `model` | `"logistic_regression"` | Name: `logistic_regression`, `random_forest`, `gradient_boosting`, `lightgbm`; or compatible estimator. A fresh clone/copy is fitted. |
+| `model_params` | `None` | Estimator options using native backend names, e.g. Pandas `{"max_iter": 100}` versus Spark `{"maxIter": 100}`. `None` uses estimator defaults. |
+| `df_scoring` | `None` | Optional frame with every feature. Label is optional and may remain present. Omission produces `scoring_predictions=None`. |
+| `save_model_to` | `"folder"` | `folder`, `mlflow` or `none`; see execution examples above. |
+| `output_dir` | `"training_runs"` | Folder-mode parent directory, created if needed. Ignored in other modes, where `None` is accepted. |
+| `model_format` | `None` | Folder format, defaulting to Pandas `pickle` or Spark `spark`. Other formats/dependencies are listed above. Ignored outside folder mode. |
+| `signature` | `False` | Infer MLflow input/native prediction schemas. Does not change fitting or add score output to the logged model. Ignored outside MLflow. |
+| `analysis_cube` | `None` | Grouping column or list, e.g. `["company_size", "industry_section"]`, present in OOT. Returns `result.analysis_cube`. `[]` requests overall metrics; `None` disables it. More dimensions create exponentially more groups. Not included in the four persisted reports. |
+| `n_tiles` (Spark-only) | `10` | Integer >= 2 for approximate KS/AUC/Gini and the optional metric cube. Changes approximation granularity, not model fitting. Pandas has no training `n_tiles` argument. |
+| `overwrite` (Spark-only) | `False` | Native folder-writer overwrite, useful with an explicit legacy `save_path`. Generated run directories remain unique. Ignored outside folder mode. |
+| `run_as`, `runs_as` | `None` | Deprecated destination aliases: `local`, `mlflow`, `none`. Conflicting destinations remain errors. |
+| `mlflow_logging` | `None` | Deprecated: `True` selects MLflow; `False` does not override the destination. |
+| `save_path` | `None` | Deprecated explicit folder-mode model path. Reports still use `output_dir`. Ignored in other modes. |
+| `save_format` | `None` | Deprecated folder format alias. Conflicting folder formats are errors. Ignored outside folder mode. |
+| `save_metadata` | `True` | Sidecar for an explicit legacy folder `save_path` only. Does not disable standard reports or MLflow tags. |
+
+Input `score` is reserved in both backends. Spark also reserves `features`,
+`prediction`, `probability`, `rawPrediction`: pass raw feature columns rather
+than an assembled frame. Predictions preserve input columns and add outputs.
+Dropping the label from `df_scoring` is optional and does not fix saving errors.
+
+### Spark on Windows
+
+Spark can fit successfully and fail when saving. Folder and MLflow destinations
+both use Spark's native writer. MLflow stages the Spark model through a
+Hadoop/local filesystem before uploading it; changing `output_dir`, disabling
+`signature`, or dropping the scoring label does not remove this dependency.
+See [MLflow Spark persistence](https://mlflow.org/docs/latest/api_reference/python_api/mlflow.spark.html).
+
+An exception mentioning `Shell.checkHadoopHome`, `HADOOP_HOME` or `winutils.exe`
+points to Windows Hadoop configuration. BrainModelKit checks the Windows driver
+helper before fitting when saving is requested and reports a missing helper
+with recovery instructions. This check does not guarantee filesystem permissions,
+native-library compatibility or remote artifact availability.
+
+1. Use `save_model_to="none"` to train/evaluate without model persistence while
+   configuring the environment. The model remains in `result.model`.
+2. For saving, configure Windows Hadoop binaries/native libraries compatible
+   with Spark's bundled Hadoop. `HADOOP_HOME` must point to their root containing
+   `bin/winutils.exe`; native libraries must be on the process path. Setting a
+   variable alone does not install these files.
+3. Set up the environment before starting Python/Spark and restart the notebook
+   kernel/process. Hadoop caches initialization in the JVM.
+4. Alternatively use a configured Linux/WSL Spark environment. A remote MLflow
+   server alone does not change the Spark driver's operating system.
+
+Inspect the active classic Spark JVM:
+
+```python
+print(spark.sparkContext._jvm.org.apache.hadoop.util.VersionInfo.getVersion())
+print(spark.sparkContext._jvm.java.lang.System.getProperty("os.name"))
+```
+
+See [Hadoop Shell](https://hadoop.apache.org/docs/current/api/org/apache/hadoop/util/Shell.html)
+for helper resolution. MLflow database migration and experiment-creation INFO
+messages are normal first-use output; inspect the final exception and its cause.
+
+### Migration and compatibility
 
 | Previous API | New API |
 | --- | --- |
@@ -801,11 +908,11 @@ directories remain unique.
 Legacy aliases emit `DeprecationWarning`; incompatible destination arguments
 raise `ValueError`. The deprecated result property retains historical values.
 `mlflow_logging=True` remains a deprecated alias for MLflow. Replace `save_format`
-with `model_format`; `save_format="mlflow"` raises a migration error.
+with `model_format`; `save_format="mlflow"` raises a migration error in folder mode.
 Replace `save_path` with `output_dir` and read `result.model_uri`. Deprecated
 explicit paths still save the model at that path and reports in the run directory;
-`save_metadata` controls only the external model sidecar. External paths require
-folder persistence. Read metrics from `metrics.json`.
+`save_metadata` controls only the external model sidecar. External paths take
+effect only with folder persistence. Read metrics from `metrics.json`.
 
 ## Feature selection
 

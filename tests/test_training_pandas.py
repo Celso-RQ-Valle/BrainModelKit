@@ -100,6 +100,7 @@ def test_mlflow_round_trip(tmp_path, monkeypatch):
             data,
             output_dir=tmp_path / "reports",
             save_model_to="mlflow",
+            model_format="unused-folder-format",
             signature=True,
         )
         loaded = flavor.load_model(f"runs:/{result.run_id}/model")

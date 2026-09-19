@@ -3,6 +3,33 @@
 from ._common import SPARK_FORMATS, optional_import, validate_format, write_metadata
 
 
+def validate_spark_persistence(session, destination):
+    """Detect missing Windows Hadoop helpers before fitting or opening a run."""
+    if destination == "none":
+        return
+    jvm = getattr(session, "_jvm", None)
+    if jvm is None:  # Spark Connect does not expose the driver's JVM.
+        return
+    driver_os = str(jvm.java.lang.System.getProperty("os.name"))
+    if not driver_os.startswith("Windows"):
+        return
+
+    from py4j.protocol import Py4JJavaError
+
+    try:
+        jvm.org.apache.hadoop.util.Shell.getWinUtilsPath()
+    except Py4JJavaError as exc:
+        raise RuntimeError(
+            "Spark model persistence on Windows requires Hadoop winutils. "
+            "Configure HADOOP_HOME with compatible bin/winutils.exe and "
+            "native Hadoop libraries before starting Spark, then restart "
+            "the Python process/notebook kernel. MLflow also uses Spark's "
+            "native writer. Use save_model_to='none' to train without "
+            "saving, or run Spark in a configured Linux/WSL environment. "
+            "See README: Spark on Windows."
+        ) from exc
+
+
 def _save_spark_model(
     model, path, format="spark", *, overwrite=False, save_metadata=True, **metadata
 ):

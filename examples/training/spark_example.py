@@ -18,6 +18,7 @@ try:
         model="random_forest",
         model_params={"numTrees": 20, "maxDepth": 5, "seed": 42},
         df_scoring=oot.drop("default_flag"),
+        save_model_to="none",  # Use folder/mlflow after configuring Hadoop writes.
     )
     print(result.metrics)
     print(result.output_dir)

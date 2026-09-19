@@ -14,6 +14,7 @@ from pyspark.sql import functions as F
 
 from brainmodelkit.cube_analysis.pyspark import calculate_metrics as calculate_cube
 from brainmodelkit.metrics.pyspark import auc_gini, ks_ntile
+from brainmodelkit.persistence.spark import validate_spark_persistence
 
 from ._common import (
     DEFAULT_DESTINATION,
@@ -60,8 +61,9 @@ def train_model(
     the model and reports under output_dir. model_format independently selects
     folder serialization (pickle for Pandas, spark for PySpark by default).
     run_as and runs_as are deprecated aliases for save_model_to.
-    signature requires MLflow. Legacy save_path, save_format and mlflow_logging
-    are deprecated. save_metadata controls only legacy external model sidecars.
+    signature is used only with MLflow; folder options are ignored elsewhere.
+    Legacy save_path, save_format and mlflow_logging are deprecated.
+    save_metadata controls only legacy external model sidecars.
     """
     save_model_to, model_format = resolve_execution(
         "spark",
@@ -79,6 +81,7 @@ def train_model(
         target_col,
         [(train_df, True), (oot_df, True), (df_scoring, False)],
     )
+    validate_spark_persistence(train_df.sparkSession, save_model_to)
     if not isinstance(n_tiles, int) or isinstance(n_tiles, bool) or n_tiles < 2:
         raise ValueError("n_tiles must be an integer >= 2")
     for frame in (train_df, oot_df, df_scoring):

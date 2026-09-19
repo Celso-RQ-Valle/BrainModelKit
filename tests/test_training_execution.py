@@ -108,7 +108,15 @@ def test_none_has_no_filesystem_or_serialization(data, tmp_path, monkeypatch):
     monkeypatch.setattr("brainmodelkit.training._common.optional_import", unexpected)
     monkeypatch.setattr("brainmodelkit.training._common._save_python_model", unexpected)
     result = train_model(
-        "none", "y", ["x"], data, data, save_model_to="none", output_dir=None
+        "none",
+        "y",
+        ["x"],
+        data,
+        data,
+        save_model_to="none",
+        output_dir=None,
+        model_format="unused",
+        signature=True,
     )
     assert result.model is not None
     assert result.metrics["oot_auc"] == 1
@@ -124,12 +132,6 @@ def test_none_has_no_filesystem_or_serialization(data, tmp_path, monkeypatch):
         ({"save_model_to": "invalid"}, "Available:"),
         ({"model_format": "invalid"}, "Available:"),
         ({"model_format": "mlflow"}, "Available:"),
-        ({"signature": True}, "requires save_model_to='mlflow'"),
-        (
-            {"save_model_to": "none", "signature": True},
-            "requires save_model_to='mlflow'",
-        ),
-        ({"save_model_to": "mlflow", "model_format": "onnx"}, "require|Available:"),
     ],
 )
 def test_validation_before_fit(backend, options, match):
@@ -315,7 +317,6 @@ def test_legacy_conflicts(data):
     for options in (
         {"run_as": "none", "mlflow_logging": True},
         {"model_format": "pickle", "save_format": "joblib"},
-        {"run_as": "none", "save_path": "model"},
         {"save_format": "mlflow"},
     ):
         with pytest.warns(DeprecationWarning), pytest.raises(ValueError):
@@ -385,3 +386,88 @@ def test_public_defaults(backend):
     assert parameters["save_model_to"].default == "folder"
     assert parameters["model_format"].default is None
     assert parameters["output_dir"].default == "training_runs"
+
+
+@pytest.mark.parametrize("backend", ["sklearn", "spark"])
+@pytest.mark.parametrize("destination", ["mlflow", "none"])
+def test_unused_folder_options(backend, destination, monkeypatch):
+    from brainmodelkit.training._common import resolve_execution
+
+    dependency = Mock()
+    monkeypatch.setattr("brainmodelkit.training._common.optional_import", dependency)
+    with pytest.warns(DeprecationWarning):
+        assert resolve_execution(
+            backend, destination, "unused", None, "unused", "also-unused", True
+        ) == (destination, None)
+    assert dependency.call_count == int(destination == "mlflow")
+
+
+@pytest.mark.parametrize("destination", ["folder", "none"])
+def test_unused_signature_without_mlflow(destination, data, tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "brainmodelkit.training._common.optional_import",
+        Mock(side_effect=AssertionError("MLflow must not be imported")),
+    )
+    result = train_model(
+        "signature",
+        "y",
+        ["x"],
+        data,
+        data,
+        save_model_to=destination,
+        signature=True,
+        output_dir=tmp_path,
+    )
+    assert result.metrics["oot_auc"] == 1
+
+
+@pytest.mark.parametrize("destination", ["folder", "mlflow", "none"])
+def test_windows_hadoop_preflight(destination):
+    from py4j.protocol import Py4JJavaError
+
+    from brainmodelkit.persistence.spark import validate_spark_persistence
+
+    session = Mock()
+    session._jvm.java.lang.System.getProperty.return_value = "Windows 11"
+    probe = session._jvm.org.apache.hadoop.util.Shell.getWinUtilsPath
+    error = Py4JJavaError("HADOOP_HOME is unset", Mock(_target_id="error"))
+    probe.side_effect = error
+    if destination == "none":
+        validate_spark_persistence(session, destination)
+        probe.assert_not_called()
+    else:
+        with pytest.raises(RuntimeError, match="restart") as caught:
+            validate_spark_persistence(session, destination)
+        assert caught.value.__cause__ is error
+
+
+def test_hadoop_preflight_uses_driver_os():
+    from brainmodelkit.persistence.spark import validate_spark_persistence
+
+    session = Mock()
+    session._jvm.java.lang.System.getProperty.return_value = "Linux"
+    validate_spark_persistence(session, "mlflow")
+    session._jvm.org.apache.hadoop.util.Shell.getWinUtilsPath.assert_not_called()
+
+
+@pytest.mark.parametrize("destination", ["folder", "mlflow"])
+def test_spark_preflight_precedes_fit_and_tracking(destination, monkeypatch):
+    from brainmodelkit.training import pyspark as trainer
+
+    frame = Mock(columns=["x", "y"])
+    pipeline = Mock()
+    finish = Mock()
+    monkeypatch.setattr(trainer, "Pipeline", pipeline)
+    monkeypatch.setattr(trainer, "finalize_run", finish)
+    monkeypatch.setattr("brainmodelkit.training._common.optional_import", Mock())
+    monkeypatch.setattr(
+        trainer,
+        "validate_spark_persistence",
+        Mock(side_effect=RuntimeError("missing Hadoop helper")),
+    )
+    with pytest.raises(RuntimeError, match="missing Hadoop"):
+        trainer.train_model(
+            "check", "y", ["x"], frame, frame, save_model_to=destination
+        )
+    pipeline.assert_not_called()
+    finish.assert_not_called()

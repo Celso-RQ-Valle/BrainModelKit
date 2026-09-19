@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Training ignores persistence options that do not apply to the selected
+  destination. Folder formats/paths are unused for MLflow and none; signatures
+  are unused outside MLflow. Conflicting destination aliases remain errors.
+- Expanded README training modes, parameter reference and Windows Hadoop setup.
+- Spark training checks Windows Hadoop helper availability before fitting when
+  model persistence is requested, including MLflow. The Spark quickstart now
+  trains without persistence by default; the API default remains folder.
+
 - Cube-only performance improvements: Spark computes grouped AUC and n-tile
   tables with partitioned windows, avoids group-key collection, and validates
   once per call. Pandas reuses grouping across scores and avoids metric merges.

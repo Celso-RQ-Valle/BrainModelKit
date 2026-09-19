@@ -53,8 +53,9 @@ def train_model(
     the model and reports under output_dir. model_format independently selects
     folder serialization (pickle for Pandas, spark for PySpark by default).
     run_as and runs_as are deprecated aliases for save_model_to.
-    signature requires MLflow. Legacy save_path, save_format and mlflow_logging
-    are deprecated. save_metadata controls only legacy external model sidecars.
+    signature is used only with MLflow; folder options are ignored elsewhere.
+    Legacy save_path, save_format and mlflow_logging are deprecated.
+    save_metadata controls only legacy external model sidecars.
     """
     save_model_to, model_format = resolve_execution(
         "sklearn",

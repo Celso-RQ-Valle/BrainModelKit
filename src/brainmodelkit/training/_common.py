@@ -89,7 +89,11 @@ def resolve_execution(
     run_as=None,
     runs_as=None,
 ):
-    """Normalize deprecated switches and validate before fitting."""
+    """Resolve the destination and validate only the options it consumes.
+
+    Keep legacy arguments in this internal interface for existing callers.
+    ``signature`` is consumed by MLflow during finalization, not validation.
+    """
     if save_model_to not in ("folder", "mlflow", "none"):
         raise ValueError("Invalid save_model_to. Available: folder, mlflow, none")
     destinations = [] if save_model_to is DEFAULT_DESTINATION else [save_model_to]
@@ -123,6 +127,16 @@ def resolve_execution(
             "(run_as, runs_as or mlflow_logging); use save_model_to only"
         )
     destination = destinations[0] if destinations else "folder"
+    # Destination-specific options are deliberately unused in other modes.
+    if destination != "folder":
+        if destination == "mlflow":
+            optional_import("mlflow", "mlflow")
+        return destination, None
+    return destination, _resolve_folder_format(backend, model_format, save_format)
+
+
+def _resolve_folder_format(backend, model_format, save_format):
+    """Normalize the legacy format alias and select backend serialization."""
     if save_format == "mlflow":
         raise ValueError(
             "save_format='mlflow' was replaced by save_model_to='mlflow'; "
@@ -139,15 +153,7 @@ def resolve_execution(
     )
     if model_format is not None:
         validate_format(model_format, available)
-    if destination != "folder" and (model_format is not None or save_path is not None):
-        raise ValueError("model_format and save_path require save_model_to='folder'")
-    if signature and destination != "mlflow":
-        raise ValueError("signature=True requires save_model_to='mlflow'")
-    if destination == "mlflow":
-        optional_import("mlflow", "mlflow")
-    return destination, (
-        model_format or available[0]
-    ) if destination == "folder" else None
+    return model_format or available[0]
 
 
 def _write_reports(folder, result, report, metadata):
@@ -279,23 +285,28 @@ def finalize_run(
                 "feature_cols": json.dumps(features),
             }
         )
-        model_signature = None
-        if signature:
-            infer_signature = optional_import("mlflow.models", "mlflow").infer_signature
-            if backend == "sklearn":
-                sample = train_df[features].head(5)
-                model_signature = infer_signature(sample, result.model.predict(sample))
-            else:
-                model_signature = infer_signature(
-                    train_df.select(*features),
-                    result.oot_predictions.select("prediction"),
-                )
+        model_signature = (
+            _infer_model_signature(result, backend, train_df, features)
+            if signature
+            else None
+        )
         _log_mlflow_model(result.model, backend, model_signature)
         result.model_uri = f"runs:/{result.run_id}/model"
         with TemporaryDirectory(prefix="brainmodelkit-") as temporary:
             _write_reports(Path(temporary), result, report, metadata)
             mlflow.log_artifacts(temporary, artifact_path="training_report")
     return result
+
+
+def _infer_model_signature(result, backend, train_df, features):
+    """Describe raw feature inputs and native prediction outputs for MLflow."""
+    infer_signature = optional_import("mlflow.models", "mlflow").infer_signature
+    if backend == "sklearn":
+        sample = train_df[features].head(5)
+        return infer_signature(sample, result.model.predict(sample))
+    return infer_signature(
+        train_df.select(*features), result.oot_predictions.select("prediction")
+    )
 
 
 def importance_records(features, values):

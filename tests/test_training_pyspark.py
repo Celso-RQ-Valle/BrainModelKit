@@ -29,6 +29,9 @@ def test_training(spark, tmp_path, model, monkeypatch, save_model_to):
     from unittest.mock import Mock
 
     saver = Mock()
+    monkeypatch.setattr(
+        "brainmodelkit.training.pyspark.validate_spark_persistence", Mock()
+    )
     monkeypatch.setattr("brainmodelkit.training._common._save_spark_model", saver)
     data = spark.createDataFrame(
         [(-3.0, 0), (-2.0, 0), (-1.0, 0), (1.0, 1), (2.0, 1), (3.0, 1)],
@@ -98,6 +101,9 @@ def test_training_persistence(spark, tmp_path):
 def test_rfe(spark, tmp_path, model, monkeypatch):
     from unittest.mock import Mock
 
+    monkeypatch.setattr(
+        "brainmodelkit.training.pyspark.validate_spark_persistence", Mock()
+    )
     monkeypatch.setattr("brainmodelkit.training._common._save_spark_model", Mock())
     from brainmodelkit.feature_selection.pyspark import rfe
 

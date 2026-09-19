@@ -21,7 +21,12 @@ column is the probability of target 1. Training requires both 0 and 1 labels;
 OOT may be single-class, producing undefined metrics. Spark KS/AUC are tiled
 approximations controlled by `n_tiles`; Pandas metrics are exact.
 
-With the default `save_model_to="folder"`, each call creates `training_runs/<run_name>_<run_id>/` containing
+The Spark example explicitly uses `save_model_to="none"` so model persistence
+does not require Windows Hadoop helpers for the first training run. Select
+`folder` or `mlflow` after configuring the writer. See
+[Spark on Windows](../../README.md#spark-on-windows) for the `HADOOP_HOME` error.
+
+With the API default `save_model_to="folder"`, each call creates `training_runs/<run_name>_<run_id>/` containing
 the fitted model, `model_info.json`, `metrics.json`, `metadata.json`, and
 `feature_importance.csv`. Change the parent with `output_dir`.
 Pandas defaults to `model_format="pickle"`; Spark uses `model_format="spark"`.
@@ -35,5 +40,11 @@ Existing active runs receive a nested run. `signature=True` optionally infers
 raw feature inputs and predicted labels, not the added probability score.
 Spark logs the full assembler pipeline. No tracking server configuration is
 performed by these functions.
+
+Folder options are ignored in MLflow/none mode; `signature` is ignored outside
+MLflow. `run_as="local"`, `run_as="mlflow"`, and `run_as="none"` remain deprecated
+aliases for the three destinations. See the
+[parameter reference](../../README.md#training-parameter-reference) for every
+argument, its default and where it takes effect.
 
 See [destination, format and migration details](../../README.md#model-training).
