@@ -1,8 +1,8 @@
 # BrainModelKit
 
 BrainModelKit is an early-stage Python library for building, evaluating, and
-analyzing models. Its package structure is ready for optional Pandas and
-PySpark integrations without requiring either framework for core usage.
+analyzing models. Its standard installation includes the Python dependencies
+for Pandas, PySpark, MLflow, model selection, and model persistence.
 
 > [!WARNING]
 > The public API is not stable yet. BrainModelKit is currently under active
@@ -14,48 +14,31 @@ PySpark integrations without requiring either framework for core usage.
 
 ## Installation
 
-Install the core package from PyPI:
+Install the package and all supported feature dependencies from PyPI:
 
 ```bash
 python -m pip install BrainModelKit
 ```
 
-Install an optional dataframe integration from PyPI:
+The standard installation includes Pandas, scikit-learn, PySpark, the SynapseML
+1.1.3 Python wrapper, NumPy, SciPy, MLflow, joblib, cloudpickle, skops,
+skl2onnx, ONNX, ONNX Runtime, LightGBM, Boruta, and Optuna.
+Existing extras such as `[pyspark]`, `[mlflow]`, and `[full]` remain accepted for
+compatibility, but are no longer needed to enable these dependencies.
 
-```bash
-python -m pip install "BrainModelKit[pandas]"
-python -m pip install "BrainModelKit[pyspark]"
-```
-
-The `pyspark` extra installs PySpark and the compatible SynapseML 1.1.3 Python
-wrapper automatically. The base `BrainModelKit` install intentionally does not
-install Spark dependencies; use `BrainModelKit[pyspark]` when using Spark.
+Spark requires a Java installation and a configured Spark environment.
 Spark LightGBM also needs its JVM package attached before the Spark session is
 created; pip cannot install Maven/JAR packages into an already running JVM.
 See the Spark LightGBM setup below for the required coordinate.
 
-Add the integrations you use to one command when setting up a complete
-workflow:
-
-```bash
-python -m pip install "BrainModelKit[pandas,mlflow,persistence]"
-```
-
-The `mlflow`, `persistence`, `optimization`, and model-specific extras install
-their third-party dependencies only when requested. To install the common
-development stack, use `BrainModelKit[full]`.
-
-Install both integrations:
-
-```bash
-python -m pip install "BrainModelKit[dataframes]"
-```
+Development tools are available through `BrainModelKit[dev]`. Notebook and
+plotting tools such as Jupyter and matplotlib are installed separately.
 
 To use the unreleased source from a local clone, replace `BrainModelKit` with
 `.` in the commands above, for example:
 
 ```bash
-python -m pip install ".[pyspark]"
+python -m pip install .
 ```
 
 ## Usage
@@ -80,7 +63,7 @@ In a Jupyter notebook, install the package into the active kernel and restart
 the kernel if prompted:
 
 ```python
-%pip install "BrainModelKit[pyspark]"
+%pip install BrainModelKit
 ```
 
 Generate 10,000 rows with the default 20 numeric features:
@@ -804,8 +787,8 @@ result = train_model(
 )
 ```
 
-Install `brainmodelkit[persistence]` for joblib/cloudpickle, `[secure]` for skops,
-or `[onnx]` for ONNX. Optional dependencies are imported only when requested.
+The standard installation includes joblib/cloudpickle, skops, and ONNX
+dependencies. Integrations are imported only when requested.
 Native serialization supports LightGBM, XGBoost, and CatBoost. ONNX requires a
 supported skl2onnx converter and uses one training row to describe inputs.
 Spark persistence requires a configured Spark/Hadoop environment.
@@ -892,16 +875,21 @@ Dropping the label from `df_scoring` is optional and does not fix saving errors.
 ### Spark on Windows
 
 Spark can fit successfully and fail when saving. Folder and MLflow destinations
-both use Spark's native writer. MLflow stages the Spark model through a
-Hadoop/local filesystem before uploading it; changing `output_dir`, disabling
+both use Spark's native writer. MLflow may write directly to a remote artifact
+filesystem or stage the Spark model through a Hadoop/local filesystem before
+uploading it; changing `output_dir`, disabling
 `signature`, or dropping the scoring label does not remove this dependency.
 See [MLflow Spark persistence](https://mlflow.org/docs/latest/api_reference/python_api/mlflow.spark.html).
 
 An exception mentioning `Shell.checkHadoopHome`, `HADOOP_HOME` or `winutils.exe`
-points to Windows Hadoop configuration. BrainModelKit checks the Windows driver
-helper before fitting when saving is requested and reports a missing helper
-with recovery instructions. This check does not guarantee filesystem permissions,
-native-library compatibility or remote artifact availability.
+points to Windows Hadoop configuration. For folder persistence on a local
+filesystem, BrainModelKit checks the Windows driver helper before fitting when
+Hadoop NativeIO is unavailable. Remote filesystems, Linux drivers, and sessions
+without a driver JVM do not run this local check. MLflow selects its own save
+path without a winutils preflight; actual Hadoop save failures include recovery
+instructions. MLflow local staging can still require Windows Hadoop support.
+`save_model_to="none"` performs no persistence validation. These checks do not
+guarantee filesystem permissions, native-library compatibility or artifact access.
 
 1. Use `save_model_to="none"` to train/evaluate without model persistence while
    configuring the environment. The model remains in `result.model`.

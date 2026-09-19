@@ -429,10 +429,11 @@ def test_windows_hadoop_preflight(destination):
 
     session = Mock()
     session._jvm.java.lang.System.getProperty.return_value = "Windows 11"
+    session._jvm.org.apache.hadoop.io.nativeio.NativeIO.isAvailable.return_value = False
     probe = session._jvm.org.apache.hadoop.util.Shell.getWinUtilsPath
     error = Py4JJavaError("HADOOP_HOME is unset", Mock(_target_id="error"))
     probe.side_effect = error
-    if destination == "none":
+    if destination != "folder":
         validate_spark_persistence(session, destination)
         probe.assert_not_called()
     else:
@@ -446,8 +447,45 @@ def test_hadoop_preflight_uses_driver_os():
 
     session = Mock()
     session._jvm.java.lang.System.getProperty.return_value = "Linux"
-    validate_spark_persistence(session, "mlflow")
+    validate_spark_persistence(session, "folder")
     session._jvm.org.apache.hadoop.util.Shell.getWinUtilsPath.assert_not_called()
+
+
+@pytest.mark.parametrize("destination", ["none", "mlflow", "folder"])
+def test_hadoop_preflight_without_driver_jvm(destination):
+    from brainmodelkit.persistence.spark import validate_spark_persistence
+
+    validate_spark_persistence(object(), destination)
+
+
+@pytest.mark.parametrize("scheme", ["file", "hdfs", "s3a"])
+@pytest.mark.parametrize("native_available", [True, False])
+def test_windows_preflight_respects_filesystem_and_native_io(scheme, native_available):
+    from brainmodelkit.persistence.spark import validate_spark_persistence
+
+    session = Mock()
+    jvm = session._jvm
+    jvm.java.lang.System.getProperty.return_value = "Windows 11"
+    jvm.org.apache.hadoop.io.nativeio.NativeIO.isAvailable.return_value = (
+        native_available
+    )
+    fs = jvm.org.apache.hadoop.fs.Path.return_value.getFileSystem.return_value
+    fs.getUri.return_value.getScheme.return_value = scheme
+    validate_spark_persistence(session, "folder", path="model")
+    probe = jvm.org.apache.hadoop.util.Shell.getWinUtilsPath
+    if scheme == "file" and not native_available:
+        probe.assert_called_once_with()
+    else:
+        probe.assert_not_called()
+
+
+@pytest.mark.parametrize("destination", ["none", "mlflow"])
+def test_nonfolder_preflight_does_not_inspect_jvm(destination):
+    from brainmodelkit.persistence.spark import validate_spark_persistence
+
+    session = Mock()
+    validate_spark_persistence(session, destination, path="ignored")
+    assert session.mock_calls == []
 
 
 def test_spark_save_reports_windows_hadoop_error():
@@ -461,8 +499,7 @@ def test_spark_save_reports_windows_hadoop_error():
         _save_spark_model(model, "model", "spark")
 
 
-@pytest.mark.parametrize("destination", ["folder", "mlflow"])
-def test_spark_preflight_precedes_fit_and_tracking(destination, monkeypatch):
+def test_spark_folder_preflight_precedes_fit_and_tracking(monkeypatch):
     from brainmodelkit.training import pyspark as trainer
 
     frame = Mock(columns=["x", "y"])
@@ -477,8 +514,6 @@ def test_spark_preflight_precedes_fit_and_tracking(destination, monkeypatch):
         Mock(side_effect=RuntimeError("missing Hadoop helper")),
     )
     with pytest.raises(RuntimeError, match="missing Hadoop"):
-        trainer.train_model(
-            "check", "y", ["x"], frame, frame, save_model_to=destination
-        )
+        trainer.train_model("check", "y", ["x"], frame, frame, save_model_to="folder")
     pipeline.assert_not_called()
     finish.assert_not_called()

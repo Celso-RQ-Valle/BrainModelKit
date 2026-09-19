@@ -170,3 +170,52 @@ def test_mlflow_flavor(tmp_path, monkeypatch, flavor):
     backend.save_model.assert_called_once_with("model", str(path))
     assert load_model(path, "mlflow") is backend.load_model.return_value
     assert importer.call_args.args == (f"mlflow.{flavor}",)
+
+
+def test_mlflow_spark_logging_delegates_without_local_preflight(monkeypatch):
+    from brainmodelkit.persistence import mlflow as persistence
+
+    flavor = Mock()
+    monkeypatch.setattr(persistence, "optional_import", Mock(return_value=flavor))
+    model = Mock()
+    result = persistence._log_mlflow_model(model, "spark", "signature")
+    flavor.log_model.assert_called_once_with(
+        model, artifact_path="model", signature="signature"
+    )
+    assert result is flavor.log_model.return_value
+    assert model.mock_calls == []
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_mlflow_spark_logging_explains_actual_hadoop_failure(monkeypatch, wrapped):
+    from brainmodelkit.persistence import mlflow as persistence
+
+    error = RuntimeError("HADOOP_HOME and hadoop.home.dir are unset")
+    if wrapped:
+        outer = RuntimeError("failed to save spark model")
+        outer.__cause__ = error
+        error = outer
+    flavor = Mock()
+    flavor.log_model.side_effect = error
+    monkeypatch.setattr(persistence, "optional_import", Mock(return_value=flavor))
+    with pytest.raises(
+        RuntimeError, match="Windows Hadoop is not configured"
+    ) as caught:
+        persistence._log_mlflow_model(Mock(), "spark")
+    assert caught.value.__cause__ is error
+
+
+@pytest.mark.parametrize(
+    ("backend", "message"),
+    [("spark", "permission denied"), ("sklearn", "HADOOP_HOME is unset")],
+)
+def test_mlflow_logging_preserves_other_errors(monkeypatch, backend, message):
+    from brainmodelkit.persistence import mlflow as persistence
+
+    error = RuntimeError(message)
+    flavor = Mock()
+    flavor.log_model.side_effect = error
+    monkeypatch.setattr(persistence, "optional_import", Mock(return_value=flavor))
+    with pytest.raises(RuntimeError) as caught:
+        persistence._log_mlflow_model(Mock(), backend)
+    assert caught.value is error

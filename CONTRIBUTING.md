@@ -18,12 +18,8 @@ Activate it and install the project in editable mode:
 python -m pip install -e ".[dev]"
 ```
 
-To work on an integration, include its extra:
-
-```bash
-python -m pip install -e ".[dev,pandas]"
-python -m pip install -e ".[dev,pyspark]"
-```
+All supported feature dependencies are installed automatically. The `dev`
+extra adds build, test, and lint tools.
 
 ## Quality checks
 
@@ -47,9 +43,9 @@ ruff format .
 
 - Add type hints to public functions and methods.
 - Write public names, docstrings, comments, and documentation in English.
-- Keep the core package independent of Pandas and PySpark.
+- Keep top-level imports independent of Pandas and PySpark.
 - Put framework-specific behavior in its corresponding integration namespace.
-- Import optional dependencies only inside the integration that needs them.
+- Import framework dependencies only inside the integration that needs them.
 - Add tests for new behavior and bug fixes.
 - Keep the public API small and document compatibility-impacting changes.
 

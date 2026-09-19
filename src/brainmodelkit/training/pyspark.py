@@ -81,7 +81,11 @@ def train_model(
         target_col,
         [(train_df, True), (oot_df, True), (df_scoring, False)],
     )
-    validate_spark_persistence(train_df.sparkSession, save_model_to)
+    validate_spark_persistence(
+        train_df.sparkSession,
+        save_model_to,
+        path=save_path if save_path is not None else output_dir,
+    )
     if not isinstance(n_tiles, int) or isinstance(n_tiles, bool) or n_tiles < 2:
         raise ValueError("n_tiles must be an integer >= 2")
     for frame in (train_df, oot_df, df_scoring):

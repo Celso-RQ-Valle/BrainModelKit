@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Standard `pip install BrainModelKit` now installs all supported Python feature
+  dependencies, including PySpark, SynapseML, MLflow, persistence formats,
+  LightGBM, Boruta, and Optuna. Existing extras remain compatible.
+
 - Spark LightGBM now reports a clear setup error when the Python SynapseML
   wrapper is installed without its matching JVM package. The PySpark extra now
   includes the SynapseML Python wrapper; the Spark JVM package still must be
