@@ -635,8 +635,7 @@ starts. For Spark 4.0.x, create the session as follows:
 from pyspark.sql import SparkSession
 
 spark = (
-    SparkSession.builder
-    .appName("BrainModelLightGBM")
+    SparkSession.builder.appName("BrainModelLightGBM")
     .config(
         "spark.jars.repositories",
         "https://mmlspark.blob.core.windows.net/maven",

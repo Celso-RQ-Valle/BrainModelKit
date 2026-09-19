@@ -170,6 +170,10 @@ def test_l1_and_rfe_native(spark, tmp_path, monkeypatch):
     )
     # Native writer behavior is covered in training tests; Windows lacks winutils.
     monkeypatch.setattr(
+        "brainmodelkit.training.pyspark.validate_spark_persistence",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(
         "brainmodelkit.training._common._save_spark_model", lambda *a, **kw: None
     )
     result = fs.rfe(
