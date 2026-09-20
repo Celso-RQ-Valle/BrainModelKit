@@ -69,6 +69,64 @@ To use the unreleased source from a local clone, replace the package name with
 python -m pip install -e ".[pandas]"
 ```
 
+## Environment Doctor
+
+Inspect existing capabilities without changing the environment:
+
+```python
+import brainmodelkit as bmk
+
+bmk.doctor()
+bmk.doctor(backend="pandas")
+bmk.doctor(backend="pyspark")
+bmk.doctor(
+    backend="pyspark",
+    model="lightgbm",
+    save_model_to="mlflow",
+)
+bmk.doctor(verbose=True)
+```
+
+Doctor prints a report and returns a dictionary with capabilities, the result,
+blocking capabilities, and recommendations. It recommends an available path
+based on detected prerequisites, without assuming your workload size. Specify
+`backend` when checking a model or persistence destination. Omitted persistence
+checks no destination; training itself still defaults to folder persistence.
+
+- `READY`: inspected prerequisites are present and meet package requirements.
+- `PARTIAL`: some prerequisites exist, but a runtime check is incomplete or denied.
+- `NOT AVAILABLE`: a required dependency is missing.
+- `INCOMPATIBLE`: a detected version is below the package's minimum requirement.
+
+Missing optional features affect only workflows that request them. Doctor does
+not install anything, change package versions or environment variables, write
+test files, change Spark configuration, download JARs, or create/restart Spark.
+Package versions come from metadata without importing optional libraries.
+
+In a Databricks notebook with an existing Spark session:
+
+```python
+bmk.doctor(verbose=True)
+bmk.doctor(
+    backend="pyspark", model="lightgbm", save_model_to="mlflow", verbose=True
+)
+```
+
+Compatible platform-provided Spark and MLflow installations are preserved.
+Doctor inspects existing session references and distinguishes the PySpark Python
+package, actual Spark runtime, and SynapseML Python wrapper from the JVM class.
+An installed wrapper alone never makes Spark LightGBM ready. Restricted JVM
+access or Spark Connect produces a partial check, not a recommendation to
+replace platform packages. SynapseML artifacts must match the existing
+Spark/Scala runtime; meeting `pyspark>=3.5` alone does not certify every pairing.
+
+`READY` is a prerequisite check, not a training or persistence smoke test.
+Doctor cannot safely verify native LightGBM execution, credentials, MLflow
+tracking/artifact access, or filesystem write permissions. Spark folder writes
+remain `PARTIAL` because filesystem/Hadoop support is not exercised. Without
+an accessible existing JVM, Java version and SynapseML JVM checks are incomplete;
+Doctor only looks for a Java executable and never launches it.
+
 ## Usage
 
 ```python
