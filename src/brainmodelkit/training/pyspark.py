@@ -109,7 +109,15 @@ def train_model(
             "gradient_boosting": GBTClassifier,
         }
         if model == "lightgbm":
-            from synapse.ml.lightgbm import LightGBMClassifier
+            try:
+                from synapse.ml.lightgbm import LightGBMClassifier
+            except ImportError as exc:
+                raise ImportError(
+                    "Spark LightGBM support requires SynapseML. Install "
+                    "BrainModelKit with: pip install 'brainmodelkit[pyspark]'. "
+                    "The matching SynapseML JVM package must also be attached "
+                    "to the Spark session before it starts."
+                ) from exc
 
             choices[model] = LightGBMClassifier
         if model not in choices:

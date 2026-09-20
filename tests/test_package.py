@@ -12,18 +12,27 @@ def test_version_is_exposed() -> None:
     assert brainmodelkit.__version__ == "0.2.1"
 
 
-def test_feature_dependencies_are_installed_by_default() -> None:
-    """Feature extras must not be needed to install runtime dependencies."""
+def test_runtime_dependencies_are_optional() -> None:
+    """The base install must not select an execution or integration stack."""
     requirements = [Requirement(value) for value in requires("brainmodelkit")]
-    defaults = {
-        requirement.name.lower(): requirement.specifier
+    assert not [
+        requirement for requirement in requirements if requirement.marker is None
+    ]
+
+
+def test_execution_extras_are_independent() -> None:
+    """Backend extras do not pull MLflow or unrelated integrations."""
+    requirements = [Requirement(value) for value in requires("brainmodelkit")]
+    for extra in ("pandas", "pyspark"):
+        selected = {
+            requirement.name.lower()
+            for requirement in requirements
+            if requirement.marker and requirement.marker.evaluate({"extra": extra})
+        }
+        assert "mlflow" not in selected
+    assert "mlflow" in {
+        requirement.name.lower()
         for requirement in requirements
-        if requirement.marker is None
+        if requirement.marker
+        and requirement.marker.evaluate({"extra": "mlflow"})
     }
-    assert {"pyspark", "synapseml", "mlflow"} <= defaults.keys()
-    for requirement in requirements:
-        if requirement.marker is None:
-            continue
-        if requirement.marker.evaluate({"extra": "dev"}):
-            continue
-        assert defaults.get(requirement.name.lower()) == requirement.specifier

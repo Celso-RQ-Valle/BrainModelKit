@@ -8,9 +8,10 @@ for Pandas DataFrames or `brainmodelkit.feature_selection.pyspark` for Spark
 DataFrames. The backends do not delegate to one another. There is no automatic
 pipeline engine and no implicit category encoding or imputation.
 
-Install `pip install BrainModelKit`. The standard installation includes both
-dataframe backends, NumPy, SciPy, scikit-learn, LightGBM, and Boruta.
-Spark requires a caller-configured Spark session and Java installation.
+Install `pip install "BrainModelKit[pandas]"` for the Pandas backend or
+`pip install "BrainModelKit[pyspark]"` for the Spark backend. Boruta remains a
+separate optional extra. Spark requires a caller-configured Spark session and
+Java installation.
 See [Spark's dependency requirements](https://spark.apache.org/docs/3.5.7/api/python/getting_started/install.html).
 
 Except for the existing RFE, selectors return a lightweight `SelectionResult`:

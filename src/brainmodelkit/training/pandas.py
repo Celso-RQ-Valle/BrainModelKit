@@ -85,7 +85,13 @@ def train_model(
             "gradient_boosting": GradientBoostingClassifier,
         }
         if model == "lightgbm":
-            from lightgbm import LGBMClassifier
+            try:
+                from lightgbm import LGBMClassifier
+            except ImportError as exc:
+                raise ImportError(
+                    "Pandas LightGBM support requires LightGBM. Install "
+                    "BrainModelKit with: pip install 'brainmodelkit[pandas]'"
+                ) from exc
 
             choices[model] = LGBMClassifier
         if model not in choices:

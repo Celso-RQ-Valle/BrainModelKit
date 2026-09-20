@@ -1,8 +1,8 @@
 # BrainModelKit
 
 BrainModelKit is an early-stage Python library for building, evaluating, and
-analyzing models. Its standard installation includes the Python dependencies
-for Pandas, PySpark, MLflow, model selection, and model persistence.
+analyzing models. Its base installation has no runtime dependencies; install
+the execution stack that your application uses.
 
 > [!WARNING]
 > The public API is not stable yet. BrainModelKit is currently under active
@@ -14,31 +14,59 @@ for Pandas, PySpark, MLflow, model selection, and model persistence.
 
 ## Installation
 
-Install the package and all supported feature dependencies from PyPI:
+Install the execution stack you need from PyPI:
 
 ```bash
-python -m pip install BrainModelKit
+# Pandas
+python -m pip install "brainmodelkit[pandas]"
+
+# PySpark
+python -m pip install "brainmodelkit[pyspark]"
+
+# Pandas + MLflow
+python -m pip install "brainmodelkit[pandas,mlflow]"
+
+# PySpark + MLflow
+python -m pip install "brainmodelkit[pyspark,mlflow]"
 ```
 
-The standard installation includes Pandas, scikit-learn, PySpark, the SynapseML
-1.1.3 Python wrapper, NumPy, SciPy, MLflow, joblib, cloudpickle, skops,
-skl2onnx, ONNX, ONNX Runtime, LightGBM, Boruta, and Optuna.
-Existing extras such as `[pyspark]`, `[mlflow]`, and `[full]` remain accepted for
-compatibility, but are no longer needed to enable these dependencies.
+`brainmodelkit` by itself installs no execution backend. MLflow is independent
+of both backends, so add `[mlflow]` only when model logging or MLflow model
+persistence is needed. Persistence formats, ONNX conversion, Boruta, and
+Optuna are also separate optional features; see the relevant sections below.
 
-Spark requires a Java installation and a configured Spark environment.
-Spark LightGBM also needs its JVM package attached before the Spark session is
-created; pip cannot install Maven/JAR packages into an already running JVM.
-See the Spark LightGBM setup below for the required coordinate.
+Spark requires a Java installation and a configured Spark environment. The
+`[pyspark]` extra requires PySpark 3.5 or newer. Spark LightGBM also needs a
+SynapseML JVM package matching the running Spark and Scala runtime; pip only
+installs the Python wrapper and does not configure Maven/JAR packages.
+
+For a managed environment such as Databricks, use the platform-provided Spark
+and MLflow versions when they meet those requirements:
+
+```bash
+python -m pip install --no-deps brainmodelkit
+```
+
+When installing directly from the repository, use the equivalent command:
+
+```bash
+python -m pip install --no-deps "git+https://github.com/Celso-RQ-Valle/BrainModelKit.git"
+```
+
+`--no-deps` prevents pip from installing, upgrading, or downgrading runtime
+dependencies. Use it only after confirming that the platform already provides
+the Pandas, PySpark/SynapseML, and any other optional dependencies required by
+the features you will call. In particular, do not use the PySpark extra merely
+to replace a managed Spark runtime.
 
 Development tools are available through `BrainModelKit[dev]`. Notebook and
 plotting tools such as Jupyter and matplotlib are installed separately.
 
-To use the unreleased source from a local clone, replace `BrainModelKit` with
+To use the unreleased source from a local clone, replace the package name with
 `.` in the commands above, for example:
 
 ```bash
-python -m pip install .
+python -m pip install -e ".[pandas]"
 ```
 
 ## Usage
@@ -63,7 +91,7 @@ In a Jupyter notebook, install the package into the active kernel and restart
 the kernel if prompted:
 
 ```python
-%pip install BrainModelKit
+%pip install "brainmodelkit[pyspark]"
 ```
 
 Generate 10,000 rows with the default 20 numeric features:
@@ -650,7 +678,7 @@ Both backends accept `model="logistic_regression"` (default), `"random_forest"`,
 `"gradient_boosting"`, or `"lightgbm"`. Pass algorithm parameters in
 `model_params` using the backend's native names, as shown above. You may also
 pass a custom estimator instance through `model`; it must support probability
-predictions. For Pandas LightGBM, install `python -m pip install -e ".[pandas,lightgbm]"`.
+predictions. LightGBM is included in the Pandas extra.
 
 Training labels must contain both classes, 0 and 1, and the target must not be
 included in `feature_cols`. Preprocess your features before training. The examples
@@ -787,8 +815,8 @@ result = train_model(
 )
 ```
 
-The standard installation includes joblib/cloudpickle, skops, and ONNX
-dependencies. Integrations are imported only when requested.
+Joblib, cloudpickle, skops, and ONNX are separate optional persistence extras;
+they are imported only when the corresponding format is requested.
 Native serialization supports LightGBM, XGBoost, and CatBoost. ONNX requires a
 supported skl2onnx converter and uses one training row to describe inputs.
 Spark persistence requires a configured Spark/Hadoop environment.

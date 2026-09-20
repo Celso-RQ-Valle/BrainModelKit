@@ -22,7 +22,7 @@ def require_optuna():
     except ImportError as error:
         raise ImportError(
             "Optuna is required for optimization. Install "
-            "`BrainModelKit[optimization]`."
+            "`brainmodelkit[optimization]`."
         ) from error
     return optuna
 
