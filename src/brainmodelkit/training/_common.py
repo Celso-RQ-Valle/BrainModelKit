@@ -193,6 +193,7 @@ def finalize_run(
     save_path=None,
     save_metadata=True,
     overwrite=False,
+    mlflow_dfs_tmp: str | None = None,
 ):
     """Persist a complete run through one destination."""
     result.save_model_to = save_model_to
@@ -290,7 +291,10 @@ def finalize_run(
             if signature
             else None
         )
-        _log_mlflow_model(result.model, backend, model_signature)
+        mlflow_options = {}
+        if backend == "spark" and mlflow_dfs_tmp is not None:
+            mlflow_options["mlflow_dfs_tmp"] = mlflow_dfs_tmp
+        _log_mlflow_model(result.model, backend, model_signature, **mlflow_options)
         result.model_uri = f"runs:/{result.run_id}/model"
         with TemporaryDirectory(prefix="brainmodelkit-") as temporary:
             _write_reports(Path(temporary), result, report, metadata)

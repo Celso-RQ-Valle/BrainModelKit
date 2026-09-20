@@ -43,6 +43,7 @@ def train_model(
     model_format: str | None = None,
     mlflow_logging=None,
     signature=False,
+    mlflow_dfs_tmp: str | None = None,
     n_tiles=10,
     save_path: str | None = None,
     save_format: str | None = None,
@@ -62,6 +63,8 @@ def train_model(
     folder serialization (pickle for Pandas, spark for PySpark by default).
     run_as and runs_as are deprecated aliases for save_model_to.
     signature is used only with MLflow; folder options are ignored elsewhere.
+    mlflow_dfs_tmp optionally supplies MLflow Spark's dfs_tmpdir. None leaves
+    MLflow defaults/environment configuration unchanged; ignored outside MLflow.
     Legacy save_path, save_format and mlflow_logging are deprecated.
     save_metadata controls only legacy external model sidecars.
     """
@@ -210,4 +213,5 @@ def train_model(
         save_path=save_path,
         save_metadata=save_metadata,
         overwrite=overwrite,
+        mlflow_dfs_tmp=mlflow_dfs_tmp,
     )

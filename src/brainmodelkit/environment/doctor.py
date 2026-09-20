@@ -32,6 +32,15 @@ def doctor(*, backend=None, model=None, save_model_to=None, verbose=False):
     env = detect()
     packages, caps = evaluate(env)
     recommendations = []
+    if backend == "pyspark" and save_model_to == "mlflow":
+        recommendations.append(
+            "DFS staging requirements cannot be confirmed read-only. If MLflow "
+            "reports 'UC volume path must be provided' on Databricks Serverless/shared "
+            "compute, supply "
+            "mlflow_dfs_tmp='/Volumes/<catalog>/<schema>/<volume>/mlflow_tmp' "
+            "to Spark train_model or configure MLFLOW_DFS_TMP. This is not a general "
+            "requirement and does not change the capability result."
+        )
     if packages["pyspark"] == READY:
         recommendations.append(
             f"Keep the existing PySpark installation: it satisfies >="

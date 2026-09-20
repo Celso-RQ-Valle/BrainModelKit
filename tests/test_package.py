@@ -33,6 +33,5 @@ def test_execution_extras_are_independent() -> None:
     assert "mlflow" in {
         requirement.name.lower()
         for requirement in requirements
-        if requirement.marker
-        and requirement.marker.evaluate({"extra": "mlflow"})
+        if requirement.marker and requirement.marker.evaluate({"extra": "mlflow"})
     }

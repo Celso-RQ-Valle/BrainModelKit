@@ -107,9 +107,7 @@ In a Databricks notebook with an existing Spark session:
 
 ```python
 bmk.doctor(verbose=True)
-bmk.doctor(
-    backend="pyspark", model="lightgbm", save_model_to="mlflow", verbose=True
-)
+bmk.doctor(backend="pyspark", model="lightgbm", save_model_to="mlflow", verbose=True)
 ```
 
 Compatible platform-provided Spark and MLflow installations are preserved.
@@ -830,6 +828,47 @@ Both backends log their native MLflow flavor, parameters, finite metrics,
 metadata tags, and the four report files under `training_report/`.
 An existing active run causes a nested run. Temporary reports are removed after
 upload. `result.model_uri` is `runs:/<run_id>/model`; `result.output_dir` is `None`.
+
+##### Databricks Serverless / Shared Compute
+
+Normal usage remains unchanged for local environments, Colab, and Spark setups
+where MLflow already works without a DFS temporary directory:
+
+```python
+result = train_model(
+    "experiment",
+    "target",
+    features,
+    train_df,
+    oot_df,
+    save_model_to="mlflow",
+)
+```
+
+Databricks Serverless/shared compute may require a Unity Catalog Volume while
+MLflow serializes Spark ML models. When MLflow reports that requirement, use
+the Spark `train_model` parameter:
+
+```python
+result = train_model(
+    "experiment",
+    "target",
+    features,
+    train_df,
+    oot_df,
+    save_model_to="mlflow",
+    mlflow_dfs_tmp="/Volumes/<catalog>/<schema>/<volume>/mlflow_tmp",
+)
+```
+
+Alternatively, configure
+`MLFLOW_DFS_TMP=/Volumes/<catalog>/<schema>/<volume>/mlflow_tmp` in your environment.
+The optional parameter defaults to `None`, which leaves MLflow's existing
+defaults/environment handling unchanged. An explicit value is passed only to
+`mlflow.spark.log_model` as `dfs_tmpdir`; generic DFS paths are accepted without
+requiring `/Volumes/`. This does not apply to Pandas/sklearn MLflow persistence.
+BrainModelKit neither creates Unity Catalog volumes nor changes your storage,
+Spark configuration, or environment variables.
 
 #### No Persistence
 
