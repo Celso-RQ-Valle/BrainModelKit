@@ -37,10 +37,8 @@ Optuna are also separate optional features; see the relevant sections below.
 
 Spark requires a Java installation and a configured Spark environment. The
 `[pyspark]` extra requires PySpark 3.5 or newer and includes SparkLightGBM.
-Spark training defaults to `lgbm_backend="default"` (SparkLightGBM). Install
-`brainmodelkit[synapseml]` and select `lgbm_backend="synapseml"` explicitly to
-use SynapseML, which also needs matching Spark/Scala JVM artifacts. For managed
-Spark, install `[sparklightgbm]` without replacing platform PySpark.
+For managed Spark, install `[sparklightgbm]` without replacing platform PySpark.
+See [Choosing the LightGBM backend](#choosing-the-lightgbm-backend) for usage.
 
 For a managed environment such as Databricks, use the platform-provided Spark
 and MLflow versions when they meet those requirements:
@@ -70,6 +68,39 @@ To use the unreleased source from a local clone, replace the package name with
 ```bash
 python -m pip install -e ".[pandas]"
 ```
+
+### SynapseML setup
+
+For SynapseML, install the Python wrapper and load matching JVM artifacts
+before the Spark session starts:
+
+```bash
+python -m pip install "brainmodelkit[synapseml]"
+```
+
+For Spark 4.0.x:
+
+```python
+from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder.appName("BrainModelLightGBM")
+    .config(
+        "spark.jars.repositories",
+        "https://mmlspark.blob.core.windows.net/maven",
+    )
+    .config(
+        "spark.jars.packages",
+        "com.microsoft.azure:synapseml_2.13:1.1.3-spark4.0",
+    )
+    .getOrCreate()
+)
+```
+
+For Spark 3.5.x, use the compatible SynapseML `_2.12` coordinate documented by
+[SynapseML](https://microsoft.github.io/SynapseML/docs/Get%20Started/InstallSynapseML/).
+If the Python wrapper imports but the JVM package is missing, training raises
+an actionable error instead of the opaque `JavaPackage object is not callable`.
 
 ## Environment Doctor
 
@@ -657,11 +688,7 @@ python examples/training/pandas_example.py
 
 ### PySpark
 
-Install the integration from your local clone and configure Java/Spark:
-
-```bash
-python -m pip install -e ".[pyspark]"
-```
+Follow the [PySpark installation requirements](#installation) first.
 
 Import `train_model` and pass your Spark DataFrames. This complete example
 generates sample data and trains a random forest:
@@ -697,51 +724,61 @@ result.scoring_predictions.select(*features, "score").show(5)
 result.model.transform(oot_df.drop("default_flag")).show(5)
 ```
 
-Spark KS/AUC use tile approximations controlled by `n_tiles` (at least 2).
-Use numeric, non-null features. `model="lightgbm"` defaults to SparkLightGBM,
-using native parameters such as `num_iterations` and `learning_rate`:
+#### Choosing the LightGBM backend
+
+Pass `lgbm_backend` directly to `train_model()`, outside `model_params`.
+`"default"` selects SparkLightGBM and is used when omitted; `"synapseml"`
+explicitly selects SynapseML. See [Installation](#installation) and
+[SynapseML setup](#synapseml-setup) for prerequisites.
+
+Using the same data and features from the example above:
 
 ```python
+# SparkLightGBM: native LightGBM parameter names.
 result = train_model(
-    "lgbm", "target", features, train_df, oot_df,
-    model="lightgbm", lgbm_backend="default",
+    run_name="spark_lightgbm",
+    target_col="default_flag",
+    feature_cols=features,
+    train_df=train_df,
+    oot_df=oot_df,
+    model="lightgbm",
+    lgbm_backend="default",
     model_params={"num_iterations": 100, "learning_rate": 0.05},
     save_model_to="none",
 )
 ```
 
-The adapter supports raw-feature pipelines, class-1 probabilities, and Spark
-folder/MLflow Spark persistence. Loading requires BrainModelKit and the selected
-LightGBM backend in the target environment.
-For cluster training, configure `num_workers>1`; SparkLightGBM's automatic local
-mode uses driver memory. See [backend setup and limitations](docs/optimization.md#spark-lightgbm).
-
-To use `lgbm_backend="synapseml"`, install `[synapseml]` and load the matching
-JVM package before the Spark session starts. For Spark 4.0.x:
-
 ```python
-from pyspark.sql import SparkSession
-
-spark = (
-    SparkSession.builder.appName("BrainModelLightGBM")
-    .config(
-        "spark.jars.repositories",
-        "https://mmlspark.blob.core.windows.net/maven",
-    )
-    .config(
-        "spark.jars.packages",
-        "com.microsoft.azure:synapseml_2.13:1.1.3-spark4.0",
-    )
-    .getOrCreate()
+# SynapseML: Spark parameter names.
+result = train_model(
+    run_name="synapseml_lightgbm",
+    target_col="default_flag",
+    feature_cols=features,
+    train_df=train_df,
+    oot_df=oot_df,
+    model="lightgbm",
+    lgbm_backend="synapseml",
+    model_params={"numIterations": 100, "learningRate": 0.05},
+    save_model_to="none",
 )
 ```
 
-For Spark 3.5.x, use the compatible SynapseML `_2.12` coordinate documented by
-[SynapseML](https://microsoft.github.io/SynapseML/docs/Get%20Started/InstallSynapseML/).
-If the Python wrapper imports but the JVM package is missing, training now raises
-an actionable error instead of the opaque `JavaPackage object is not callable`.
-For SynapseML, choose `save_model_to="folder"` or `"mlflow"` after
-configuring persistence; see [Spark on Windows](#spark-on-windows).
+The same selector works in PySpark `cross_validate()` and `optimize()`;
+keep it outside `model_params` and optimization `search_space`. It does not
+apply to pandas training. Missing dependencies do not switch the backend.
+
+Spark KS/AUC use tile approximations controlled by `n_tiles` (at least 2).
+Use numeric, non-null features. SparkLightGBM requires classic Spark;
+Spark Connect is unsupported. Its local/single-worker mode uses driver memory;
+set `num_workers>1` in `model_params` for distributed training. See
+[backend runtime limitations](docs/optimization.md#spark-lightgbm) for worker
+memory and barrier execution requirements.
+
+The SparkLightGBM adapter supports raw-feature pipelines, class-1 probabilities,
+and Spark folder/MLflow persistence. Loading requires BrainModelKit and the
+selected LightGBM backend in the target environment. Configure persistence
+before choosing `save_model_to="folder"` or `"mlflow"` with either backend;
+see [Spark on Windows](#spark-on-windows).
 
 To execute the standalone example from the repository root:
 
@@ -999,6 +1036,7 @@ Arguments after `model` must be passed by keyword.
 | `oot_df` | Required | Separate labeled evaluation frame. Prefer a later period for real OOT. Single-class metrics are undefined (NaN). |
 | `model` | `"logistic_regression"` | Name: `logistic_regression`, `random_forest`, `gradient_boosting`, `lightgbm`; or compatible estimator. A fresh clone/copy is fitted. |
 | `model_params` | `None` | Estimator options using native backend names, e.g. Pandas `{"max_iter": 100}` versus Spark `{"maxIter": 100}`. `None` uses estimator defaults. |
+| `lgbm_backend` (Spark-only) | `"default"` | LightGBM backend: `"default"` (SparkLightGBM) or `"synapseml"`. Pass directly to `train_model()`, outside `model_params`; see [backend examples](#choosing-the-lightgbm-backend). |
 | `df_scoring` | `None` | Optional frame with every feature. Label is optional and may remain present. Omission produces `scoring_predictions=None`. |
 | `save_model_to` | `"folder"` | `folder`, `mlflow` or `none`; see execution examples above. |
 | `output_dir` | `"training_runs"` | Folder-mode parent directory, created if needed. Ignored in other modes, where `None` is accepted. |
@@ -1300,10 +1338,16 @@ Constraints are optional and guide Optuna sampling throughout optimization:
 
 ```python
 result = optimize(
-    train_df, oot_df, "target", features, "logistic_regression",
+    train_df,
+    oot_df,
+    "target",
+    features,
+    "logistic_regression",
     {"C": {"type": "float", "low": 0.01, "high": 10.0, "log": True}},
-    objective_metric="oot_ks", direction="maximize",
-    target_metric="train_oot_ks_abs_shift", target_limit=0.05,
+    objective_metric="oot_ks",
+    direction="maximize",
+    target_metric="train_oot_ks_abs_shift",
+    target_limit=0.05,
     target_operator="<=",
 )
 ```
