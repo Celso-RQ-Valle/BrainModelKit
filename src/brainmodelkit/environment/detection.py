@@ -13,6 +13,7 @@ PACKAGES = (
     "lightgbm",
     "pyspark",
     "synapseml",
+    "sparklightgbm",
     "mlflow",
     "optuna",
     "Boruta",

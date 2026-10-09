@@ -13,6 +13,8 @@ class OptimizationResult:
     best_value: float
     trials: Any
     best_model: Any
+    selected_trial_number: int | None = None
+    constraint_satisfied: bool | None = None
 
 
 def require_optuna():

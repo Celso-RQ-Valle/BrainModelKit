@@ -32,44 +32,10 @@ def _validate(df, target_col, feature_cols):
     return features
 
 
-def _pipeline(features, target, model, params, seed):
-    from pyspark.ml import Pipeline
-    from pyspark.ml.classification import (
-        DecisionTreeClassifier,
-        GBTClassifier,
-        LogisticRegression,
-        RandomForestClassifier,
-    )
-    from pyspark.ml.feature import VectorAssembler
+def _pipeline(features, target, model, params, seed, lgbm_backend="default"):
+    from brainmodelkit.training._spark_estimators import make_pipeline
 
-    choices = {
-        "logistic_regression": LogisticRegression,
-        "decision_tree": DecisionTreeClassifier,
-        "random_forest": RandomForestClassifier,
-        "gradient_boosting": GBTClassifier,
-    }
-    if isinstance(model, str):
-        if model not in choices:
-            raise ValueError(f"Unknown model: {model}")
-        estimator = choices[model](**(params or {}))
-    else:
-        estimator = model.copy({})
-        estimator.setParams(**(params or {}))
-    for name, value in (
-        ("featuresCol", "features"),
-        ("labelCol", target),
-        ("probabilityCol", "probability"),
-        ("predictionCol", "prediction"),
-        ("rawPredictionCol", "rawPrediction"),
-    ):
-        if not estimator.hasParam(name):
-            raise TypeError(f"model must expose {name}")
-        estimator.set(estimator.getParam(name), value)
-    if estimator.hasParam("seed"):
-        estimator.set(estimator.getParam("seed"), seed)
-    return Pipeline(
-        stages=[VectorAssembler(inputCols=features, outputCol="features"), estimator]
-    )
+    return make_pipeline(features, target, model, params, seed, lgbm_backend)
 
 
 def _assign_folds(
@@ -138,8 +104,16 @@ def cross_validate(
     random_state: int = 42,
     n_tiles: int = 10,
     return_models: bool = False,
+    lgbm_backend: str = "default",
 ) -> CrossValidationResult:
-    """Fit Spark ML pipelines on distributed folds; source rows never leave Spark."""
+    """Fit pipelines on Spark folds and aggregate validation metrics in Spark.
+
+    SparkLightGBM's local/single-worker training uses driver NumPy memory;
+    configure model_params['num_workers'] > 1 for distributed native training.
+    """
+    from brainmodelkit.training._spark_estimators import validate_backend
+
+    validate_backend(lgbm_backend, model_params)
     if not isinstance(cv, int) or isinstance(cv, bool) or cv < 2:
         raise ValueError("cv must be an integer >= 2")
     if not isinstance(n_tiles, int) or isinstance(n_tiles, bool) or n_tiles < 2:
@@ -165,9 +139,9 @@ def cross_validate(
     for fold in range(cv):
         train = assigned.filter(assigned.__bmk_fold != fold)
         valid = assigned.filter(assigned.__bmk_fold == fold)
-        fitted = _pipeline(features, target_col, model, model_params, random_state).fit(
-            train
-        )
+        fitted = _pipeline(
+            features, target_col, model, model_params, random_state, lgbm_backend
+        ).fit(train)
 
         def evaluate(frame, fitted_model=fitted):
             scored = fitted_model.transform(frame).withColumn(

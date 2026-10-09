@@ -2,13 +2,6 @@
 
 from typing import Literal
 
-from pyspark.ml import Pipeline
-from pyspark.ml.classification import (
-    GBTClassifier,
-    LogisticRegression,
-    RandomForestClassifier,
-)
-from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
 
@@ -24,6 +17,7 @@ from ._common import (
     resolve_execution,
     validate_columns,
 )
+from ._spark_estimators import is_default_lightgbm, make_pipeline, validate_backend
 
 
 def train_model(
@@ -35,6 +29,8 @@ def train_model(
     model="logistic_regression",
     *,
     model_params=None,
+    lgbm_backend="default",
+    random_state=42,
     df_scoring=None,
     output_dir="training_runs",
     save_model_to: Literal["folder", "mlflow", "none"] = DEFAULT_DESTINATION,
@@ -53,10 +49,12 @@ def train_model(
 ):
     """Fit assembler + classifier; return distributed scores and tiled OOT metrics.
 
-    Model names match the Pandas backend; lightgbm requires configured SynapseML.
+    LightGBM defaults to SparkLightGBM; lgbm_backend="synapseml" selects SynapseML.
     Custom estimators must expose standard Spark probabilistic classifier columns.
     Features must be numeric and non-null. The returned PipelineModel accepts raw
-    feature columns. Only aggregate metrics and feature importances reach the driver.
+    feature columns. Metrics use distributed Spark utilities. SparkLightGBM's
+    num_workers=1 (including automatic local mode) materializes training rows in
+    driver NumPy memory; use num_workers>1 for distributed native training.
     MLflow signatures describe native prediction labels. No Spark session is created.
     save_model_to selects folder (default), mlflow, or none. Folder runs save
     the model and reports under output_dir. model_format independently selects
@@ -79,6 +77,7 @@ def train_model(
         run_as=run_as,
         runs_as=runs_as,
     )
+    validate_backend(lgbm_backend, model_params)
     features = validate_columns(
         feature_cols,
         target_col,
@@ -105,57 +104,11 @@ def train_model(
             raise ValueError("Targets must be non-null binary 0/1 values")
     if train_df.select(target_col).distinct().count() != 2:
         raise ValueError("Training requires both target classes")
-    if isinstance(model, str):
-        choices = {
-            "logistic_regression": LogisticRegression,
-            "random_forest": RandomForestClassifier,
-            "gradient_boosting": GBTClassifier,
-        }
-        if model == "lightgbm":
-            try:
-                from synapse.ml.lightgbm import LightGBMClassifier
-            except ImportError as exc:
-                raise ImportError(
-                    "Spark LightGBM support requires SynapseML. Install "
-                    "BrainModelKit with: pip install 'brainmodelkit[pyspark]'. "
-                    "The matching SynapseML JVM package must also be attached "
-                    "to the Spark session before it starts."
-                ) from exc
-
-            choices[model] = LightGBMClassifier
-        if model not in choices:
-            raise ValueError(f"Unknown model: {model}")
-        try:
-            estimator = choices[model](**(model_params or {}))
-        except TypeError as exc:
-            if model != "lightgbm" or "JavaPackage" not in str(exc):
-                raise
-            raise RuntimeError(
-                "Spark LightGBM is not available in the JVM. The Python "
-                "'synapseml' package only provides wrappers; Spark must also "
-                "load the matching SynapseML Maven package before the session "
-                "starts. For Spark 4.0.x use "
-                "com.microsoft.azure:synapseml_2.13:1.1.3-spark4.0 and the "
-                "repository https://mmlspark.blob.core.windows.net/maven. "
-                "For Spark 3.5.x use the matching _2.12 coordinate. Restart "
-                "the notebook kernel after changing Spark packages."
-            ) from exc
-    else:
-        estimator = model.copy({})
-        estimator.setParams(**(model_params or {}))
-    for name, value in {
-        "featuresCol": "features",
-        "labelCol": target_col,
-        "probabilityCol": "probability",
-        "predictionCol": "prediction",
-        "rawPredictionCol": "rawPrediction",
-    }.items():
-        if not estimator.hasParam(name):
-            raise TypeError(f"model must expose {name}")
-        estimator.set(estimator.getParam(name), value)
-    fitted = Pipeline(
-        stages=[VectorAssembler(inputCols=features, outputCol="features"), estimator]
-    ).fit(train_df)
+    pipeline = make_pipeline(
+        features, target_col, model, model_params, random_state, lgbm_backend
+    )
+    estimator = pipeline.getStages()[-1]
+    fitted = pipeline.fit(train_df)
 
     def score(frame):
         if frame is None:
@@ -198,6 +151,10 @@ def train_model(
         analysis_cube=cube,
     )
     params = {p.name: v for p, v in estimator.extractParamMap().items()}
+    if is_default_lightgbm(model, lgbm_backend):
+        params = dict(params["options"])
+    if isinstance(model, str) and model in {"lightgbm", "lgbm"}:
+        params["lgbm_backend"] = lgbm_backend
     return finalize_run(
         result,
         run_name,

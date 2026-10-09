@@ -73,7 +73,7 @@ def feature_importance_selection(
             except ImportError as exc:
                 raise ImportError(
                     "Spark LightGBM requires SynapseML. Install BrainModelKit with "
-                    "'brainmodelkit[pyspark]' and attach the matching SynapseML "
+                    "'brainmodelkit[synapseml]' and attach the matching SynapseML "
                     "JVM package before starting Spark."
                 ) from exc
             choices[model] = LightGBMClassifier

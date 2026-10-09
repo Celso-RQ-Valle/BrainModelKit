@@ -505,7 +505,7 @@ def test_spark_folder_preflight_precedes_fit_and_tracking(monkeypatch):
     frame = Mock(columns=["x", "y"])
     pipeline = Mock()
     finish = Mock()
-    monkeypatch.setattr(trainer, "Pipeline", pipeline)
+    monkeypatch.setattr(trainer, "make_pipeline", pipeline)
     monkeypatch.setattr(trainer, "finalize_run", finish)
     monkeypatch.setattr("brainmodelkit.training._common.optional_import", Mock())
     monkeypatch.setattr(

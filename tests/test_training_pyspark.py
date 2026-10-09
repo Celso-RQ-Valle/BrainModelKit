@@ -72,7 +72,13 @@ def test_lightgbm_reports_missing_jvm_package(monkeypatch, spark):
         def __init__(self, **kwargs):
             raise TypeError("'JavaPackage' object is not callable")
 
-    monkeypatch.setattr("synapse.ml.lightgbm.LightGBMClassifier", MissingJvmLightGBM)
+    from types import SimpleNamespace
+
+    monkeypatch.setitem(
+        sys.modules,
+        "synapse.ml.lightgbm",
+        SimpleNamespace(LightGBMClassifier=MissingJvmLightGBM),
+    )
     data = spark.createDataFrame([(-1.0, 0), (1.0, 1)], "x double, target int")
     with pytest.raises(RuntimeError, match="matching SynapseML Maven package"):
         train_model(
@@ -82,6 +88,7 @@ def test_lightgbm_reports_missing_jvm_package(monkeypatch, spark):
             data,
             data,
             model="lightgbm",
+            lgbm_backend="synapseml",
             save_model_to="none",
         )
 

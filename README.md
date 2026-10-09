@@ -36,9 +36,11 @@ persistence is needed. Persistence formats, ONNX conversion, Boruta, and
 Optuna are also separate optional features; see the relevant sections below.
 
 Spark requires a Java installation and a configured Spark environment. The
-`[pyspark]` extra requires PySpark 3.5 or newer. Spark LightGBM also needs a
-SynapseML JVM package matching the running Spark and Scala runtime; pip only
-installs the Python wrapper and does not configure Maven/JAR packages.
+`[pyspark]` extra requires PySpark 3.5 or newer and includes SparkLightGBM.
+Spark training defaults to `lgbm_backend="default"` (SparkLightGBM). Install
+`brainmodelkit[synapseml]` and select `lgbm_backend="synapseml"` explicitly to
+use SynapseML, which also needs matching Spark/Scala JVM artifacts. For managed
+Spark, install `[sparklightgbm]` without replacing platform PySpark.
 
 For a managed environment such as Databricks, use the platform-provided Spark
 and MLflow versions when they meet those requirements:
@@ -55,7 +57,7 @@ python -m pip install --no-deps "git+https://github.com/Celso-RQ-Valle/BrainMode
 
 `--no-deps` prevents pip from installing, upgrading, or downgrading runtime
 dependencies. Use it only after confirming that the platform already provides
-the Pandas, PySpark/SynapseML, and any other optional dependencies required by
+the Pandas, PySpark, selected LightGBM backend, and other optional dependencies required by
 the features you will call. In particular, do not use the PySpark extra merely
 to replace a managed Spark runtime.
 
@@ -82,6 +84,7 @@ bmk.doctor(backend="pyspark")
 bmk.doctor(
     backend="pyspark",
     model="lightgbm",
+    lgbm_backend="synapseml",
     save_model_to="mlflow",
 )
 bmk.doctor(verbose=True)
@@ -107,13 +110,14 @@ In a Databricks notebook with an existing Spark session:
 
 ```python
 bmk.doctor(verbose=True)
-bmk.doctor(backend="pyspark", model="lightgbm", save_model_to="mlflow", verbose=True)
+bmk.doctor(backend="pyspark", model="lightgbm", save_model_to="folder", verbose=True)
 ```
 
 Compatible platform-provided Spark and MLflow installations are preserved.
 Doctor inspects existing session references and distinguishes the PySpark Python
 package, actual Spark runtime, and SynapseML Python wrapper from the JVM class.
-An installed wrapper alone never makes Spark LightGBM ready. Restricted JVM
+For SynapseML, an installed wrapper alone does not establish JVM readiness.
+For SparkLightGBM, both the bridge and native LightGBM must be installed. Restricted JVM
 access or Spark Connect produces a partial check, not a recommendation to
 replace platform packages. SynapseML artifacts must match the existing
 Spark/Scala runtime; meeting `pyspark>=3.5` alone does not certify every pairing.
@@ -694,9 +698,26 @@ result.model.transform(oot_df.drop("default_flag")).show(5)
 ```
 
 Spark KS/AUC use tile approximations controlled by `n_tiles` (at least 2).
-Use numeric, non-null features. Spark LightGBM requires both the Python
-`synapseml` wrapper and the matching JVM package loaded before the Spark session
-starts. For Spark 4.0.x, create the session as follows:
+Use numeric, non-null features. `model="lightgbm"` defaults to SparkLightGBM,
+using native parameters such as `num_iterations` and `learning_rate`:
+
+```python
+result = train_model(
+    "lgbm", "target", features, train_df, oot_df,
+    model="lightgbm", lgbm_backend="default",
+    model_params={"num_iterations": 100, "learning_rate": 0.05},
+    save_model_to="none",
+)
+```
+
+The adapter supports raw-feature pipelines, class-1 probabilities, and Spark
+folder/MLflow Spark persistence. Loading requires BrainModelKit and the selected
+LightGBM backend in the target environment.
+For cluster training, configure `num_workers>1`; SparkLightGBM's automatic local
+mode uses driver memory. See [backend setup and limitations](docs/optimization.md#spark-lightgbm).
+
+To use `lgbm_backend="synapseml"`, install `[synapseml]` and load the matching
+JVM package before the Spark session starts. For Spark 4.0.x:
 
 ```python
 from pyspark.sql import SparkSession
@@ -719,7 +740,7 @@ For Spark 3.5.x, use the compatible SynapseML `_2.12` coordinate documented by
 [SynapseML](https://microsoft.github.io/SynapseML/docs/Get%20Started/InstallSynapseML/).
 If the Python wrapper imports but the JVM package is missing, training now raises
 an actionable error instead of the opaque `JavaPackage object is not callable`.
-To save this model, choose `save_model_to="folder"` or `"mlflow"` after
+For SynapseML, choose `save_model_to="folder"` or `"mlflow"` after
 configuring persistence; see [Spark on Windows](#spark-on-windows).
 
 To execute the standalone example from the repository root:
@@ -1273,3 +1294,28 @@ result = optimize(
 print(result.best_params, result.best_value)
 print(result.trials)
 ```
+
+
+Constraints are optional and guide Optuna sampling throughout optimization:
+
+```python
+result = optimize(
+    train_df, oot_df, "target", features, "logistic_regression",
+    {"C": {"type": "float", "low": 0.01, "high": 10.0, "log": True}},
+    objective_metric="oot_ks", direction="maximize",
+    target_metric="train_oot_ks_abs_shift", target_limit=0.05,
+    target_operator="<=",
+)
+```
+
+To minimize instability subject to OOT KS >= 40%, use
+`objective_metric="train_oot_ks_abs_shift", direction="minimize",
+ target_metric="oot_ks", target_limit=0.40, target_operator=">="`.
+All metrics use decimal units. Feasible trials outrank infeasible trials;
+if no trial qualifies, the result explicitly reports failure and selects the
+least-violating trial. Train, CV, OOT, and signed/absolute shift metrics are
+available for AUC, Gini, and KS; unqualified names remain CV aliases.
+
+**OOT used for optimization is a tuning validation set. Keep a separate untouched
+temporal holdout for final evaluation.** See the [optimization guide](docs/optimization.md)
+for metric names, selection semantics, diagnostics, and Spark backend setup.

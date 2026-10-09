@@ -14,6 +14,7 @@ MINIMUMS = {
     "scipy": "1.9",
     "scikit-learn": "1.2",
     "lightgbm": "4.0",
+    "sparklightgbm": "0.9.2",
     "pyspark": "3.5",
     "mlflow": "2.12",
     "optuna": "3.0",
@@ -64,6 +65,8 @@ def evaluate(env):
             )
         elif name == "synapseml":
             packages[name] = READY if value == SYNAPSE_VERSION else PARTIAL
+        elif name == "sparklightgbm" and version_status(value, "0.10") == READY:
+            packages[name] = INCOMPATIBLE
         else:
             packages[name] = version_status(value, MINIMUMS[name])
     python = version_status(env["python"], MINIMUMS["python"])
@@ -96,7 +99,10 @@ def evaluate(env):
         "Pandas LightGBM": stack(
             "pandas", "numpy", "scipy", "scikit-learn", "lightgbm"
         ),
-        "Spark LightGBM": lightgbm,
+        "Spark LightGBM (SynapseML)": lightgbm,
+        "Spark LightGBM": combine(
+            [spark, packages["sparklightgbm"], packages["lightgbm"]]
+        ),
         "Folder persistence": READY,
         "Spark folder persistence": PARTIAL,
         "MLflow persistence": stack("mlflow"),

@@ -4,7 +4,14 @@ from .capabilities import MINIMUMS, PARTIAL, READY, SYNAPSE_VERSION, combine, ev
 from .detection import detect
 
 
-def doctor(*, backend=None, model=None, save_model_to=None, verbose=False):
+def doctor(
+    *,
+    backend=None,
+    model=None,
+    save_model_to=None,
+    verbose=False,
+    lgbm_backend="default",
+):
     """Print and return a diagnostic dictionary without changing the environment.
 
     READY means the inspected prerequisites are present, not that a training
@@ -12,6 +19,8 @@ def doctor(*, backend=None, model=None, save_model_to=None, verbose=False):
     Omitted persistence checks no destination; use folder/mlflow/none explicitly.
     A model or persistence request requires an explicit backend.
     """
+    if lgbm_backend not in {"default", "synapseml"}:
+        raise ValueError("lgbm_backend must be default or synapseml")
     if backend not in (None, "pandas", "pyspark"):
         raise ValueError("backend must be pandas, pyspark, or None")
     if model not in (
@@ -32,6 +41,16 @@ def doctor(*, backend=None, model=None, save_model_to=None, verbose=False):
     env = detect()
     packages, caps = evaluate(env)
     recommendations = []
+    if lgbm_backend == "synapseml":
+        caps["Spark LightGBM"] = caps["Spark LightGBM (SynapseML)"]
+    if backend == "pyspark" and model == "lightgbm" and lgbm_backend == "default":
+        recommendations.append(
+            "SparkLightGBM needs classic Spark/RDD/barrier access and "
+            "sparklightgbm plus LightGBM on every executor. Install "
+            "'brainmodelkit[sparklightgbm]' without replacing managed PySpark. "
+            "Use num_workers>1 for distributed training; its automatic local "
+            "mode collects training rows into driver NumPy memory."
+        )
     if backend == "pyspark" and save_model_to == "mlflow":
         recommendations.append(
             "DFS staging requirements cannot be confirmed read-only. If MLflow "
@@ -107,7 +126,7 @@ def doctor(*, backend=None, model=None, save_model_to=None, verbose=False):
             "code. Stopped sessions or differing client/runtime major-minor versions "
             "also require review."
         )
-    if "Spark LightGBM" in blockers:
+    if "Spark LightGBM" in blockers and lgbm_backend == "synapseml":
         recommendations.append(
             "Spark LightGBM requires both the SynapseML Python wrapper and JVM "
             "integration. Ask the runtime administrator to verify the SynapseML "

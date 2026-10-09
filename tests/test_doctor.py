@@ -101,7 +101,12 @@ def test_spark_lightgbm_jvm(environment, monkeypatch, available):
         pyspark="4.1.0", numpy="2.0", scipy="1.14", synapseml="1.1.3", mlflow="3.0.0"
     )
     jvm = spark_session(monkeypatch, available=available)
-    report = bmk.doctor(backend="pyspark", model="lightgbm", save_model_to="mlflow")
+    report = bmk.doctor(
+        backend="pyspark",
+        model="lightgbm",
+        save_model_to="mlflow",
+        lgbm_backend="synapseml",
+    )
     assert report["result"] == (rules.READY if available else rules.PARTIAL)
     assert report["packages"]["synapseml"] == rules.READY
     assert jvm.java.lang.Class.forName.call_args.args[1] is False
@@ -171,7 +176,9 @@ def test_restricted_jvm_is_partial(environment, monkeypatch):
             raise RuntimeError("access denied")
 
     monkeypatch.setattr(detection, "_existing_session", Restricted)
-    report = bmk.doctor(backend="pyspark", model="lightgbm", verbose=True)
+    report = bmk.doctor(
+        backend="pyspark", model="lightgbm", verbose=True, lgbm_backend="synapseml"
+    )
     assert report["result"] == rules.PARTIAL
     assert report["environment"]["jvm_error"] == "RuntimeError"
 
@@ -191,7 +198,9 @@ def test_packaging_rules_do_not_drift():
     for name, minimum in rules.MINIMUMS.items():
         if name != "python":
             assert any(
-                r.name.lower() == name.lower() and str(r.specifier) == f">={minimum}"
+                r.name.lower() == name.lower()
+                and str(r.specifier)
+                == (f"<0.10,>={minimum}" if name == "sparklightgbm" else f">={minimum}")
                 for r in requirements
             )
     assert any(
@@ -244,7 +253,7 @@ def test_unverified_spark_prerequisites(environment, monkeypatch, mode):
         session.version = "4.0.2"
     else:
         environment["synapseml"] = "9.0.0"
-    report = bmk.doctor(backend="pyspark", model="lightgbm")
+    report = bmk.doctor(backend="pyspark", model="lightgbm", lgbm_backend="synapseml")
     assert report["result"] == rules.PARTIAL
     assert any("Keep the existing PySpark" in r for r in report["recommendations"])
 
@@ -266,3 +275,24 @@ def test_general_prefers_existing_spark(environment, monkeypatch):
     report = bmk.doctor()
     assert report["recommended_path"] == "Existing Spark environment"
     assert report["result"] == rules.READY
+
+
+def test_default_lightgbm_independent_of_synapse(environment, monkeypatch):
+    environment.update(
+        pyspark="4.1.0",
+        numpy="2.0",
+        scipy="1.14",
+        sparklightgbm="0.9.2",
+        lightgbm="4.6.0",
+    )
+    spark_session(monkeypatch, available=False)
+    report = bmk.doctor(backend="pyspark", model="lightgbm")
+    assert report["result"] == rules.READY
+    assert report["packages"]["synapseml"] == rules.MISSING
+    environment["mlflow"] = "3.0.0"
+    assert (
+        bmk.doctor(backend="pyspark", model="lightgbm", save_model_to="mlflow")[
+            "result"
+        ]
+        == rules.READY
+    )

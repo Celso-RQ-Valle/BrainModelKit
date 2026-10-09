@@ -12,6 +12,14 @@ from brainmodelkit.model_selection.pandas import _estimator, cross_validate
 from brainmodelkit.training.pandas import train_model
 
 from . import OptimizationResult, destination, require_optuna, suggest_parameters
+from ._common import (
+    make_study,
+    metric_values,
+    record_trial,
+    select_trial,
+    trial_records,
+    validate_options,
+)
 
 
 def _metric_values(target, score, names):
@@ -46,9 +54,13 @@ def optimize(
     save_path: str | None = None,
     study_name: str | None = None,
     random_state: int = 42,
+    target_metric: str | None = None,
+    target_limit: float | None = None,
+    target_operator: str | None = None,
 ) -> OptimizationResult:
-    """Optimize parameters on CV and report, but never optimize on, OOT."""
+    """Tune with CV/train/OOT metrics; OOT used for selection is validation data."""
     optuna = require_optuna()
+    save_model_to = destination(save_as, save_path)
     features = list(feature_cols)
     if not features or len(set(features)) != len(features) or target_col in features:
         raise ValueError(
@@ -56,19 +68,20 @@ def optimize(
         )
     _validate(train_df, target_col, features, "train_df")
     _validate(oot_df, target_col, features, "oot_df")
-    requested = tuple(str(metric).lower() for metric in metrics)
-    if any(metric not in {"ks", "auc", "gini"} for metric in requested):
-        raise ValueError("metrics must contain only ks, auc, and gini")
-    objective_metric = objective_metric.lower()
-    if objective_metric not in requested:
-        raise ValueError("objective_metric must be included in metrics")
-    if direction not in {"maximize", "minimize"}:
-        raise ValueError("direction must be maximize or minimize")
-    if not isinstance(n_trials, int) or isinstance(n_trials, bool) or n_trials < 1:
-        raise ValueError("n_trials must be an integer >= 1")
+    requested, objective_metric, target_metric = validate_options(
+        metrics,
+        objective_metric,
+        direction,
+        n_trials,
+        target_metric,
+        target_limit,
+        target_operator,
+        search_space,
+    )
 
     def objective(trial):
         params = suggest_parameters(trial, search_space)
+        trial.set_user_attr("parameters", params)
         cv_result = cross_validate(
             train_df,
             target_col,
@@ -89,51 +102,50 @@ def optimize(
         positive = list(fitted.classes_).index(1)
         score = fitted.predict_proba(oot_df[features])[:, positive]
         oot_values = _metric_values(oot_df[target_col], score, requested)
-        for metric in requested:
-            trial.set_user_attr(f"cv_{metric}", cv_values[metric])
-            trial.set_user_attr(f"oot_{metric}", oot_values[metric])
-            trial.set_user_attr(
-                f"{metric}_shift", oot_values[metric] - cv_values[metric]
-            )
-        trial.set_user_attr("parameters", params)
-        return cv_values[objective_metric]
+        train_score = fitted.predict_proba(train_df[features])[:, positive]
+        train_values = _metric_values(train_df[target_col], train_score, requested)
+        values = metric_values(train_values, cv_values, oot_values)
+        record_trial(
+            trial, values, params, target_metric, target_limit, target_operator
+        )
+        return values[objective_metric]
 
-    sampler = optuna.samplers.TPESampler(seed=random_state)
-    study = optuna.create_study(
-        study_name=study_name,
-        direction=direction,
-        sampler=sampler,
+    study = make_study(
+        optuna, study_name, direction, random_state, target_metric is not None
     )
+    study.set_user_attr("objective_metric", objective_metric)
+    if target_metric is not None:
+        study.set_user_attr(
+            "constraint",
+            {
+                "metric": target_metric,
+                "limit": target_limit,
+                "operator": target_operator,
+            },
+        )
     study.optimize(objective, n_trials=n_trials)
-    rows = []
-    for trial in study.trials:
-        row = {"trial": trial.number, "params": trial.params, "value": trial.value}
-        for metric in requested:
-            row.update(
-                {
-                    f"cv_{metric}": trial.user_attrs.get(f"cv_{metric}"),
-                    f"oot_{metric}": trial.user_attrs.get(f"oot_{metric}"),
-                    f"{metric}_shift": trial.user_attrs.get(f"{metric}_shift"),
-                }
-            )
-        rows.append(row)
+    selected = select_trial(study, direction, target_metric is not None)
+    selected_params = dict(selected.user_attrs["parameters"])
+    rows = trial_records(study)
     final = train_model(
         study_name or "optimization",
         target_col,
         features,
         train_df,
         oot_df,
-        model=model,
-        model_params=study.best_params,
-        save_model_to=destination(save_as, save_path),
+        model=_estimator(model, selected_params, random_state),
+        model_params=None,
+        save_model_to=save_model_to,
         save_path=save_path,
     )
     return OptimizationResult(
         study,
-        dict(study.best_params),
-        float(study.best_value),
+        selected_params,
+        float(selected.value),
         pd.DataFrame(rows),
         final.model,
+        selected_trial_number=selected.number,
+        constraint_satisfied=selected.user_attrs["feasible"] if target_metric else None,
     )
 
 
