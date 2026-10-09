@@ -13,18 +13,34 @@ from brainmodelkit.optimization.pandas import optimize
 
 space = {"num_leaves": {"type": "int", "low": 8, "high": 64}}
 result = optimize(
-    train_df, oot_df, "target", features, "lightgbm", space,
-    objective_metric="oot_ks", direction="maximize",
-    target_metric="train_oot_ks_abs_shift", target_limit=0.05,
-    target_operator="<=", n_trials=50,
+    train_df,
+    oot_df,
+    "target",
+    features,
+    "lightgbm",
+    space,
+    objective_metric="oot_ks",
+    direction="maximize",
+    target_metric="train_oot_ks_abs_shift",
+    target_limit=0.05,
+    target_operator="<=",
+    n_trials=50,
 )
 
 # Alternatively, minimize instability while requiring OOT KS of at least 40%:
 stable = optimize(
-    train_df, oot_df, "target", features, "lightgbm", space,
-    objective_metric="train_oot_ks_abs_shift", direction="minimize",
-    target_metric="oot_ks", target_limit=0.40,
-    target_operator=">=", n_trials=50,
+    train_df,
+    oot_df,
+    "target",
+    features,
+    "lightgbm",
+    space,
+    objective_metric="train_oot_ks_abs_shift",
+    direction="minimize",
+    target_metric="oot_ks",
+    target_limit=0.40,
+    target_operator=">=",
+    n_trials=50,
 )
 print(result.constraint_satisfied, result.selected_trial_number)
 print(result.best_params, result.best_value)

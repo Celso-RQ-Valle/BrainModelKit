@@ -97,13 +97,13 @@ def test_spark_public_parameter_reaches_finalization(monkeypatch, path):
     frame.select.return_value.distinct.return_value.count.return_value = 2
     monkeypatch.setattr(trainer, "F", MagicMock())
     monkeypatch.setattr(trainer, "vector_to_array", MagicMock())
-    monkeypatch.setattr(trainer, "VectorAssembler", Mock())
     monkeypatch.setattr(trainer, "validate_spark_persistence", Mock())
     monkeypatch.setattr(_common, "optional_import", Mock())
     fitted = Mock(stages=[Mock(featureImportances=[1.0])])
     pipeline = Mock()
-    pipeline.return_value.fit.return_value = fitted
-    monkeypatch.setattr(trainer, "Pipeline", pipeline)
+    pipeline.fit.return_value = fitted
+    make_pipeline = Mock(return_value=pipeline)
+    monkeypatch.setattr(trainer, "make_pipeline", make_pipeline)
     monkeypatch.setattr(
         trainer,
         "auc_gini",
@@ -117,7 +117,8 @@ def test_spark_public_parameter_reaches_finalization(monkeypatch, path):
     finish = Mock()
     monkeypatch.setattr(trainer, "finalize_run", finish)
     model = Mock()
-    model.copy.return_value.extractParamMap.return_value = {}
+    model.extractParamMap.return_value = {}
+    pipeline.getStages.return_value = [model]
     trainer.train_model(
         "run",
         "y",
@@ -128,6 +129,8 @@ def test_spark_public_parameter_reaches_finalization(monkeypatch, path):
         save_model_to="mlflow",
         mlflow_dfs_tmp=path,
     )
+    make_pipeline.assert_called_once_with(["x"], "y", model, None, 42, "default")
+    pipeline.fit.assert_called_once_with(frame)
     assert finish.call_args.kwargs["mlflow_dfs_tmp"] == path
 
 
