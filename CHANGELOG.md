@@ -3,28 +3,41 @@
 All notable changes to BrainModelKit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and version numbers use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The project is experimental and pre-1.0; public APIs remain unstable.
 
 ## [Unreleased]
 
 ### Changed
 
-- Standard `pip install BrainModelKit` now installs all supported Python feature
-  dependencies, including PySpark, SynapseML, MLflow, persistence formats,
-  LightGBM, Boruta, and Optuna. Existing extras remain compatible.
+- The base install has no runtime dependencies. Execution backends, MLflow,
+  Optuna, Boruta, and optional persistence formats are selected through extras.
+  The Pandas extra includes native LightGBM; the PySpark and dataframes extras
+  include SparkLightGBM (`>=0.9.2,<0.10`). The full extra includes both Spark
+  LightGBM backends but excludes Boruta, skops, and ONNX.
 
 - Spark LightGBM now reports a clear setup error when the Python SynapseML
-  wrapper is installed without its matching JVM package. The PySpark extra now
-  includes the SynapseML Python wrapper; the Spark JVM package still must be
-  attached before creating the Spark session.
+  wrapper is installed without its matching JVM package. SparkLightGBM is the
+  default backend; SynapseML requires explicit selection and its own extra.
+  Matching SynapseML JVM artifacts must be attached before session creation.
 
 - Training ignores persistence options that do not apply to the selected
   destination. Folder formats/paths are unused for MLflow and none; signatures
   are unused outside MLflow. Conflicting destination aliases remain errors.
 - Expanded README training modes, parameter reference and Windows Hadoop setup.
-- Spark training checks Windows Hadoop helper availability before fitting when
-  model persistence is requested, including MLflow. The Spark quickstart now
-  trains without persistence by default; the API default remains folder.
+- Spark training preflights local Windows folder persistence when applicable.
+  MLflow delegates staging to its configured filesystem without a local winutils
+  preflight; actual Hadoop failures include recovery instructions. `none` performs
+  no persistence validation or writes. The Spark quickstart explicitly selects
+  `none`; the API default remains folder (Pandas pickle / Spark native pipeline).
+
+- Release validation now installs Optuna, MLflow, and Boruta explicitly, rejects
+  skipped tests, pins Python/PySpark CI pairs with Java 17, and checks fresh wheel
+  installs through training, evaluation, save/reload, and prediction comparison.
+  Publishing waits for the shared validation workflow on the resolved release
+  commit and uses its validated distributions without rebuilding.
+- Documented experimental status, unverified environments, and Spark scaling
+  limits; the CI matrix is a validation target, not a cluster performance claim.
 
 - Cube-only performance improvements: Spark computes grouped AUC and n-tile
   tables with partitioned windows, avoids group-key collection, and validates
@@ -41,10 +54,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- SynapseML 1.1.3 is installed automatically by the `pyspark`, `dataframes`,
-  and `full` extras for Spark LightGBM support.
-
-### Added
+- SynapseML 1.1.3 integration for Spark LightGBM. In the current source, its
+  wrapper is selected by `synapseml` or `full`; `pyspark` and `dataframes` select
+  SparkLightGBM instead. JVM setup remains separate.
 
 - Complete Spark feature-selection namespace: binned mutual information, ANOVA,
   permutation importance, fold-local RFECV, forward/backward sequential selection,

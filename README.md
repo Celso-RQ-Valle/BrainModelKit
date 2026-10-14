@@ -6,11 +6,15 @@ the execution stack that your application uses.
 
 > [!WARNING]
 > The public API is not stable yet. BrainModelKit is currently under active
-> development.
+> development and remains experimental, including its Spark integrations.
 
 ## Requirements
 
 - Python 3.10 or newer
+
+The Python requirement is a packaging minimum, not a guarantee for every Spark
+or optional-integration combination. See the [compatibility and release checks](docs/release-readiness.md)
+for the explicit CI matrix, tested scope, and unverified environments.
 
 ## Installation
 
@@ -34,6 +38,11 @@ python -m pip install "brainmodelkit[pyspark,mlflow]"
 of both backends, so add `[mlflow]` only when model logging or MLflow model
 persistence is needed. Persistence formats, ONNX conversion, Boruta, and
 Optuna are also separate optional features; see the relevant sections below.
+
+The `[pandas]` extra includes native LightGBM. `[pyspark]` includes SparkLightGBM
+(`>=0.9.2,<0.10`); SynapseML is an explicit alternative via `[synapseml]`.
+`[full]` is a convenience bundle, not every optional integration: Boruta, skops,
+and ONNX still require `[boruta]`, `[secure]`, and `[onnx]`, respectively.
 
 Spark requires a Java installation and a configured Spark environment. The
 `[pyspark]` extra requires PySpark 3.5 or newer and includes SparkLightGBM.
@@ -591,7 +600,8 @@ and optionally persisting models. Choose the backend import for your DataFrames.
   - `"folder"` (default): saves the fitted model and training artifacts in a run directory.
   - `"mlflow"`: logs the training run and model through MLflow.
   - `"none"`: keeps the trained model in memory without creating persistence artifacts.
-- `model_format`: controls serialization independently of the destination.
+- `model_format`: selects serialization for folder persistence only; ignored
+  for MLflow and `"none"`.
 
 The defaults are `save_model_to="folder"`, `model_format=None`, and
 `output_dir="training_runs"`. For example, with Pandas data and LightGBM installed:
@@ -1267,7 +1277,20 @@ python -m venv .venv
 python -m pip install -e ".[dev]"
 ```
 
-For local notebook development, install the small, reproducible notebook
+Release CI explicitly adds optional integrations and rejects skipped tests:
+
+```bash
+python -m pip install -e ".[dev,pandas,optimization,mlflow,boruta,persistence]" "pyspark==4.0.2"
+python -m pytest --fail-on-skip
+```
+
+Use a Python/Spark pair from the [CI matrix](docs/release-readiness.md).
+Local tests without the extra dependencies can skip optional integrations;
+Windows without Hadoop support can skip Spark disk round trips. Neither counts
+as release validation. CI also builds the distributions and runs
+`python scripts/check_wheel.py --spark-version 4.0.2` in fresh virtual environments.
+
+For local notebook development, install the notebook
 dependency set:
 
 ```bash
@@ -1283,6 +1306,25 @@ ruff format --check .
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contribution guide.
+
+## Spark scalability limits
+
+Spark execution does not establish universal big-data readiness. Current CI
+uses small local datasets, not distributed load benchmarks. Standalone overall
+metrics use unpartitioned ranking windows; grouped AUC collects distinct group
+keys and runs calculations per group. Cube analysis avoids that group-key
+collection, but computes `2 ** len(group_columns)` grouping subsets per score.
+
+Feature selection can run many Spark actions and repeated model fits. Correlation
+materializes a feature-by-feature matrix on the driver (default limit: 256
+features); other selectors collect aggregate summaries. Temporal feature joins
+can expand substantially with long histories and many reference dates; exact
+median needs group-size memory. Bound feature counts, grouping dimensions, and
+history batches, and measure your workload before scaling. Spark Connect and
+managed clusters are not covered by release CI; SparkLightGBM requires classic
+Spark. Its single-worker mode (including automatic local mode) materializes
+training rows in driver NumPy memory; distributed native training requires
+`num_workers>1`. See [validation scope and limitations](docs/release-readiness.md).
 
 ## Project layout
 
@@ -1382,17 +1424,26 @@ Install `brainmodelkit[pandas]`, then run this complete example:
 import pandas as pd
 from brainmodelkit.pandas import build_autoregressive_features
 
-df_base = pd.DataFrame({
-    "cnpj": ["00000000000001"] * 4,
-    "bureau_date": pd.to_datetime([
-        "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30",
-    ]),
-    "score": [600.0, 620.0, 650.0, 700.0],
-})
-df_spine = pd.DataFrame({
-    "cnpj": ["00000000000001"],
-    "dt_ref": pd.to_datetime(["2026-03-31"]),
-})
+df_base = pd.DataFrame(
+    {
+        "cnpj": ["00000000000001"] * 4,
+        "bureau_date": pd.to_datetime(
+            [
+                "2026-01-31",
+                "2026-02-28",
+                "2026-03-31",
+                "2026-04-30",
+            ]
+        ),
+        "score": [600.0, 620.0, 650.0, 700.0],
+    }
+)
+df_spine = pd.DataFrame(
+    {
+        "cnpj": ["00000000000001"],
+        "dt_ref": pd.to_datetime(["2026-03-31"]),
+    }
+)
 
 enriched = build_autoregressive_features(
     df_base,
@@ -1408,7 +1459,8 @@ enriched = build_autoregressive_features(
 )
 
 feature_columns = [
-    column for column in enriched.columns
+    column
+    for column in enriched.columns
     if column not in df_spine.columns and not column.endswith("_date")
 ]
 print(enriched[["cnpj", "dt_ref", *feature_columns]])
@@ -1441,7 +1493,8 @@ df_base = spark.createDataFrame(
     ["cnpj", "bureau_date", "score"],
 ).withColumn("bureau_date", F.to_date("bureau_date"))
 df_spine = spark.createDataFrame(
-    [("00000000000001", "2026-03-31")], ["cnpj", "dt_ref"],
+    [("00000000000001", "2026-03-31")],
+    ["cnpj", "dt_ref"],
 ).withColumn("dt_ref", F.to_date("dt_ref"))
 
 enriched = build_autoregressive_features(
@@ -1458,6 +1511,89 @@ enriched = build_autoregressive_features(
 )
 enriched.show(truncate=False)
 ```
+
+### Generate sample data, then create features
+
+This complete PySpark example connects `simulate_credit_data`,
+`simulate_bureau_history`, and `build_autoregressive_features`. Install
+`brainmodelkit[pyspark]` and configure Spark/Java first.
+
+```python
+from pyspark.sql import SparkSession, functions as F
+from brainmodelkit.pyspark import (
+    build_autoregressive_features,
+    simulate_bureau_history,
+    simulate_credit_data,
+)
+
+spark = SparkSession.builder.appName("GeneratedFeatureExample").getOrCreate()
+
+# 1. Generate customers, a binary label, and three synthetic numeric inputs.
+credit_df, original_features = simulate_credit_data(
+    spark, row_count=20, feature_count=3, seed=42
+)
+# Fix the reference date so the example uses the same history window each run.
+df_spine = credit_df.withColumn("reference_date", F.to_date(F.lit("2026-10-13")))
+
+# 2. Generate monthly bureau scores for those same customers.
+df_base = simulate_bureau_history(
+    df_spine.select("company_id").distinct(),
+    entity_cols="company_id",
+    initial_date="2025-01-01",
+    final_date="2026-10-13",
+    frequency="monthly",
+    seed=42,
+    late_entry_fraction=0.0,
+    missing_customer_fraction=0.0,
+    observation_col="bureau_date",
+    score_col="bureau_score",
+)
+
+# 3. Add features from the history to each row of the credit data.
+enriched = build_autoregressive_features(
+    df_base,
+    df_spine,
+    key_cols=["company_id"],
+    date_col="bureau_date",
+    reference_date_col="reference_date",
+    value_cols=["bureau_score"],
+    period_unit="months",
+    windows=[3, 6, 9],
+    lags=[1, 2, 8],
+    aggregations=["mean", "min", "max", "std", "count"],
+)
+
+# 4. Inspect features and collect their column names for later model training.
+created_features = [
+    name
+    for name in enriched.columns
+    if name not in df_spine.columns and not name.endswith("_date")
+]
+model_features = original_features + created_features
+print(model_features)
+enriched.select(
+    "company_id",
+    "reference_date",
+    "default_flag",
+    "bureau_score__current",
+    "bureau_score__lag_1_months",
+    "bureau_score__mean_3_months",
+    "bureau_score__count_3_months",
+).orderBy("company_id").show(5, truncate=False)
+```
+
+`df_base` contains 21 month-end observations per customer, ending on September
+30, 2026. `enriched` preserves the 20 credit rows, their original features, and
+`default_flag`, and adds 22 numeric history features plus four observation-date
+columns. The three-month count is `3` for every row. The current score comes
+from September 30; the one-month lag uses August 31 because its cutoff is
+September 13. Setting both missing-history fractions to zero keeps this example
+complete; real histories can produce null features.
+
+Use `model_features` as `feature_cols` and `default_flag` as `target_col` when
+training on separate train/OOT splits. Observation dates and identifiers are
+excluded from that numeric feature list. These synthetic histories demonstrate
+the API; they are not designed to predict the simulated credit label.
 
 ### Configure the generated features
 
