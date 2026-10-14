@@ -1363,3 +1363,11 @@ available for AUC, Gini, and KS; unqualified names remain CV aliases.
 **OOT used for optimization is a tuning validation set. Keep a separate untouched
 temporal holdout for final evaluation.** See the [optimization guide](docs/optimization.md)
 for metric names, selection semantics, diagnostics, and Spark backend setup.
+
+## Bureau history and temporal features
+
+Generate persistent synthetic bureau histories and enrich pandas or Spark spines
+with point-in-time current scores, lags, and rolling statistics using
+`build_autoregressive_features(df_base, df_spine, ...)`: historical source first,
+rows to enrich second. See the
+[complete example and temporal contracts](docs/temporal.md).
