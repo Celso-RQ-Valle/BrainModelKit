@@ -1366,8 +1366,118 @@ for metric names, selection semantics, diagnostics, and Spark backend setup.
 
 ## Bureau history and temporal features
 
-Generate persistent synthetic bureau histories and enrich pandas or Spark spines
-with point-in-time current scores, lags, and rolling statistics using
-`build_autoregressive_features(df_base, df_spine, ...)`: historical source first,
-rows to enrich second. See the
-[complete example and temporal contracts](docs/temporal.md).
+Use `build_autoregressive_features(df_base, df_spine, ...)` to create current
+values, lags, and rolling statistics from historical numeric data. Pass the
+historical source **first** and the rows to enrich (the spine) **second**:
+
+- `df_base` contains entity keys, observation dates, and numeric values.
+- `df_spine` contains entity keys and a reference date for each row to enrich.
+  Its original rows and columns are preserved.
+
+### Create features with Pandas
+
+Install `brainmodelkit[pandas]`, then run this complete example:
+
+```python
+import pandas as pd
+from brainmodelkit.pandas import build_autoregressive_features
+
+df_base = pd.DataFrame({
+    "cnpj": ["00000000000001"] * 4,
+    "bureau_date": pd.to_datetime([
+        "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30",
+    ]),
+    "score": [600.0, 620.0, 650.0, 700.0],
+})
+df_spine = pd.DataFrame({
+    "cnpj": ["00000000000001"],
+    "dt_ref": pd.to_datetime(["2026-03-31"]),
+})
+
+enriched = build_autoregressive_features(
+    df_base,
+    df_spine,
+    key_cols=["cnpj"],
+    date_col="bureau_date",
+    reference_date_col="dt_ref",
+    value_cols=["score"],
+    period_unit="months",
+    windows=[3],
+    lags=[1],
+    aggregations=["mean", "min", "max", "std", "count"],
+)
+
+feature_columns = [
+    column for column in enriched.columns
+    if column not in df_spine.columns and not column.endswith("_date")
+]
+print(enriched[["cnpj", "dt_ref", *feature_columns]])
+```
+
+For the March 31 reference date, `score__current` is `650`,
+`score__lag_1_months` is `620`, `score__mean_3_months` is approximately `623.33`,
+and `score__count_3_months` is `3`. The April observation is excluded because
+it is after the reference date. The output also includes observation dates
+(`score__current_date`, `score__lag_1_months_date`) and
+`score__current_minus_mean_3_months` (approximately `26.67`).
+
+### Create features with PySpark
+
+Install `brainmodelkit[pyspark]` and use Spark DataFrames with the same arguments.
+This standalone example requires a configured Spark/Java environment:
+
+```python
+from pyspark.sql import SparkSession, functions as F
+from brainmodelkit.pyspark import build_autoregressive_features
+
+spark = SparkSession.builder.appName("TemporalFeatures").getOrCreate()
+df_base = spark.createDataFrame(
+    [
+        ("00000000000001", "2026-01-31", 600.0),
+        ("00000000000001", "2026-02-28", 620.0),
+        ("00000000000001", "2026-03-31", 650.0),
+        ("00000000000001", "2026-04-30", 700.0),
+    ],
+    ["cnpj", "bureau_date", "score"],
+).withColumn("bureau_date", F.to_date("bureau_date"))
+df_spine = spark.createDataFrame(
+    [("00000000000001", "2026-03-31")], ["cnpj", "dt_ref"],
+).withColumn("dt_ref", F.to_date("dt_ref"))
+
+enriched = build_autoregressive_features(
+    df_base,
+    df_spine,
+    key_cols=["cnpj"],
+    date_col="bureau_date",
+    reference_date_col="dt_ref",
+    value_cols=["score"],
+    period_unit="months",
+    windows=[3],
+    lags=[1],
+    aggregations=["mean", "min", "max", "std", "count"],
+)
+enriched.show(truncate=False)
+```
+
+### Configure the generated features
+
+Pass multiple numeric columns in `value_cols` to generate features for each,
+or multiple keys in `key_cols` for composite entities. `period_unit` accepts
+`"days"`, `"weeks"`, or `"months"`. Defaults are `windows=[3, 6, 9]` and
+`lags=[1, 2, 8]`; supported aggregations are `mean`, `median`, `max`, `min`,
+`std`, `sum`, and `count`.
+
+Current and lag features use the latest non-null value on or before their
+cutoff, rather than requiring an observation on that exact date. Rolling
+windows include dates in `(reference date - window, reference date]`.
+Set `max_staleness_days=60`, for example, to reject current/lag observations
+more than 60 days before their respective cutoffs; this does not filter windows.
+
+Keys and dates must be non-null, and history must have at most one row per
+entity and observation date. Missing lookups return null; empty windows have
+zero counts and null statistics. Handle missing numeric features before passing
+them to an estimator that requires complete inputs.
+
+For synthetic input histories, use `simulate_bureau_history` from the same
+backend namespace. See the [complete example and temporal contracts](docs/temporal.md)
+for simulation, date handling, and execution details.
