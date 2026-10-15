@@ -44,6 +44,8 @@ pandas = [
 ]
 pyspark = [
     "pyspark>=3.5",
+    # Spark 3.5 imports pandas when loading pyspark.ml.functions.
+    "pandas>=2.0",
     "numpy>=1.23",
     "scipy>=1.9",
     "sparklightgbm>=0.9.2,<0.10",

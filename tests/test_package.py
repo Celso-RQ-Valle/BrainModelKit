@@ -35,3 +35,14 @@ def test_execution_extras_are_independent() -> None:
         for requirement in requirements
         if requirement.marker and requirement.marker.evaluate({"extra": "mlflow"})
     }
+
+
+def test_pyspark_extra_includes_pandas_for_spark_35() -> None:
+    """Spark 3.5 ML functions import pandas even for native Spark operations."""
+    requirements = [Requirement(value) for value in requires("brainmodelkit")]
+    selected = {
+        requirement.name.lower()
+        for requirement in requirements
+        if requirement.marker and requirement.marker.evaluate({"extra": "pyspark"})
+    }
+    assert "pandas" in selected
