@@ -8,6 +8,26 @@ the execution stack that your application uses.
 > The public API is not stable yet. BrainModelKit is currently under active
 > development and remains experimental, including its Spark integrations.
 
+## Guided summary
+
+Start with [Installation](#installation), check your setup with
+[Environment Doctor](#environment-doctor), then follow the workflow below.
+For time-series inputs, jump to the [complete feature example](#create-features-with-pandas)
+and its [feature output summary](#feature-output-summary).
+
+| Step | Guide | What you can do |
+| --- | --- | --- |
+| 1. Prepare data | [Simulate data](#simulate-data) | Generate sample credit data for experiments. |
+| 2. Build features | [Numeric time-series features](#numeric-time-series-features) | Create current values, lags, rolling statistics, and differences from numeric history. |
+| 3. Select features | [Feature selection](#feature-selection) | Choose useful inputs with pandas or Spark. |
+| 4. Train models | [Model Training](#model-training) | Fit models, configure backends, and save or load fitted models. |
+| 5. Validate and tune | [Cross-validation](#cross-validation) and [Optimization](#optimization) | Compare models and search hyperparameters. |
+| 6. Evaluate results | [Metrics](#metrics) and [Cube analysis](#cube-analysis) | Evaluate discrimination, risk tables, and performance across segments. |
+
+For implementation details, see [Usage](#usage),
+[Spark scalability limits](#spark-scalability-limits),
+[Development](#development), [Project layout](#project-layout), and [License](#license).
+
 ## Requirements
 
 - Python 3.10 or newer
@@ -1418,10 +1438,14 @@ historical source **first** and the rows to enrich (the spine) **second**:
 
 ### Create features with Pandas
 
-Install `brainmodelkit[pandas]`, then run this complete example:
+Install `brainmodelkit[pandas]`, then run this complete example. It creates
+features for revenue and balance using all seven supported aggregations, two
+windows, two lags, and a staleness limit. The printed summary includes every
+generated column, including observation dates.
 
 ```python
 import pandas as pd
+
 from brainmodelkit.pandas import build_features
 
 df_base = pd.DataFrame(
@@ -1436,6 +1460,7 @@ df_base = pd.DataFrame(
             ]
         ),
         "revenue": [600.0, 620.0, 650.0, 700.0],
+        "balance": [1000.0, None, 900.0, 1100.0],
     }
 )
 df_spine = pd.DataFrame(
@@ -1451,27 +1476,70 @@ enriched = build_features(
     key_cols=["account_id"],
     date_col="observation_date",
     reference_date_col="dt_ref",
-    value_cols=["revenue"],
+    value_cols=["revenue", "balance"],
     period_unit="months",
-    windows=[3],
-    lags=[1],
-    aggregations=["mean", "min", "max", "std", "count"],
+    windows=[1, 3],
+    lags=[1, 2],
+    aggregations=["mean", "median", "min", "max", "std", "sum", "count"],
+    max_staleness_days=60,
 )
 
-feature_columns = [
-    column
-    for column in enriched.columns
-    if column not in df_spine.columns and not column.endswith("_date")
-]
-print(enriched[["account_id", "dt_ref", *feature_columns]])
+# Display all generated outputs for this reference row, including lookup dates.
+feature_columns = [column for column in enriched if column not in df_spine.columns]
+feature_summary = (
+    enriched.loc[0, feature_columns]
+    .rename_axis("feature")
+    .reset_index(name="value")
+)
+print(feature_summary.to_string(index=False))
+
+# Keep only numeric features when preparing inputs for a model.
+model_features = [name for name in feature_columns if not name.endswith("_date")]
 ```
 
-For the March 31 reference date, `revenue__current` is `650`,
-`revenue__lag_1_months` is `620`, `revenue__mean_3_months` is approximately `623.33`,
-and `revenue__count_3_months` is `3`. The April observation is excluded because
-it is after the reference date. The output also includes observation dates
-(`revenue__current_date`, `revenue__lag_1_months_date`) and
-`revenue__current_minus_mean_3_months` (approximately `26.67`).
+### Feature output summary
+
+The example adds **44 columns**: 38 numeric features and six observation dates.
+Each source column gets the same set of features. `feature_summary` is a display
+table built from the enriched DataFrame; `build_features` returns the original
+spine rows and columns with features appended.
+
+For revenue at the March 31 reference date, the outputs are:
+
+| Output | Example value | Meaning |
+| --- | --- | --- |
+| `revenue__current` | `650` | Latest non-null value on or before March 31. |
+| `revenue__current_date` | `2026-03-31` | Observation date of that current value. |
+| `revenue__lag_1_months` | `620` | Latest non-null value on or before February 28. |
+| `revenue__lag_1_months_date` | `2026-02-28` | Observation date used for the one-month lag. |
+| `revenue__lag_2_months` | `600` | Latest non-null value on or before January 31. |
+| `revenue__lag_2_months_date` | `2026-01-31` | Observation date used for the two-month lag. |
+| `revenue__mean_3_months` | `623.3333` | Arithmetic mean of the three window observations. |
+| `revenue__median_3_months` | `620` | Exact median. |
+| `revenue__min_3_months` | `600` | Minimum value. |
+| `revenue__max_3_months` | `650` | Maximum value. |
+| `revenue__std_3_months` | `25.1661` | Sample standard deviation (`ddof=1`). |
+| `revenue__sum_3_months` | `1870` | Sum of non-null values. |
+| `revenue__count_3_months` | `3` | Number of non-null observations. |
+| `revenue__current_minus_mean_3_months` | `26.6667` | Current value minus the window mean. |
+
+The seven statistics and current-minus-mean difference also appear with the
+`_1_months` suffix. That window is `(2026-02-28, 2026-03-31]`, so it contains
+only `650`: count is `1`, sum/mean/median/min/max are `650`, standard deviation
+is null, and current-minus-mean is `0`. April observations are excluded from
+all features because they occur after the reference date.
+
+Balance illustrates missing observations: its one-month lag uses January 31's
+`1000` because February's value is null. Its lag date is therefore January 31,
+and that observation satisfies the 60-day staleness limit measured from the
+February 28 cutoff. Its three-month count is `2`, mean is `950`, sum is `1900`,
+and current-minus-mean is `-50`. Each numeric column is evaluated independently.
+
+Choose a subset of `aggregations`, `windows`, or `lags` to reduce the outputs.
+Current values and their dates are always included; each requested window also
+adds current-minus-mean even when `"mean"` is omitted from `aggregations`.
+See [Configure the generated features](#configure-the-generated-features) for
+units, composite keys, empty-window behavior, and validation rules.
 
 ### Create features with PySpark
 
