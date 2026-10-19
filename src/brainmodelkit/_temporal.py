@@ -59,6 +59,8 @@ def feature_config(
     lags,
     aggregations,
     max_staleness_days,
+    *,
+    date_diff=False,
 ):
     keys, scores = names(entity_cols, "entity_cols"), names(score_cols, "score_cols")
     if set(keys) & set(scores) or reference_col in keys or observation_col in keys:
@@ -84,7 +86,8 @@ def feature_config(
     output = []
     for score in scores:
         for suffix in ["current", *(f"lag_{k}_{unit}" for k in lags)]:
-            output.extend([f"{score}__{suffix}", f"{score}__{suffix}_date"])
+            date_suffix = "_date_diff_days" if date_diff else "_date"
+            output.extend([f"{score}__{suffix}", f"{score}__{suffix}{date_suffix}"])
         for k in windows:
             output.extend(f"{score}__{a}_{k}_{unit}" for a in aggregations)
             output.append(f"{score}__current_minus_mean_{k}_{unit}")

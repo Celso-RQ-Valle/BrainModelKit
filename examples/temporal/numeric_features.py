@@ -40,7 +40,7 @@ enriched = build_features(
     max_staleness_days=60,
 )
 
-# Display all generated outputs for this reference row, including lookup dates.
+# Display all generated outputs for this reference row, including lookup latency.
 feature_columns = [column for column in enriched if column not in df_spine.columns]
 feature_summary = (
     enriched.loc[0, feature_columns].rename_axis("feature").reset_index(name="value")

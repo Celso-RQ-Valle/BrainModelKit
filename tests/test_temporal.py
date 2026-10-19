@@ -371,6 +371,13 @@ def test_autoregressive_base_spine_contract(backend, api, request):
         aggregations=["mean", "sum", "count"],
         max_staleness_days=10,
     )
+    if api == "build_features":
+        for name in list(expected.columns):
+            if name not in spine.columns and name.endswith("_date"):
+                expected[name] = (
+                    pd.to_datetime(expected.as_of) - expected[name]
+                ).dt.days
+                expected.rename(columns={name: name + "_diff_days"}, inplace=True)
     if backend == "pyspark":
         spark = request.getfixturevalue("spark")
         base = spark.createDataFrame(
@@ -466,9 +473,12 @@ def test_generic_features_and_deprecation(backend, request):
     assert warnings[0].filename == __file__
     if backend == "pyspark":
         actual = [r.asDict() for r in result.orderBy("account").collect()]
-        assert actual == [r.asDict() for r in legacy.orderBy("account").collect()]
+        old = [r.asDict() for r in legacy.orderBy("account").collect()]
+        assert old[0]["revenue__current_date"] == date(2024, 3, 1)
+        assert "revenue__current_date_diff_days" not in legacy.columns
     else:
-        pd.testing.assert_frame_equal(result, legacy)
+        assert legacy.iloc[0]["revenue__current_date"] == pd.Timestamp("2024-03-01")
+        assert "revenue__current_date_diff_days" not in legacy.columns
         actual = result.to_dict("records")
     assert len(actual) == 3
     assert actual[0]["revenue__current"] == 10000
@@ -476,3 +486,16 @@ def test_generic_features_and_deprecation(backend, request):
     assert actual[0]["revenue__sum_1_months"] == 10000
     assert actual[0]["balance__current"] == 25000
     assert actual[2]["balance__count_1_months"] == 0
+    assert actual[0]["revenue__current_date_diff_days"] == 30
+    assert actual[0]["revenue__lag_1_months_date_diff_days"] == 31
+    assert actual[0]["balance__current_date_diff_days"] == 30
+    assert pd.isna(actual[2]["revenue__current_date_diff_days"])
+    assert not any(name.endswith("_date") for name in result.columns)
+    if backend == "pyspark":
+        from pyspark.sql import functions as F
+
+        collision = spine.withColumn("revenue__current_date_diff_days", F.lit(0))
+    else:
+        collision = spine.assign(revenue__current_date_diff_days=0)
+    with pytest.raises(ValueError, match="already exist"):
+        module.build_features(base, collision, **options)

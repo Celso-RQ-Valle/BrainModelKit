@@ -49,7 +49,7 @@ print(
             "cnpj",
             "dt_ref",
             "score__current",
-            "score__current_date",
+            "score__current_date_diff_days",
             "score__lag_1_months",
             "score__mean_3_months",
         ]
@@ -96,8 +96,10 @@ Lists and single strings are accepted for column names.
 `DeprecationWarning` at the caller. It preserves its original defaults:
 `key_cols=("cnpj",)`, `date_col="bureau_date"`, `value_cols=("score",)`.
 Replace its name with `build_features` and pass these three arguments explicitly
-to preserve a call that previously relied on defaults. All other defaults,
-feature names, output columns, and temporal semantics are unchanged.
+to preserve a call that previously relied on defaults. All other defaults and
+temporal semantics are unchanged. The legacy APIs retain lookup-date columns;
+`build_features` replaces them with numeric `_date_diff_days` columns measured
+from the observation date to the spine reference date (including for lags).
 `simulate_bureau_history` remains a separate domain-specific data generator.
 
 The original `temporal_features(spine, history, entity_cols, score_cols, ...)`
@@ -105,7 +107,8 @@ continues to work with its original argument order and defaults. The new API
 delegates to that same backend implementation, mapping `df_base` to `history`,
 `df_spine` to `spine`, `key_cols` to `entity_cols`, `value_cols` to `score_cols`,
 `date_col` to `observation_col`, `reference_date_col` to `reference_col`, and
-`period_unit` to `unit`. Temporal semantics and feature names are identical.
+`period_unit` to `unit`. Temporal values and window semantics are identical;
+lookup dates become latency features in `build_features`.
 
 ## Simulation
 
@@ -159,18 +162,22 @@ observation after February 13 through October 13, not just lag snapshots.
 March 31 minus one month is February 28 (29 in a leap year).
 
 Names use double underscores between the original score and feature:
-`score__current`, `score__current_date`, `score__lag_2_months`,
-`score__lag_2_months_date`, `score__mean_6_months`,
+`score__current`, `score__current_date_diff_days`, `score__lag_2_months`,
+`score__lag_2_months_date_diff_days`, `score__mean_6_months`,
 `score__current_minus_mean_6_months`. Existing spine column collisions fail.
 
 Supported aggregations (also the defaults) are `mean`, exact `median`, `max`,
 `min`, `std`, `sum`, and `count`. NaN/null scores are ignored. Empty windows have
 null statistics, including sum, and count zero. Standard deviation is the sample
 standard deviation (`ddof=1`), null with fewer than two observations. Unavailable
-lookups and their observation dates are null. `max_staleness_days`, when supplied,
+lookups and their latency indicators are null. `max_staleness_days`, when supplied,
 is a nonnegative integer: each current/lag observation must be no more than that
 many calendar days before **its own lookup cutoff**, inclusive. It does not filter
-rolling windows. Dates expose staleness even when no limit is applied.
+rolling windows. Latency indicators measure `reference_date - observation_date`
+in calendar days,
+including for lag lookups; they do not use the lag cutoff. Same-day observations
+have latency zero. No generated lookup dates are returned by `build_features`;
+original spine columns, including the reference date, remain unchanged.
 
 Duplicate history entity/date records always raise `ValueError`, including exact
 duplicates and duplicates with disjoint non-null scores. Aggregate or resolve

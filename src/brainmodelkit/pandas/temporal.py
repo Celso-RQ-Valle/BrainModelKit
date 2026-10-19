@@ -99,6 +99,7 @@ def temporal_features(
     lags: Sequence[int] = (1, 2, 8),
     aggregations: Sequence[str] = AGGREGATIONS,
     max_staleness_days: int | None = None,
+    _date_diff: bool = False,
 ) -> pd.DataFrame:
     """Enrich the spine using only history on/before each reference date.
 
@@ -117,6 +118,7 @@ def temporal_features(
         lags,
         aggregations,
         max_staleness_days,
+        date_diff=_date_diff,
     )
     columns(spine, [*keys, reference_col])
     columns(history, [*keys, observation_col, *scores])
@@ -159,8 +161,13 @@ def temporal_features(
                         )
                     name = f"{score}__" + ("current" if k == 0 else f"lag_{k}_{unit}")
                     features[name] = valid[score].iloc[position] if available else None
-                    features[name + "_date"] = (
-                        dates.iloc[position] if available else None
+                    date_suffix = "_date_diff_days" if _date_diff else "_date"
+                    features[name + date_suffix] = (
+                        (ref - dates.iloc[position]).days
+                        if available and _date_diff
+                        else dates.iloc[position]
+                        if available
+                        else None
                     )
                 for k in windows:
                     lower = dates.searchsorted(shift(ref, k, unit), side="right")
@@ -218,8 +225,10 @@ def build_features(
 
     Current and lag values are the latest non-null base values on/before their
     cutoffs. Windows are (reference minus k periods, reference], with calendar
-    month arithmetic. Observation dates accompany lookups; max_staleness_days
-    is measured from each lookup cutoff. Sample std is null for fewer than two
+    month arithmetic. Lookup date_diff_days features measure calendar days from
+    the observation to the spine reference date; no lookup dates are returned.
+    max_staleness_days is measured from each lookup cutoff.
+    Sample std is null for fewer than two
     values; empty windows have null statistics and zero counts. Differences are
     current minus window mean. Duplicate base entity/date records are rejected.
 
@@ -238,6 +247,7 @@ def build_features(
         lags=lags,
         aggregations=aggregations,
         max_staleness_days=max_staleness_days,
+        _date_diff=True,
     )
 
 
@@ -262,14 +272,14 @@ def build_autoregressive_features(
         DeprecationWarning,
         stacklevel=2,
     )
-    return build_features(
-        df_base,
-        df_spine,
-        key_cols=key_cols,
-        date_col=date_col,
-        reference_date_col=reference_date_col,
-        value_cols=value_cols,
-        period_unit=period_unit,
+    return temporal_features(
+        history=df_base,
+        spine=df_spine,
+        entity_cols=key_cols,
+        observation_col=date_col,
+        reference_col=reference_date_col,
+        score_cols=value_cols,
+        unit=period_unit,
         windows=windows,
         lags=lags,
         aggregations=aggregations,

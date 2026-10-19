@@ -10,6 +10,10 @@ The project is experimental and pre-1.0; public APIs remain unstable.
 
 ### Changed
 
+- `build_features` now returns numeric lookup latency (`_date_diff_days`) instead
+  of lookup dates, measured against the spine reference date for current and lag
+  values. Legacy APIs retain their original date outputs.
+
 - Added generic `build_features` to pandas and Spark with explicit keys and value
   columns. Deprecated `build_autoregressive_features` while preserving its defaults
   and results. Pandas now sorts history once and uses binary-search boundaries.
