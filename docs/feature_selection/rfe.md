@@ -150,5 +150,14 @@ repeated OOT inspection also consumes validation information. Reserve a final
 untouched test period. RFE is useful when refitting reveals conditional importance,
 but can be costly and inherits the model's importance biases and scaling issues.
 
+## Computational cost and practical limits
 
+Typical relative cost: **high**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: fits per elimination step; reports. Spark: distributed fits per step; reports.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for conditional importance when justified;
+do not run every selector as a fixed pipeline.
 
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

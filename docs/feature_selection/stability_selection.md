@@ -151,3 +151,18 @@ coefficients across periods requires consistent scaling.
 
 See [the complete Spark setup and stability_selection example](spark.md#stability_selection) for the
 distributed algorithm, parameters, result fields, limits, and interpretation.
+
+## Computational cost and practical limits
+
+Typical relative cost: **high?very high**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: bootstrap fits ? groups. Spark: poisson resample fits ? groups.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for check robustness when justified;
+do not run every selector as a fixed pipeline.
+
+Spark collects at most the configured group-key budget (`max_groups=100` by
+default). Poisson sampling differs from pandas stratified fixed-size bootstraps.
+
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

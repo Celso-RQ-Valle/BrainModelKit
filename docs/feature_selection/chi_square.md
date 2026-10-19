@@ -106,5 +106,14 @@ screening, but sparse expected counts and many simultaneous tests weaken p-value
 interpretation. See [sklearn chi2](https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.chi2.html)
 and [Spark ChiSquareTest](https://spark.apache.org/docs/latest/api/java/org/apache/spark/ml/stat/ChiSquareTest.html).
 
+## Computational cost and practical limits
 
+Typical relative cost: **low?moderate**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: count-by-class summaries. Spark: categorical contingency tables.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for counts (pandas); category codes (spark) when justified;
+do not run every selector as a fixed pipeline.
 
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

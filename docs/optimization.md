@@ -1,5 +1,7 @@
 # Hyperparameter optimization
 
+[Documentation home](README.md) ? [Backend journeys](../README.md)
+
 Install `brainmodelkit[pandas,optimization]` or
 `brainmodelkit[pyspark,optimization]`. Both optimization modules expose the same
 `objective_metric`, `direction`, `target_metric`, `target_limit`, and

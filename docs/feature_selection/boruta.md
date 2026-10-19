@@ -216,3 +216,18 @@ list and evaluate on independent later/group-separated data. A useful validation
 question is whether predictions and retained features remain stable in that new
 sample, not whether the same training p-value can be made smaller. Retain
 tentative diagnostics in the report even when only confirmed features are deployed.
+
+## Computational cost and practical limits
+
+Typical relative cost: **very high**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: forests on real + shadow columns. Spark: shadow sorts/joins + repeated forests.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for all-relevant hypothesis testing when justified;
+do not run every selector as a fixed pipeline.
+
+Spark uses RDD indexing and needs classic Spark Python workers; Spark Connect
+is unsupported. Sorting, joins, and executor caches can dominate model work.
+
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

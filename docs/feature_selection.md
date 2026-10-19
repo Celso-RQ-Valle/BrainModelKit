@@ -1,5 +1,7 @@
 # Feature Selection Guide
 
+[Documentation home](README.md) ? [Backend journeys](../README.md)
+
 ## Overview
 
 BrainModelKit offers independent selectors that compose through

@@ -121,3 +121,18 @@ redundancy or interactions. Spark implements binned MI; read the [Spark estimato
 
 See [the complete Spark setup and mutual_information example](spark.md#mutual_information) for the
 distributed algorithm, parameters, result fields, limits, and interpretation.
+
+## Computational cost and practical limits
+
+Typical relative cost: **moderate**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: nearest-neighbor estimation for continuous data. Spark: quantile binning and joint-count shuffles.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for nonlinear screening when justified;
+do not run every selector as a fixed pipeline.
+
+Spark collects bin edges and bounded feature/category summaries, not source rows.
+Its binned empirical estimate is not pandas nearest-neighbor MI.
+
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

@@ -116,5 +116,14 @@ coefficients still depend on input units. L1 is useful for compact linear models
 but it may arbitrarily retain one of several correlated predictors and can miss
 nonlinear interactions. Strong regularization can validly select no features.
 
+## Computational cost and practical limits
 
+Typical relative cost: **moderate?high**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: iterative penalized logistic fit. Spark: distributed logistic iterations.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for compact linear models when justified;
+do not run every selector as a fixed pipeline.
 
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

@@ -29,7 +29,7 @@ approximations controlled by `n_tiles`; Pandas metrics are exact.
 The Spark example explicitly uses `save_model_to="none"` so model persistence
 does not require Windows Hadoop helpers for the first training run. Select
 `folder` or `mlflow` after configuring the writer. See
-[Spark on Windows](../../README.md#spark-on-windows) for the `HADOOP_HOME` error.
+[Spark on Windows](../../docs/setup.md#spark-on-windows) for the `HADOOP_HOME` error.
 
 With the API default `save_model_to="folder"`, each call creates `training_runs/<run_name>_<run_id>/` containing
 the fitted model, `model_info.json`, `metrics.json`, `metadata.json`, and
@@ -52,4 +52,4 @@ aliases for the three destinations. See the
 [parameter reference](../../README.md#training-parameter-reference) for every
 argument, its default and where it takes effect.
 
-See [destination, format and migration details](../../README.md#model-training).
+See [destination, format and migration details](../../docs/training.md).

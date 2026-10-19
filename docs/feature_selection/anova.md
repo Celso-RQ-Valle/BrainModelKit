@@ -104,3 +104,15 @@ Spark computes distributed class statistics; read the [Spark ANOVA contract](spa
 
 See [the complete Spark setup and anova example](spark.md#anova) for the
 distributed algorithm, parameters, result fields, limits, and interpretation.
+
+## Computational cost and practical limits
+
+Typical relative cost: **low?moderate**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: class-wise sums and variances. Spark: two class summaries per feature.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for numeric screening when justified;
+do not run every selector as a fixed pipeline.
+
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

@@ -76,5 +76,14 @@ scale, and low-variance rare indicators can still be predictive. Standardization
 before this filter makes a nonzero variance threshold largely uninformative.
 Spark uses native `var_pop` aggregation.
 
+## Computational cost and practical limits
 
+Typical relative cost: **low**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: column moments. Spark: native var_pop aggregates.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for before fitting when justified;
+do not run every selector as a fixed pipeline.
 
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

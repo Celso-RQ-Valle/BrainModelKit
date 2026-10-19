@@ -113,5 +113,14 @@ for predictive evaluation: missingness can itself carry information, and a rare
 but valuable field may merit a dedicated model. Spark computes means of native
 non-null indicators; group tables stay distributed.
 
+## Computational cost and practical limits
 
+Typical relative cost: **low**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: non-null scans; optional grouped aggregates. Spark: non-null aggregates; grouped shuffles.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for missing-input screening when justified;
+do not run every selector as a fixed pipeline.
 
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

@@ -136,5 +136,14 @@ independent validation. This selector does not return a reusable WoE transformer
 do not independently re-bin OOT data and treat it as a fitted transformation.
 It is unsuitable for multiclass targets without a separately designed extension.
 
+## Computational cost and practical limits
 
+Typical relative cost: **moderate**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: binning and class counts. Spark: quantiles and grouped bin counts.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for inspect woe bins when justified;
+do not run every selector as a fixed pipeline.
 
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

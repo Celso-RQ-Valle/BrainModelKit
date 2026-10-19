@@ -141,4 +141,14 @@ importance. Coefficient magnitudes depend on scaling. An importance is not a
 causal effect and does not guarantee held-out benefit. Use permutation or temporal
 evaluation where those limitations matter.
 
+## Computational cost and practical limits
 
+Typical relative cost: **moderate?high**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: one estimator fit. Spark: one native model fit.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for capture model-specific signal when justified;
+do not run every selector as a fixed pipeline.
+
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

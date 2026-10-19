@@ -266,7 +266,7 @@ all_relevant = fs.boruta(
 print(all_relevant.feature_table)
 ```
 
-This is the most expensive new method: every iteration permutes at least five
+This is typically a very high-cost method: every iteration permutes at least five
 shadow columns, joins them to the real data, and fits a forest. Start with a small
 candidate set and inspect tentative decisions before increasing the iteration
 budget. Internal caches require executor storage. Functions release their own

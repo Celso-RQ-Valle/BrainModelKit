@@ -99,5 +99,17 @@ Spark uses native `Correlation.corr`; its matrix needs O(p²) driver memory.
 raise that budget. Spearman requires distributed ranking and is more expensive.
 See the [Spark correlation API](https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.ml.stat.Correlation.html).
 
+## Computational cost and practical limits
 
+Typical relative cost: **moderate?high**, with overlapping tiers across methods.
+This is an implementation-based estimate, not a benchmark or a universal ranking.
+Pandas: feature-pair matrix; Spearman ranks. Spark: distributed matrix/ranks; p? driver memory.
+Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
+change which method dominates. Use this method for after quality checks when justified;
+do not run every selector as a fixed pipeline.
 
+Spark collects a feature-sized correlation matrix; `max_features=256` is a
+guard, not a promise that a larger matrix fits driver memory.
+
+See the [backend comparison](../selection-costs.md) for an ordered shortlist
+and [input contracts](../feature_selection.md) before comparing scores.

@@ -1,5 +1,7 @@
 # Cross-validation
 
+[Documentation home](README.md) ? [Backend journeys](../README.md)
+
 BrainModelKit cross-validation evaluates models using development data only.
 It fits a fresh estimator for every fold, scores validation rows, and returns
 fold-level and aggregate metrics. It does not persist models, create MLflow
@@ -24,7 +26,10 @@ print(result.summary)
 Use `strategy="kfold"` for ordinary shuffled folds, `strategy="stratified"`
 for binary classification, `group_col`/`strategy="group"` when observations
 from one entity must stay together, and `date_col`/`strategy="time_series"`
-when temporal ordering must be respected. Spark additionally accepts
+for pandas expanding-window splits. **Spark time ordering is different:** it
+forms contiguous date blocks, then trains each fold on every other block,
+including later blocks. It is not forward-only forecasting validation. Use
+explicit chronological train/validation calls for that task. Spark additionally accepts
 `fold_col`, containing integer IDs from `0` through `cv - 1`, so externally
 created folds can be consumed without regeneration.
 
@@ -35,7 +40,10 @@ Preprocessing that learns state (imputation, encoding, scaling, or selection)
 must be inside a fold-fitted pipeline; preprocessing the complete frame first
 can leak validation information.
 
-`rfecv` and `sequential_selection` reuse the same CV infrastructure when
-evaluating candidate subsets. Their search remains responsible for elimination
-or greedy decisions. The result can also be passed directly to future
+`rfecv` and `sequential_selection` have their own backend-specific search/fold
+implementations; do not infer identical split behavior from the centralized CV
+API. Their search remains responsible for elimination or greedy decisions. The result can also be passed directly to future
 hyperparameter optimization loops, one parameter candidate at a time.
+
+See [connected CV and optimization alternatives](journey-validation.md) for
+fixed-feature examples, fold-fitted preprocessing, and optimizer limitations.

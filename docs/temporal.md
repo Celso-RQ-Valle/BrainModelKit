@@ -1,5 +1,7 @@
 # Numeric time-series features and bureau simulation
 
+[Documentation home](README.md) ? [Backend journeys](../README.md)
+
 Both `brainmodelkit.pandas` and `brainmodelkit.pyspark` export
 `simulate_bureau_history` and `build_features`. Existing APIs,
 including `temporal_features`, remain available unchanged.
