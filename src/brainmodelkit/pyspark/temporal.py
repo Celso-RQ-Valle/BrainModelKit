@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from datetime import date
 from functools import reduce
@@ -162,7 +163,7 @@ def temporal_features(
         if spine.schema[key].dataType != history.schema[key].dataType:
             raise ValueError("Entity key types must match between spine and history")
     if any(not isinstance(history.schema[s].dataType, NumericType) for s in scores):
-        raise ValueError("Score columns must be numeric")
+        raise ValueError("Value columns must be numeric")
     _validate_dates(spine, keys, reference_col)
     _validate_dates(history, keys, observation_col)
     internal = [f"k{i}" for i in range(len(keys))]
@@ -198,6 +199,12 @@ def temporal_features(
         lambda a, b: a & b, [F.col(n) == F.col("h" + n) for n in internal]
     )
     condition = condition & (F.col("d") <= F.col("r"))
+    if max_staleness_days is not None:
+        # Bound join expansion without discarding observations needed by windows.
+        earliest = F.date_sub(cutoff(max([0, *lags])), max_staleness_days)
+        if windows:
+            earliest = F.least(earliest, cutoff(max(windows)))
+        condition = condition & (F.col("d") >= earliest)
     joined = refs.join(hist, condition, "left")
     expressions = []
     for i, score in enumerate(scores):
@@ -246,14 +253,14 @@ def temporal_features(
     )
 
 
-def build_autoregressive_features(
+def build_features(
     df_base: DataFrame,
     df_spine: DataFrame,
     *,
-    key_cols: str | Sequence[str] = ("cnpj",),
-    date_col: str = "bureau_date",
+    key_cols: str | Sequence[str],
+    date_col: str = "observation_date",
     reference_date_col: str = "dt_ref",
-    value_cols: str | Sequence[str] = ("score",),
+    value_cols: str | Sequence[str],
     period_unit: str = "months",
     windows: Sequence[int] = (3, 6, 9),
     lags: Sequence[int] = (1, 2, 8),
@@ -292,8 +299,45 @@ def build_autoregressive_features(
     )
 
 
+def build_autoregressive_features(
+    df_base: DataFrame,
+    df_spine: DataFrame,
+    *,
+    key_cols: str | Sequence[str] = ("cnpj",),
+    date_col: str = "bureau_date",
+    reference_date_col: str = "dt_ref",
+    value_cols: str | Sequence[str] = ("score",),
+    period_unit: str = "months",
+    windows: Sequence[int] = (3, 6, 9),
+    lags: Sequence[int] = (1, 2, 8),
+    aggregations: Sequence[str] = AGGREGATIONS,
+    max_staleness_days: int | None = None,
+) -> DataFrame:
+    """Deprecated alias preserving the original column defaults and semantics."""
+    warnings.warn(
+        "build_autoregressive_features is deprecated; use build_features with "
+        "explicit key_cols, value_cols, and date_col instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return build_features(
+        df_base,
+        df_spine,
+        key_cols=key_cols,
+        date_col=date_col,
+        reference_date_col=reference_date_col,
+        value_cols=value_cols,
+        period_unit=period_unit,
+        windows=windows,
+        lags=lags,
+        aggregations=aggregations,
+        max_staleness_days=max_staleness_days,
+    )
+
+
 __all__ = [
     "build_autoregressive_features",
+    "build_features",
     "simulate_bureau_history",
     "temporal_features",
 ]

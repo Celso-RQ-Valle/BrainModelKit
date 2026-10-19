@@ -1406,9 +1406,9 @@ available for AUC, Gini, and KS; unqualified names remain CV aliases.
 temporal holdout for final evaluation.** See the [optimization guide](docs/optimization.md)
 for metric names, selection semantics, diagnostics, and Spark backend setup.
 
-## Bureau history and temporal features
+## Numeric time-series features
 
-Use `build_autoregressive_features(df_base, df_spine, ...)` to create current
+Use `build_features(df_base, df_spine, ...)` to create current
 values, lags, and rolling statistics from historical numeric data. Pass the
 historical source **first** and the rows to enrich (the spine) **second**:
 
@@ -1422,12 +1422,12 @@ Install `brainmodelkit[pandas]`, then run this complete example:
 
 ```python
 import pandas as pd
-from brainmodelkit.pandas import build_autoregressive_features
+from brainmodelkit.pandas import build_features
 
 df_base = pd.DataFrame(
     {
-        "cnpj": ["00000000000001"] * 4,
-        "bureau_date": pd.to_datetime(
+        "account_id": ["00000000000001"] * 4,
+        "observation_date": pd.to_datetime(
             [
                 "2026-01-31",
                 "2026-02-28",
@@ -1435,23 +1435,23 @@ df_base = pd.DataFrame(
                 "2026-04-30",
             ]
         ),
-        "score": [600.0, 620.0, 650.0, 700.0],
+        "revenue": [600.0, 620.0, 650.0, 700.0],
     }
 )
 df_spine = pd.DataFrame(
     {
-        "cnpj": ["00000000000001"],
+        "account_id": ["00000000000001"],
         "dt_ref": pd.to_datetime(["2026-03-31"]),
     }
 )
 
-enriched = build_autoregressive_features(
+enriched = build_features(
     df_base,
     df_spine,
-    key_cols=["cnpj"],
-    date_col="bureau_date",
+    key_cols=["account_id"],
+    date_col="observation_date",
     reference_date_col="dt_ref",
-    value_cols=["score"],
+    value_cols=["revenue"],
     period_unit="months",
     windows=[3],
     lags=[1],
@@ -1463,15 +1463,15 @@ feature_columns = [
     for column in enriched.columns
     if column not in df_spine.columns and not column.endswith("_date")
 ]
-print(enriched[["cnpj", "dt_ref", *feature_columns]])
+print(enriched[["account_id", "dt_ref", *feature_columns]])
 ```
 
-For the March 31 reference date, `score__current` is `650`,
-`score__lag_1_months` is `620`, `score__mean_3_months` is approximately `623.33`,
-and `score__count_3_months` is `3`. The April observation is excluded because
+For the March 31 reference date, `revenue__current` is `650`,
+`revenue__lag_1_months` is `620`, `revenue__mean_3_months` is approximately `623.33`,
+and `revenue__count_3_months` is `3`. The April observation is excluded because
 it is after the reference date. The output also includes observation dates
-(`score__current_date`, `score__lag_1_months_date`) and
-`score__current_minus_mean_3_months` (approximately `26.67`).
+(`revenue__current_date`, `revenue__lag_1_months_date`) and
+`revenue__current_minus_mean_3_months` (approximately `26.67`).
 
 ### Create features with PySpark
 
@@ -1480,7 +1480,7 @@ This standalone example requires a configured Spark/Java environment:
 
 ```python
 from pyspark.sql import SparkSession, functions as F
-from brainmodelkit.pyspark import build_autoregressive_features
+from brainmodelkit.pyspark import build_features
 
 spark = SparkSession.builder.appName("TemporalFeatures").getOrCreate()
 df_base = spark.createDataFrame(
@@ -1490,20 +1490,20 @@ df_base = spark.createDataFrame(
         ("00000000000001", "2026-03-31", 650.0),
         ("00000000000001", "2026-04-30", 700.0),
     ],
-    ["cnpj", "bureau_date", "score"],
-).withColumn("bureau_date", F.to_date("bureau_date"))
+    ["account_id", "observation_date", "revenue"],
+).withColumn("observation_date", F.to_date("observation_date"))
 df_spine = spark.createDataFrame(
     [("00000000000001", "2026-03-31")],
-    ["cnpj", "dt_ref"],
+    ["account_id", "dt_ref"],
 ).withColumn("dt_ref", F.to_date("dt_ref"))
 
-enriched = build_autoregressive_features(
+enriched = build_features(
     df_base,
     df_spine,
-    key_cols=["cnpj"],
-    date_col="bureau_date",
+    key_cols=["account_id"],
+    date_col="observation_date",
     reference_date_col="dt_ref",
-    value_cols=["score"],
+    value_cols=["revenue"],
     period_unit="months",
     windows=[3],
     lags=[1],
@@ -1515,13 +1515,13 @@ enriched.show(truncate=False)
 ### Generate sample data, then create features
 
 This complete PySpark example connects `simulate_credit_data`,
-`simulate_bureau_history`, and `build_autoregressive_features`. Install
+`simulate_bureau_history`, and `build_features`. Install
 `brainmodelkit[pyspark]` and configure Spark/Java first.
 
 ```python
 from pyspark.sql import SparkSession, functions as F
 from brainmodelkit.pyspark import (
-    build_autoregressive_features,
+    build_features,
     simulate_bureau_history,
     simulate_credit_data,
 )
@@ -1550,7 +1550,7 @@ df_base = simulate_bureau_history(
 )
 
 # 3. Add features from the history to each row of the credit data.
-enriched = build_autoregressive_features(
+enriched = build_features(
     df_base,
     df_spine,
     key_cols=["company_id"],

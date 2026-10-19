@@ -1,7 +1,7 @@
-# Bureau history and point-in-time features
+# Numeric time-series features and bureau simulation
 
 Both `brainmodelkit.pandas` and `brainmodelkit.pyspark` export
-`simulate_bureau_history` and `build_autoregressive_features`. Existing APIs,
+`simulate_bureau_history` and `build_features`. Existing APIs,
 including `temporal_features`, remain available unchanged.
 Install the corresponding backend extra. The root package does not import either
 backend dependency.
@@ -9,7 +9,7 @@ backend dependency.
 ```python
 import pandas as pd
 from brainmodelkit.pandas import (
-    build_autoregressive_features,
+    build_features,
     simulate_bureau_history,
 )
 
@@ -30,7 +30,7 @@ df_spine = customers.merge(
     pd.DataFrame({"dt_ref": pd.to_datetime(["2026-09-13", "2026-10-13"])}),
     how="cross",
 )
-enriched = build_autoregressive_features(
+enriched = build_features(
     df_base,
     df_spine,
     key_cols=["cnpj"],
@@ -69,7 +69,7 @@ implicit row ordering. Both preserve spine columns, duplicate rows, and cardinal
 
 ## Feature inputs
 
-`build_autoregressive_features(df_base, df_spine, ...)` takes the historical source
+`build_features(df_base, df_spine, ...)` takes the historical source
 **first** and the rows to enrich **second**:
 
 - `df_base`: historical source, containing `key_cols`, observation dates in
@@ -84,11 +84,21 @@ reference date to determine the lookups and rolling windows. Multiple reference
 dates for one customer and duplicate spine rows are supported. For composite
 entities, pass e.g. `key_cols=["cnpj", "branch"]` on both backends.
 
-Defaults are `key_cols=("cnpj",)`, `date_col="bureau_date"`,
-`reference_date_col="dt_ref"`, `value_cols=("score",)`, and
-`period_unit="months"`. Lists and single strings are accepted for column names.
-The simulator's original column defaults remain unchanged; the example explicitly
-names its outputs to match this API.
+`key_cols` and `value_cols` are required: select any numeric measures, such as
+revenue, balances, credit limits, transaction amounts, or scores. Values are not
+clipped or normalized. Defaults are `date_col="observation_date"`,
+`reference_date_col="dt_ref"`, and `period_unit="months"`.
+Lists and single strings are accepted for column names.
+
+### Migration
+
+`build_autoregressive_features` remains available on both backends and emits a
+`DeprecationWarning` at the caller. It preserves its original defaults:
+`key_cols=("cnpj",)`, `date_col="bureau_date"`, `value_cols=("score",)`.
+Replace its name with `build_features` and pass these three arguments explicitly
+to preserve a call that previously relied on defaults. All other defaults,
+feature names, output columns, and temporal semantics are unchanged.
+`simulate_bureau_history` remains a separate domain-specific data generator.
 
 The original `temporal_features(spine, history, entity_cols, score_cols, ...)`
 continues to work with its original argument order and defaults. The new API
@@ -133,7 +143,7 @@ and noise finite and nonnegative.
 `period_unit` (`unit` in the original API) is `days`, `weeks` (seven days), or
 `months` (calendar subtraction, clipping
 to the last valid day). Window lengths and lag offsets must be unique positive
-integers; empty lists are allowed. For **each numeric score separately**:
+integers; empty lists are allowed. For **each numeric value separately**:
 
 - Current: latest non-null score at or before the reference date.
 - Lag k: latest non-null score at or before reference minus k periods.
@@ -169,10 +179,14 @@ an arbitrary record. Duplicate spine entity/reference rows are fully preserved.
 
 ## Execution and scale
 
-Pandas groups history by entity and caches each distinct entity/reference result;
+Pandas sorts history once, groups non-null values by entity and source column,
+uses binary searches for lookup/window boundaries, and caches each distinct
+entity/reference result. Window statistics use native pandas reductions;
 it is intended for in-memory datasets. Spark validates with distributed actions,
 deduplicates reference queries, performs an entity equality join with an as-of
-date predicate, aggregates, and joins features back to the original spine. It
+date predicate, aggregates, and joins features back to the original spine. With
+a staleness limit, the join also excludes history older than every requested
+lookup and window. It
 never converts to pandas or collects history/customer records to the driver.
 Spark simulation uses a Python UDF on workers, generating one period array per
 customer; memory per row grows with the requested number of periods.

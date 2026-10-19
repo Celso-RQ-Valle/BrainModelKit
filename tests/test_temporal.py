@@ -338,10 +338,11 @@ def test_spark_empty_stale_and_validation(spark, monkeypatch):
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
-def test_autoregressive_base_spine_contract(backend, request):
+@pytest.mark.parametrize("api", ["build_features", "build_autoregressive_features"])
+def test_autoregressive_base_spine_contract(backend, api, request):
     from importlib import import_module
 
-    build = import_module(f"brainmodelkit.{backend}").build_autoregressive_features
+    build = getattr(import_module(f"brainmodelkit.{backend}"), api)
     spine, history = inputs()
     # Conflicting spine scores must be retained but never used as feature values.
     spine = spine.assign(score=-999.0).rename(columns={"dt_ref": "as_of"})
@@ -429,3 +430,49 @@ def test_autoregressive_default_columns(backend, request):
         row = build(base, spine).iloc[0]
     assert row["score__current"] == 50
     assert row["score__count_3_months"] == 1
+
+
+@pytest.mark.parametrize("backend", ["pandas", "pyspark"])
+def test_generic_features_and_deprecation(backend, request):
+    from importlib import import_module
+
+    module = import_module(f"brainmodelkit.{backend}")
+    rows = [
+        ("a", "2024-02-29", -20.0, None),
+        ("a", "2024-03-01", 10000.0, 25000.0),
+        ("a", "2024-04-01", 99999.0, 99999.0),
+    ]
+    refs = [("a", "2024-03-31"), ("a", "2024-03-31"), ("missing", "2024-03-31")]
+    if backend == "pyspark":
+        spark = request.getfixturevalue("spark")
+        base = spark.createDataFrame(
+            rows,
+            "account string, observation_date string, revenue double, balance double",
+        )
+        spine = spark.createDataFrame(refs, "account string, dt_ref string")
+    else:
+        base = pd.DataFrame(
+            rows, columns=["account", "observation_date", "revenue", "balance"]
+        )
+        spine = pd.DataFrame(refs, columns=["account", "dt_ref"])
+    options = dict(
+        key_cols="account", value_cols=["revenue", "balance"], windows=[1], lags=[1]
+    )
+    result = module.build_features(base, spine, **options)
+    with pytest.warns(DeprecationWarning, match="use build_features") as warnings:
+        legacy = module.build_autoregressive_features(
+            base, spine, date_col="observation_date", **options
+        )
+    assert warnings[0].filename == __file__
+    if backend == "pyspark":
+        actual = [r.asDict() for r in result.orderBy("account").collect()]
+        assert actual == [r.asDict() for r in legacy.orderBy("account").collect()]
+    else:
+        pd.testing.assert_frame_equal(result, legacy)
+        actual = result.to_dict("records")
+    assert len(actual) == 3
+    assert actual[0]["revenue__current"] == 10000
+    assert actual[0]["revenue__lag_1_months"] == -20
+    assert actual[0]["revenue__sum_1_months"] == 10000
+    assert actual[0]["balance__current"] == 25000
+    assert actual[2]["balance__count_1_months"] == 0

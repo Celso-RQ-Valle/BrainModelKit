@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from datetime import date
 
@@ -125,13 +126,17 @@ def temporal_features(
         if frame[[*keys, day]].isna().any().any():
             raise ValueError("Keys and dates must not be null")
     if any(not is_numeric_dtype(history[s]) for s in scores):
-        raise ValueError("Score columns must be numeric")
+        raise ValueError("Value columns must be numeric")
     hist = history[[*keys, observation_col, *scores]].copy()
     hist[observation_col] = hist[observation_col].map(as_date)
     if hist.duplicated([*keys, observation_col]).any():
         raise ValueError("Duplicate entity/date history records")
+    hist = hist.sort_values(observation_col)
     groups = {
-        key if isinstance(key, tuple) else (key,): group
+        key if isinstance(key, tuple) else (key,): {
+            value: group.loc[group[value].notna(), [observation_col, value]]
+            for value in scores
+        }
         for key, group in hist.groupby(keys, sort=False, observed=True)
     }
     cache, records = {}, []
@@ -139,31 +144,28 @@ def temporal_features(
         key, ref = tuple(row[:-1]), as_date(row[-1])
         token = (*key, ref)
         if token not in cache:
-            group = groups.get(key, hist.iloc[:0])
+            group = groups.get(key)
             features = {}
             for score in scores:
-                valid = group[group[score].notna()].sort_values(observation_col)
+                valid = group[score] if group is not None else hist.iloc[:0]
+                dates = valid[observation_col]
                 for k in [0, *lags]:
                     cutoff = shift(ref, k, unit)
-                    available = valid[valid[observation_col] <= cutoff]
-                    if max_staleness_days is not None:
-                        available = available[
-                            available[observation_col]
-                            >= shift(cutoff, max_staleness_days, "days")
-                        ]
+                    position = dates.searchsorted(cutoff, side="right") - 1
+                    available = position >= 0
+                    if available and max_staleness_days is not None:
+                        available = dates.iloc[position] >= shift(
+                            cutoff, max_staleness_days, "days"
+                        )
                     name = f"{score}__" + ("current" if k == 0 else f"lag_{k}_{unit}")
-                    features[name] = (
-                        available[score].iloc[-1] if len(available) else None
-                    )
+                    features[name] = valid[score].iloc[position] if available else None
                     features[name + "_date"] = (
-                        available[observation_col].iloc[-1] if len(available) else None
+                        dates.iloc[position] if available else None
                     )
                 for k in windows:
-                    values = valid.loc[
-                        (valid[observation_col] > shift(ref, k, unit))
-                        & (valid[observation_col] <= ref),
-                        score,
-                    ]
+                    lower = dates.searchsorted(shift(ref, k, unit), side="right")
+                    upper = dates.searchsorted(ref, side="right")
+                    values = valid[score].iloc[lower:upper]
                     for agg in aggs:
                         value = (
                             len(values)
@@ -193,14 +195,14 @@ def temporal_features(
     return result
 
 
-def build_autoregressive_features(
+def build_features(
     df_base: pd.DataFrame,
     df_spine: pd.DataFrame,
     *,
-    key_cols: str | Sequence[str] = ("cnpj",),
-    date_col: str = "bureau_date",
+    key_cols: str | Sequence[str],
+    date_col: str = "observation_date",
     reference_date_col: str = "dt_ref",
-    value_cols: str | Sequence[str] = ("score",),
+    value_cols: str | Sequence[str],
     period_unit: str = "months",
     windows: Sequence[int] = (3, 6, 9),
     lags: Sequence[int] = (1, 2, 8),
@@ -239,8 +241,45 @@ def build_autoregressive_features(
     )
 
 
+def build_autoregressive_features(
+    df_base: pd.DataFrame,
+    df_spine: pd.DataFrame,
+    *,
+    key_cols: str | Sequence[str] = ("cnpj",),
+    date_col: str = "bureau_date",
+    reference_date_col: str = "dt_ref",
+    value_cols: str | Sequence[str] = ("score",),
+    period_unit: str = "months",
+    windows: Sequence[int] = (3, 6, 9),
+    lags: Sequence[int] = (1, 2, 8),
+    aggregations: Sequence[str] = AGGREGATIONS,
+    max_staleness_days: int | None = None,
+) -> pd.DataFrame:
+    """Deprecated alias preserving the original column defaults and semantics."""
+    warnings.warn(
+        "build_autoregressive_features is deprecated; use build_features with "
+        "explicit key_cols, value_cols, and date_col instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return build_features(
+        df_base,
+        df_spine,
+        key_cols=key_cols,
+        date_col=date_col,
+        reference_date_col=reference_date_col,
+        value_cols=value_cols,
+        period_unit=period_unit,
+        windows=windows,
+        lags=lags,
+        aggregations=aggregations,
+        max_staleness_days=max_staleness_days,
+    )
+
+
 __all__ = [
     "build_autoregressive_features",
+    "build_features",
     "simulate_bureau_history",
     "temporal_features",
 ]

@@ -2,6 +2,7 @@
 
 __all__ = [
     "build_autoregressive_features",
+    "build_features",
     "simulate_bureau_history",
     "temporal_features",
 ]

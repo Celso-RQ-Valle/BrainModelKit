@@ -10,6 +10,10 @@ The project is experimental and pre-1.0; public APIs remain unstable.
 
 ### Changed
 
+- Added generic `build_features` to pandas and Spark with explicit keys and value
+  columns. Deprecated `build_autoregressive_features` while preserving its defaults
+  and results. Pandas now sorts history once and uses binary-search boundaries.
+
 - The base install has no runtime dependencies. Execution backends, MLflow,
   Optuna, Boruta, and optional persistence formats are selected through extras.
   The Pandas extra includes native LightGBM; the PySpark and dataframes extras
