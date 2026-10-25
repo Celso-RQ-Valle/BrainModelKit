@@ -92,16 +92,20 @@ first_date = credit.agg(F.min("reference_date")).first()[0]
 df_spine = (
     credit.withColumn(
         "reference_date",
-        F.date_add(F.lit(date(2026, 4, 1)),
-                   F.datediff("reference_date", F.lit(first_date))),
+        F.date_add(
+            F.lit(date(2026, 4, 1)), F.datediff("reference_date", F.lit(first_date))
+        ),
     )
     .withColumnRenamed("company_id", "account_id")
     .withColumnRenamed("default_flag", "target")
     .withColumnRenamed("company_size", "segment")
 )
 df_base = simulate_bureau_history(
-    df_spine.select("account_id"), entity_cols="account_id",
-    initial_date="2025-10-01", final_date="2026-06-30", seed=42,
+    df_spine.select("account_id"),
+    entity_cols="account_id",
+    initial_date="2025-10-01",
+    final_date="2026-06-30",
+    seed=42,
 )
 
 # Optional: export this small credit sample for the pandas guide (requires pandas).
@@ -145,6 +149,56 @@ history_features = [c for c in enriched.columns if c not in df_spine.columns]
 candidate_features = credit_features + history_features
 ```
 
+Enable comparisons with each variable's own history using the same inputs:
+
+```python
+feature_options = dict(
+    key_cols="account_id",
+    reference_date_col="reference_date",
+    windows=[1, 3, 6],
+    lags=[1, 2, 3],
+    period_unit="months",
+    aggregations=["mean", "median", "min", "max", "std", "sum", "count"],
+)
+enriched = build_features(
+    df_base,
+    df_spine,
+    value_cols=["bureau_score"],
+    relative_historico=True,
+    **feature_options,
+)
+history_features = [c for c in enriched.columns if c not in df_spine.columns]
+candidate_features = credit_features + history_features
+```
+
+For a utilization example, derive reproducible illustrative balances and changing
+limits from the simulated history, then enable the reference-column family.
+The following version enables both options; set `relative_historico=False` for
+ratio-series temporal features alone.
+
+```python
+df_base = df_base.withColumn(
+    "used_balance", F.col("bureau_score") * F.lit(0.2)
+).withColumn("credit_limit", F.lit(100.0) + F.month("observation_date") * F.lit(20.0))
+enriched = build_features(
+    df_base,
+    df_spine,
+    value_cols=["used_balance", "credit_limit"],
+    ref_col="credit_limit",
+    relative_historico=True,
+    **feature_options,
+)
+history_features = [c for c in enriched.columns if c not in df_spine.columns]
+candidate_features = credit_features + history_features
+```
+
+Each call replaces `enriched`; continue below with the version you want to model.
+The last call includes original features, per-observation ratios, and historical
+comparisons for both. Used-balance/limit is utilization; the reference column
+retains its own features without a self-ratio.
+See [relationships and naming](docs/temporal.md#optional-relationship-families)
+for formulas, ratio scales, and missing-value rules.
+
 `date_col` defaults to `observation_date`. Windows are **(reference ? k periods,
 reference]**; lags use the latest non-null value at or before reference ? k periods.
 Units are days, seven-day weeks, or calendar months (clipped at month end).
@@ -153,84 +207,12 @@ count. Each source gets current/lag values, `_date_diff_days` latency relative
 to the spine reference date, and `current_minus_mean` for every window.
 No generated lookup dates are returned. The spine's columns and duplicate rows remain.
 
-This configuration generates **32 bureau features** plus the 20 credit inputs.
-History starts in October 2025 so the April cohort can use the six-month window.
-All seven supported aggregates are requested explicitly (they are also the API defaults).
-
-| Generated family | Count | Example column |
-| --- | ---: | --- |
-| Current value and observation age | 2 | `bureau_score__current`, `bureau_score__current_date_diff_days` |
-| Three lag values and their observation ages | 6 | `bureau_score__lag_2_months`, `bureau_score__lag_2_months_date_diff_days` |
-| Seven aggregates across three windows | 21 | `bureau_score__median_3_months`, `bureau_score__std_6_months` |
-| Current minus each window mean | 3 | `bureau_score__current_minus_mean_3_months` |
-
-`std` is sample standard deviation (`ddof=1`); fewer than two observations
-produce null. Median is exact. Observation ages are measured from the spine
-reference date, including for lagged values.
-
-
-**Optional relationship variant.** Run this immediately after the build above,
-before filling missing values or splitting the data. It adds eight numeric
-relationships to the 52 existing candidates. `build_features` already computes
-current-minus-mean; the following are explicit calculations on its outputs.
-They use only history available at each row's reference date.
-
-| Added relationship | Calculation |
-| --- | --- |
-| Change from one-month lag | Current minus lag 1 |
-| Ratio to one-month lag | Current / lag 1 |
-| Relative change from one-month lag | (current minus lag 1) / lag 1; multiply by 100 for percent |
-| Difference from median | Current minus three-month median |
-| Three-month range | Three-month maximum minus minimum |
-| Standardized deviation | (current minus three-month mean) / three-month sample std |
-| Coefficient of variation | Three-month sample std / absolute three-month mean |
-| Short/long mean ratio | One-month mean / six-month mean |
-
-Missing inputs and zero denominators remain null until the workflow's explicit
-imputation step. A zero-variance window has an undefined standardized deviation.
-These ratios compare a source with its own history; choose business-meaningful
-pairs when extending the recipe to different source columns.
-
-```python
-from pyspark.sql import functions as F
-
-current = enriched["bureau_score__current"]
-lag = enriched["bureau_score__lag_1_months"]
-mean = enriched["bureau_score__mean_3_months"]
-std = enriched["bureau_score__std_3_months"]
-
-
-def safe_ratio(numerator, denominator):
-    return numerator / F.when(denominator != 0, denominator)
-
-
-relationships = {
-    "bureau_score__change_1_month": current - lag,
-    "bureau_score__ratio_1_month": safe_ratio(current, lag),
-    "bureau_score__relative_change_1_month": safe_ratio(current - lag, lag),
-    "bureau_score__current_minus_median_3_months": (
-        current - enriched["bureau_score__median_3_months"]
-    ),
-    "bureau_score__range_3_months": (
-        enriched["bureau_score__max_3_months"] - enriched["bureau_score__min_3_months"]
-    ),
-    "bureau_score__standardized_deviation_3_months": safe_ratio(current - mean, std),
-    "bureau_score__coefficient_of_variation_3_months": safe_ratio(std, F.abs(mean)),
-    "bureau_score__mean_ratio_1_to_6_months": safe_ratio(
-        enriched["bureau_score__mean_1_months"], enriched["bureau_score__mean_6_months"]
-    ),
-}
-enriched = enriched.select("*", *[expr.alias(name) for name, expr in relationships.items()])
-candidate_features = credit_features + history_features + list(relationships)
-enriched.select("account_id", "reference_date", *relationships).show(5)
-```
-
 Missing lookups/statistics are null; empty windows have count zero, including a
 null sum. This recipe uses fixed zero filling as an explicit demonstration policy;
 it learns no statistics from validation or OOT. In production, fit any learned
 imputer/encoder on training data only and inside folds for CV. Keys, dates, target,
 segment, status, and industry section never enter `candidate_features`.
-The inputs combine the simulator's numeric credit columns with generated bureau features.
+The inputs combine the simulator's numeric credit columns with all enabled temporal features.
 
 ```python
 enriched = enriched.fillna(0, subset=candidate_features)
@@ -243,9 +225,27 @@ oot_df = enriched.filter("reference_date >= '2026-06-01'")
 
 Spark joins can expand sharply with many reference dates per entity; unlimited-staleness lookups retain all earlier history. Validation adds scans/shuffles; exact median needs group memory.
 The [full feature catalog](docs/temporal.md#temporal-semantics) covers naming,
-all aggregations, staleness, boundaries, and validation. There is no `features="all"`
-option, fitted trend family, or automatic cross-column relationship family in this API.
-The relationship variant above demonstrates how to extend its outputs explicitly.
+all aggregations, optional relationships, staleness, boundaries, and validation.
+
+<a id="build-feature-parameters"></a>
+The same parameters apply to both backends:
+
+| Parameter | Default | Effect |
+| --- | --- | --- |
+| `key_cols` | Required | Entity key column(s). |
+| `value_cols` | Required | Numeric historical series to enrich. |
+| `date_col` | `"observation_date"` | Observation date in `df_base`. |
+| `reference_date_col` | `"dt_ref"` | Reference date in `df_spine`. |
+| `period_unit` | `"months"` | Calendar months, weeks, or days. |
+| `windows` | `(3, 6, 9)` | Rolling-window lengths. |
+| `lags` | `(1, 2, 8)` | As-of lookup offsets. |
+| `aggregations` | `("mean", "median", "max", "min", "std", "sum", "count")` | Requested window statistics. |
+| `max_staleness_days` | `None` | Optional maximum age relative to each lookup cutoff. |
+| `relative_historico` | `False` | Compare current values with requested lags and enabled level statistics. |
+| `ref_col` | `None` | Add temporal features for same-observation `value / ref_col` series. |
+
+Both options default off, preserving existing outputs, including `current_minus_mean`.
+With both on, ratio comparisons also include percentage-point differences.
 
 #### Spark select features
 
@@ -518,13 +518,17 @@ import pandas as pd
 from brainmodelkit.pandas import simulate_bureau_history
 
 df_spine = pd.read_csv(
-    "simulated_credit.csv", dtype={"account_id": "string"},
+    "simulated_credit.csv",
+    dtype={"account_id": "string"},
     parse_dates=["reference_date"],
 )
 credit_features = [f"feature_{i:02d}" for i in range(1, 21)]
 df_base = simulate_bureau_history(
-    df_spine[["account_id"]], entity_cols="account_id",
-    initial_date="2025-10-01", final_date="2026-06-30", seed=42,
+    df_spine[["account_id"]],
+    entity_cols="account_id",
+    initial_date="2025-10-01",
+    final_date="2026-06-30",
+    seed=42,
 )
 ```
 
@@ -565,90 +569,58 @@ history_features = [c for c in enriched.columns if c not in df_spine.columns]
 candidate_features = credit_features + history_features
 ```
 
-`date_col` defaults to `observation_date`. Windows are **(reference ? k periods,
-reference]**; lags use the latest non-null value at or before reference ? k periods.
-Units are days, seven-day weeks, or calendar months (clipped at month end).
-Supported aggregations are mean, exact median, min, max, sample std, **sum**, and
-count. Each source gets current/lag values, `_date_diff_days` latency relative
-to the spine reference date, and `current_minus_mean` for every window.
-No generated lookup dates are returned. The spine's columns and duplicate rows remain.
-
-This configuration generates **32 bureau features** plus the 20 credit inputs.
-History starts in October 2025 so the April cohort can use the six-month window.
-All seven supported aggregates are requested explicitly (they are also the API defaults).
-
-| Generated family | Count | Example column |
-| --- | ---: | --- |
-| Current value and observation age | 2 | `bureau_score__current`, `bureau_score__current_date_diff_days` |
-| Three lag values and their observation ages | 6 | `bureau_score__lag_2_months`, `bureau_score__lag_2_months_date_diff_days` |
-| Seven aggregates across three windows | 21 | `bureau_score__median_3_months`, `bureau_score__std_6_months` |
-| Current minus each window mean | 3 | `bureau_score__current_minus_mean_3_months` |
-
-`std` is sample standard deviation (`ddof=1`); fewer than two observations
-produce null. Median is exact. Observation ages are measured from the spine
-reference date, including for lagged values.
-
-
-**Optional relationship variant.** Run this immediately after the build above,
-before filling missing values or splitting the data. It adds eight numeric
-relationships to the 52 existing candidates. `build_features` already computes
-current-minus-mean; the following are explicit calculations on its outputs.
-They use only history available at each row's reference date.
-
-| Added relationship | Calculation |
-| --- | --- |
-| Change from one-month lag | Current minus lag 1 |
-| Ratio to one-month lag | Current / lag 1 |
-| Relative change from one-month lag | (current minus lag 1) / lag 1; multiply by 100 for percent |
-| Difference from median | Current minus three-month median |
-| Three-month range | Three-month maximum minus minimum |
-| Standardized deviation | (current minus three-month mean) / three-month sample std |
-| Coefficient of variation | Three-month sample std / absolute three-month mean |
-| Short/long mean ratio | One-month mean / six-month mean |
-
-Missing inputs and zero denominators remain null until the workflow's explicit
-imputation step. A zero-variance window has an undefined standardized deviation.
-These ratios compare a source with its own history; choose business-meaningful
-pairs when extending the recipe to different source columns.
+Enable comparisons with each variable's own history using the same inputs:
 
 ```python
-current = enriched["bureau_score__current"]
-lag = enriched["bureau_score__lag_1_months"]
-mean = enriched["bureau_score__mean_3_months"]
-std = enriched["bureau_score__std_3_months"]
-
-
-def safe_ratio(numerator, denominator):
-    return numerator / denominator.where(denominator.ne(0))
-
-
-relationships = {
-    "bureau_score__change_1_month": current - lag,
-    "bureau_score__ratio_1_month": safe_ratio(current, lag),
-    "bureau_score__relative_change_1_month": safe_ratio(current - lag, lag),
-    "bureau_score__current_minus_median_3_months": (
-        current - enriched["bureau_score__median_3_months"]
-    ),
-    "bureau_score__range_3_months": (
-        enriched["bureau_score__max_3_months"] - enriched["bureau_score__min_3_months"]
-    ),
-    "bureau_score__standardized_deviation_3_months": safe_ratio(current - mean, std),
-    "bureau_score__coefficient_of_variation_3_months": safe_ratio(std, mean.abs()),
-    "bureau_score__mean_ratio_1_to_6_months": safe_ratio(
-        enriched["bureau_score__mean_1_months"], enriched["bureau_score__mean_6_months"]
-    ),
-}
-enriched = enriched.assign(**relationships)
-candidate_features = credit_features + history_features + list(relationships)
-print(enriched[["account_id", "reference_date", *relationships]].head())
+feature_options = dict(
+    key_cols="account_id",
+    reference_date_col="reference_date",
+    windows=[1, 3, 6],
+    lags=[1, 2, 3],
+    period_unit="months",
+    aggregations=["mean", "median", "min", "max", "std", "sum", "count"],
+)
+enriched = build_features(
+    df_base,
+    df_spine,
+    value_cols=["bureau_score"],
+    relative_historico=True,
+    **feature_options,
+)
+history_features = [c for c in enriched.columns if c not in df_spine.columns]
+candidate_features = credit_features + history_features
 ```
+
+Enable both families on reproducible balances and limits derived from the
+simulated history. For ratios alone, set `relative_historico=False`.
+
+```python
+df_base = df_base.assign(
+    used_balance=df_base["bureau_score"] * 0.2,
+    credit_limit=100.0 + pd.to_datetime(df_base["observation_date"]).dt.month * 20.0,
+)
+enriched = build_features(
+    df_base,
+    df_spine,
+    value_cols=["used_balance", "credit_limit"],
+    ref_col="credit_limit",
+    relative_historico=True,
+    **feature_options,
+)
+history_features = [c for c in enriched.columns if c not in df_spine.columns]
+candidate_features = credit_features + history_features
+```
+
+Continue with the last `enriched` result, or choose either earlier variant.
+Both backends share the [parameter defaults](#build-feature-parameters),
+[formulas, naming, temporal rules, and null handling](docs/temporal.md#optional-relationship-families).
 
 Missing lookups/statistics are null; empty windows have count zero, including a
 null sum. This recipe uses fixed zero filling as an explicit demonstration policy;
 it learns no statistics from validation or OOT. In production, fit any learned
 imputer/encoder on training data only and inside folds for CV. Keys, dates, target,
 segment, status, and industry section never enter `candidate_features`.
-The inputs combine the simulator's numeric credit columns with generated bureau features.
+The inputs combine the simulator's numeric credit columns with all enabled temporal features.
 
 ```python
 enriched[candidate_features] = enriched[candidate_features].fillna(0)
@@ -660,9 +632,7 @@ oot_df = enriched.loc[ref >= "2026-06-01"].copy()
 
 Pandas sorts history once, uses binary-search boundaries, and caches distinct entity/reference results. Window reductions and memory still grow with requested features and history.
 The [full feature catalog](docs/temporal.md#temporal-semantics) covers naming,
-all aggregations, staleness, boundaries, and validation. There is no `features="all"`
-option, fitted trend family, or automatic cross-column relationship family in this API.
-The relationship variant above demonstrates how to extend its outputs explicitly.
+all aggregations, optional relationships, staleness, boundaries, and validation.
 
 Run the [complete relationship example](examples/temporal/feature_relationships.py)
 against the simulated credit export:
@@ -769,7 +739,10 @@ May validation; do not look at June OOT while choosing. This small manual search
 preserves the chronological split and the training-only selected subset.
 
 ```python
-alternative_params = {"logisticregression__C": 1.0, "logisticregression__max_iter": 1000}
+alternative_params = {
+    "logisticregression__C": 1.0,
+    "logisticregression__max_iter": 1000,
+}
 alternative = train_model(
     "alternative",
     "target",

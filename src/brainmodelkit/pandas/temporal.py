@@ -12,6 +12,7 @@ from pandas.api.types import is_numeric_dtype
 from brainmodelkit._temporal import (
     AGGREGATIONS,
     as_date,
+    build_config,
     columns,
     feature_config,
     shift,
@@ -184,22 +185,27 @@ def temporal_features(
                         features[f"{score}__{agg}_{k}_{unit}"] = value
                     current = features[f"{score}__current"]
                     features[f"{score}__current_minus_mean_{k}_{unit}"] = (
-                        current - values.mean()
+                        current
+                        - (
+                            features[f"{score}__mean_{k}_{unit}"]
+                            if "mean" in aggs
+                            else values.mean()
+                        )
                         if current is not None and len(values)
                         else None
                     )
             cache[token] = features
         records.append(cache[token])
-    result = spine.copy()
     features = pd.DataFrame(records, columns=output)
+    converted = {}
     for name in output:
         values = features[name]
-        result[name] = (
+        converted[name] = (
             pd.to_datetime(values).to_numpy()
             if name.endswith("_date")
             else pd.to_numeric(values).to_numpy()
         )
-    return result
+    return pd.concat([spine.copy(), pd.DataFrame(converted, index=spine.index)], axis=1)
 
 
 def build_features(
@@ -215,6 +221,8 @@ def build_features(
     lags: Sequence[int] = (1, 2, 8),
     aggregations: Sequence[str] = AGGREGATIONS,
     max_staleness_days: int | None = None,
+    relative_historico: bool = False,
+    ref_col: str | None = None,
 ) -> pd.DataFrame:
     """Enrich df_spine with point-in-time features sourced only from df_base.
 
@@ -232,14 +240,49 @@ def build_features(
     values; empty windows have null statistics and zero counts. Differences are
     current minus window mean. Duplicate base entity/date records are rejected.
 
+    relative_historico adds comparisons with requested lags and level statistics.
+    ref_col adds same-observation value/ref_col series to the temporal engine.
+    Both options together also compare ratio series with their own histories.
+    Zero/null denominators produce null; ratios stay on the ratio scale.
+
     Returns df_spine with its original rows and columns plus feature columns.
     See docs/temporal.md for naming, validation, and backend execution details.
     """
-    return temporal_features(
+    keys, scores, all_scores, windows, lags, aggregations, ratios, specs = build_config(
+        df_base,
+        df_spine,
+        key_cols,
+        value_cols,
+        date_col,
+        reference_date_col,
+        period_unit,
+        windows,
+        lags,
+        aggregations,
+        max_staleness_days,
+        relative_historico,
+        ref_col,
+    )
+    if ref_col is not None and not is_numeric_dtype(df_base[ref_col]):
+        raise ValueError("ref_col must be numeric")
+    if any(not is_numeric_dtype(df_base[s]) for s in scores):
+        raise ValueError("Value columns must be numeric")
+
+    def divide(left, right):
+        return left / right.where(right.notna() & right.ne(0))
+
+    if ratios:
+        df_base = df_base.assign(
+            **{
+                name: divide(df_base[source], df_base[ref_col])
+                for name, source in ratios.items()
+            }
+        )
+    result = temporal_features(
         spine=df_spine,
         history=df_base,
-        entity_cols=key_cols,
-        score_cols=value_cols,
+        entity_cols=keys,
+        score_cols=all_scores,
         reference_col=reference_date_col,
         observation_col=date_col,
         unit=period_unit,
@@ -249,6 +292,23 @@ def build_features(
         max_staleness_days=max_staleness_days,
         _date_diff=True,
     )
+    extra = {}
+    for name, operation, left, right in specs:
+        a, b = result[left], result[right]
+        extra[name] = (
+            a - b
+            if operation == "diff"
+            else 100 * (a - b)
+            if operation == "diff_pp"
+            else 100 * divide(a - b, b)
+            if operation == "pct_change"
+            else divide(a, b.abs())
+            if operation == "abs_ratio"
+            else divide(a, b)
+        )
+    if extra:
+        result = pd.concat([result, pd.DataFrame(extra, index=result.index)], axis=1)
+    return result
 
 
 def build_autoregressive_features(

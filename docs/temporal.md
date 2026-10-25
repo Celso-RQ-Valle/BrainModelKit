@@ -186,6 +186,119 @@ duplicates and duplicates with disjoint non-null scores. Aggregate or resolve
 duplicates using an explicit business rule before calling. The APIs never choose
 an arbitrary record. Duplicate spine entity/reference rows are fully preserved.
 
+## Optional relationship families
+
+`build_features` adds two keyword-only options on both backends:
+`relative_historico: bool = False` and `ref_col: str | None = None`.
+Existing calls and the legacy APIs retain their outputs. Neither option changes
+window boundaries, as-of lookups, duplicate detection, or staleness rules.
+
+| Options | Additional features |
+| --- | --- |
+| Both disabled | None; existing `current_minus_mean` remains for every window. |
+| `relative_historico=True` | Historical comparisons for each `value_cols` series. |
+| `ref_col="credit_limit"` | Temporal features for each `value_cols / credit_limit` series. |
+| Both enabled | Both families, including historical comparisons of ratio series. |
+
+### Own-history comparisons
+
+Let `C` be the latest valid current value, `H` the requested lag or window
+statistic, and `M`, `S`, `lo`, `hi` the window mean, sample std, minimum, maximum.
+For every requested lag and every **enabled** level aggregation (`mean`, `median`,
+`min`, `max`), the historical relationships are:
+
+| Formula | Example name for `balance`, three-month mean or one-month lag |
+| --- | --- |
+| `C - H` | `balance__current_vs_lag_1_months_diff` |
+| `C - M` | `balance__current_minus_mean_3_months` (existing name, no duplicate `_diff`) |
+| `C / H` | `balance__current_vs_mean_3_months_ratio` |
+| `100 * (C - H) / H` | `balance__current_vs_lag_1_months_pct_change` |
+| `hi - lo`, if both `min`, `max` enabled | `balance__range_3_months` |
+| `(C - M) / S`, if both `mean`, `std` enabled | `balance__standardized_deviation_3_months` |
+| `S / abs(M)`, if both `mean`, `std` enabled | `balance__coefficient_of_variation_3_months` |
+
+For median/min/max differences, use e.g.
+`balance__current_vs_median_3_months_diff`. Names use the requested period unit,
+including `days` and `weeks`. Only the requested lags/windows are considered;
+there are no automatic comparisons between pairs of windows.
+
+`aggregations=["mean"]` adds no median, range, standardized-deviation, or
+coefficient-of-variation calculations. `sum`, `count`, and `std` remain ordinary
+aggregations and are not treated as historical levels for difference/ratio/change
+comparisons. The existing `current_minus_mean` is always retained, even when
+`mean` is not selected; its internal mean calculation is the backward-compatible
+exception to the selected-statistics rule. It does not enable other mean-based
+relationships unless `mean` is requested.
+
+### Reference-column series
+
+`ref_col` must name a numeric column in `df_base`, distinct from the key/date
+columns. For every requested source other than the reference column, form a
+same-row historical ratio, named `<value>__over__<ref_col>`. For example:
+
+```text
+used_balance__over__credit_limit__current
+used_balance__over__credit_limit__current_date_diff_days
+used_balance__over__credit_limit__lag_1_months
+used_balance__over__credit_limit__mean_3_months
+used_balance__over__credit_limit__count_3_months
+used_balance__over__credit_limit__current_minus_mean_3_months
+```
+
+This derived series passes through the same temporal engine, with the same
+requested windows, lags, aggregations, and observation-age indicators as the
+original series. Historical numerator and denominator always come from the same
+entity and observation date. No join pairs values from different dates and no
+historical numerator is divided by a current denominator. If `ref_col` also
+appears in `value_cols`, its individual features remain, but no self-ratio is made.
+
+January balance 20 / limit 100 gives **0.20**; February balance 60 / limit 200
+gives **0.30**. The two-observation mean ratio is **0.25**, not
+`mean(balance) / mean(limit) = 40 / 150`. Ratios remain on the ratio scale: 0.20
+represents 20%. Every requested aggregation is supported; the sum is **0.50**
+here, a sum of ratio observations, **not accumulated utilization**.
+
+When both options are enabled, ratio series also receive the own-history
+comparisons and one additional scale-specific difference per requested lag and
+enabled level statistic:
+
+| Interpretation (current 0.30, lag 0.20) | Value | Suffix after `used_balance__over__credit_limit__` |
+| --- | ---: | --- |
+| Difference in ratio, `C - H` | 0.10 | `current_vs_lag_1_months_diff` |
+| Difference in percentage points, `100 * (C - H)` | 10 p.p. | `current_vs_lag_1_months_diff_pp` |
+| Ratio, `C / H` | 1.50 | `current_vs_lag_1_months_ratio` |
+| Percentage change, `100 * (C - H) / H` | 50% | `current_vs_lag_1_months_pct_change` |
+
+For window means, the absolute ratio difference keeps the existing
+`current_minus_mean_<k>_<unit>` name. Its percentage-point counterpart is
+`current_vs_mean_<k>_<unit>_diff_pp`. Aggregations are not duplicated on a
+percentage scale. `ref_col` alone does not enable these optional comparisons.
+
+### Missing values and validation
+
+A zero, NaN, or null denominator produces a null ratio; a missing numerator also
+produces null. Spark division is guarded before evaluation, including with ANSI
+mode enabled. The library never fills nulls with zero. Derived-series current/lag
+values use the latest **valid ratio**, not the latest numerator or denominator
+individually, and their observation age refers to that actual historical row.
+A more recent invalid ratio does not hide an earlier valid ratio; staleness still
+applies from each lookup cutoff. Future observations are excluded.
+
+Windows count only valid ratios. Empty-window statistics, including sum, are
+null with count zero. Sample std is null with fewer than two valid observations.
+Standardized deviation is null for zero std, and coefficient of variation is
+null for zero mean. Comparisons with a missing current, lag, or statistic are null.
+
+Missing/non-numeric reference columns fail with a `ValueError`. Duplicate
+entity/date records remain errors even if one row has an invalid ratio. Generated
+series names cannot collide with existing base or spine columns; generated output
+names cannot collide with spine columns or one another. Original spine columns,
+rows, and duplicates are retained; pandas also preserves its index/order.
+
+For an executable example on the project's simulated credit export, run
+`python examples/temporal/feature_relationships.py simulated_credit.csv` from a
+checkout. The [README](../README.md#spark-prepare-data) generates the CSV.
+
 ## Execution and scale
 
 Pandas sorts history once, groups non-null values by entity and source column,
@@ -205,3 +318,12 @@ and many reference dates. All earlier history is eligible for unlimited-stalenes
 lookups; exact median also has group-size memory costs. Partition by entity and
 process bounded spine batches for large workloads. Validation adds scans/shuffles.
 Spark output order is unspecified; use `orderBy` explicitly when needed.
+
+Reference ratios are projected once before the temporal engine. Spark uses native
+expressions and includes all original/derived series in the existing history join
+and grouped aggregation; it does not collect historical records or call
+`toPandas()`. Historical relationships are a final projection over computed
+features, with no additional history joins or window aggregations. pandas uses
+native Series arithmetic and shares the same feature configuration/naming rules.
+Only enabled relationship families are constructed. The unchanged legacy mean
+needed for `current_minus_mean` remains the sole implicit window statistic.
