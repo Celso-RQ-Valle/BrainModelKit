@@ -17,8 +17,9 @@ The journey is **install ? diagnose ? prepare ? build ? select ? train ?
 validate/tune ? evaluate ? analyze segments ? save/load/score**. Each chapter
 follows this order. Its snippets continue one workflow unless marked as an
 alternative. [Complete runnable examples](examples/journey/README.md) include
-imports, synthetic data, missing-value handling, and assertions. Run them from a
-repository checkout; the library APIs also accept your own production DataFrames.
+imports, missing-value handling, and assertions using a separate small fixture.
+The README workflow below uses the project's credit and bureau-history simulators,
+also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb).
 
 ## Contents
 
@@ -70,39 +71,54 @@ Keep managed Spark versions; see [managed installs and SynapseML setup](docs/set
 
 ### Spark prepare data
 
-**Continuing the main workflow.** In a checkout, this helper creates 120 synthetic
-accounts in three disjoint monthly cohorts. It demonstrates noisy class-conditional
-signal, not a production labeling method or a performance benchmark.
+**Continuing the main workflow.** Use the project's `simulate_credit_data` and
+`simulate_bureau_history` APIs. The credit simulator supplies the binary default
+label, company-size segments, and 20 numeric inputs. Its noisy class-conditional
+signal is for demonstrations, not a production labeling recipe or benchmark.
+Bureau histories are simulated independently of the credit label.
 
 ```python
-from pyspark.sql import SparkSession
+from datetime import date
 
-from examples.journey.sample_data import make_rows
+from pyspark.sql import SparkSession, functions as F
+from brainmodelkit.pyspark import simulate_credit_data, simulate_bureau_history
 
 spark = SparkSession.builder.appName("BrainModelKitJourney").getOrCreate()
-base_rows, spine_rows = make_rows()
-df_base = spark.createDataFrame(
-    base_rows,
-    "account_id string, observation_date date, revenue double, balance double",
+credit, credit_features = simulate_credit_data(
+    spark, row_count=1200, feature_count=20, max_days=90, seed=42
 )
-df_spine = spark.createDataFrame(
-    spine_rows,
-    "account_id string, reference_date date, segment string, target int",
+# The simulator dates are relative to today. Rebase them for fixed tutorial splits.
+first_date = credit.agg(F.min("reference_date")).first()[0]
+df_spine = (
+    credit.withColumn(
+        "reference_date",
+        F.date_add(F.lit(date(2026, 4, 1)),
+                   F.datediff("reference_date", F.lit(first_date))),
+    )
+    .withColumnRenamed("company_id", "account_id")
+    .withColumnRenamed("default_flag", "target")
+    .withColumnRenamed("company_size", "segment")
 )
-```
+df_base = simulate_bureau_history(
+    df_spine.select("account_id"), entity_cols="account_id",
+    initial_date="2026-01-01", final_date="2026-06-30", seed=42,
+)
 
-For real data, replace those two DataFrames, retaining these roles:
+# Optional: export this small credit sample for the pandas guide (requires pandas).
+df_spine.toPandas().to_csv("simulated_credit.csv", index=False)
+```
 
 | Frame | Required here | Role |
 | --- | --- | --- |
-| `df_base` | `account_id`, `observation_date`, numeric `revenue`, `balance` | Historical source; no duplicate entity/date pairs. |
-| `df_spine` | `account_id`, `reference_date`, binary `target`, `segment` | Rows to model; target 1 is the event. Segment is for diagnostics, not a feature. |
+| `df_base` | `account_id`, `observation_date`, numeric `bureau_score` | Simulated historical source; no duplicate entity/date pairs. |
+| `df_spine` | `account_id`, `reference_date`, binary `target`, `segment`, `feature_01` through `feature_20` | Simulated credit records; target 1 is default. Segment is company size and is used only for diagnostics. |
 
-Use labels whose outcomes are observable for each training period and values that
-were available by its reference date. April is development training, May is
-validation for choices, and June is final OOT. Accounts are disjoint across these
-cohorts; this example does not randomly split rows and call them out-of-time.
-Standalone alternatives: [credit simulation](docs/standalone-examples.md#spark-credit-simulation) returns a DataFrame and feature names; [history simulation](docs/standalone-examples.md#spark-history-simulation) creates per-entity observations.
+April is development training, May is validation, and June is final OOT.
+These are chronological partitions of simulated dates, not evidence of real
+out-of-time performance. With real data, use labels whose outcomes are observable
+for each training period and inputs available by the reference date.
+See the [credit simulation](docs/standalone-examples.md#spark-credit-simulation)
+and [history simulation](docs/standalone-examples.md#spark-history-simulation) options.
 
 ### Spark features
 
@@ -118,14 +134,15 @@ enriched = build_features(
     df_base,
     df_spine,
     key_cols="account_id",
-    value_cols=["revenue", "balance"],
+    value_cols=["bureau_score"],
     reference_date_col="reference_date",
     windows=[3],
     lags=[1],
     period_unit="months",
     aggregations=["mean", "sum", "count"],
 )
-candidate_features = [c for c in enriched.columns if c not in df_spine.columns]
+history_features = [c for c in enriched.columns if c not in df_spine.columns]
+candidate_features = credit_features + history_features
 ```
 
 `date_col` defaults to `observation_date`. Windows are **(reference ? k periods,
@@ -140,7 +157,8 @@ Missing lookups/statistics are null; empty windows have count zero, including a
 null sum. This recipe uses fixed zero filling as an explicit demonstration policy;
 it learns no statistics from validation or OOT. In production, fit any learned
 imputer/encoder on training data only and inside folds for CV. Keys, dates, target,
-and segment never enter `candidate_features`.
+segment, status, and industry section never enter `candidate_features`.
+The inputs combine the simulator's numeric credit columns with generated bureau features.
 
 ```python
 enriched = enriched.fillna(0, subset=candidate_features)
@@ -352,7 +370,7 @@ includes an illustrative result and full output conventions.
 
 The walkthrough used `save_model_to="none"`. To persist the frozen final recipe,
 run that final fit with folder persistence enabled (or use `--save-dir` in the
-[runnable example](examples/journey/README.md)). This does not choose new settings.
+[separate fixture-based runnable example](examples/journey/README.md)). This does not choose new settings.
 
 ```python
 saved_result = train_model(
@@ -415,36 +433,39 @@ Add optional extras only for the capabilities you use, such as `optimization`, `
 
 ### pandas prepare data
 
-**Continuing the main workflow.** In a checkout, this helper creates 120 synthetic
-accounts in three disjoint monthly cohorts. It demonstrates noisy class-conditional
-signal, not a production labeling method or a performance benchmark.
+**Continuing the main workflow.** Load `simulated_credit.csv` exported in
+[Spark prepare data](#spark-prepare-data), then generate bureau histories with the
+pandas simulator. `simulate_credit_data` is currently Spark-only: generating the
+CSV requires the Spark setup above; running this guide with an existing export
+requires only the pandas backend. Both guides use the same credit rows, labels,
+segments, numeric inputs, and April/May/June date splits.
 
 ```python
 import pandas as pd
+from brainmodelkit.pandas import simulate_bureau_history
 
-from examples.journey.sample_data import make_rows
-
-base_rows, spine_rows = make_rows()
-df_base = pd.DataFrame(
-    base_rows, columns=["account_id", "observation_date", "revenue", "balance"]
+df_spine = pd.read_csv(
+    "simulated_credit.csv", dtype={"account_id": "string"},
+    parse_dates=["reference_date"],
 )
-df_spine = pd.DataFrame(
-    spine_rows, columns=["account_id", "reference_date", "segment", "target"]
+credit_features = [f"feature_{i:02d}" for i in range(1, 21)]
+df_base = simulate_bureau_history(
+    df_spine[["account_id"]], entity_cols="account_id",
+    initial_date="2026-01-01", final_date="2026-06-30", seed=42,
 )
 ```
 
-For real data, replace those two DataFrames, retaining these roles:
-
 | Frame | Required here | Role |
 | --- | --- | --- |
-| `df_base` | `account_id`, `observation_date`, numeric `revenue`, `balance` | Historical source; no duplicate entity/date pairs. |
-| `df_spine` | `account_id`, `reference_date`, binary `target`, `segment` | Rows to model; target 1 is the event. Segment is for diagnostics, not a feature. |
+| `df_base` | `account_id`, `observation_date`, numeric `bureau_score` | Simulated historical source; no duplicate entity/date pairs. |
+| `df_spine` | `account_id`, `reference_date`, binary `target`, `segment`, `feature_01` through `feature_20` | Simulated credit records; target 1 is default. Segment is company size and is used only for diagnostics. |
 
-Use labels whose outcomes are observable for each training period and values that
-were available by its reference date. April is development training, May is
-validation for choices, and June is final OOT. Accounts are disjoint across these
-cohorts; this example does not randomly split rows and call them out-of-time.
-Standalone alternatives: [history simulation](docs/standalone-examples.md#pandas-history-simulation) creates per-entity observations; [classification examples](docs/standalone-examples.md#pandas-feature-selection-quickstart) use sklearn. `simulate_credit_data` is Spark-only.
+April is development training, May is validation, and June is final OOT.
+The credit inputs have simulated class-conditional signal; bureau histories are
+independent of the label. These chronological partitions are a workflow demo,
+not a performance benchmark. With real data, use labels observable for each
+training period and values available by the reference date.
+See [history simulation options](docs/standalone-examples.md#pandas-history-simulation).
 
 ### pandas features
 
@@ -460,14 +481,15 @@ enriched = build_features(
     df_base,
     df_spine,
     key_cols="account_id",
-    value_cols=["revenue", "balance"],
+    value_cols=["bureau_score"],
     reference_date_col="reference_date",
     windows=[3],
     lags=[1],
     period_unit="months",
     aggregations=["mean", "sum", "count"],
 )
-candidate_features = [c for c in enriched.columns if c not in df_spine.columns]
+history_features = [c for c in enriched.columns if c not in df_spine.columns]
+candidate_features = credit_features + history_features
 ```
 
 `date_col` defaults to `observation_date`. Windows are **(reference ? k periods,
@@ -482,7 +504,8 @@ Missing lookups/statistics are null; empty windows have count zero, including a
 null sum. This recipe uses fixed zero filling as an explicit demonstration policy;
 it learns no statistics from validation or OOT. In production, fit any learned
 imputer/encoder on training data only and inside folds for CV. Keys, dates, target,
-and segment never enter `candidate_features`.
+segment, status, and industry section never enter `candidate_features`.
+The inputs combine the simulator's numeric credit columns with generated bureau features.
 
 ```python
 enriched[candidate_features] = enriched[candidate_features].fillna(0)
@@ -548,15 +571,21 @@ its `oot_*` metric names do not make this development set final OOT.
 
 ```python
 from brainmodelkit.training.pandas import train_model
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
-baseline_params = {"C": 0.1, "max_iter": 1000}
+# Fit scaling on training rows only; credit inputs and bureau scores differ in scale.
+classifier = make_pipeline(StandardScaler(), LogisticRegression())
+
+baseline_params = {"logisticregression__C": 0.1, "logisticregression__max_iter": 1000}
 result = train_model(
     "baseline",
     "target",
     selected_features,
     train_df,
     validation_df,
-    model="logistic_regression",
+    model=classifier,
     model_params=baseline_params,
     save_model_to="none",
 )
@@ -589,14 +618,14 @@ May validation; do not look at June OOT while choosing. This small manual search
 preserves the chronological split and the training-only selected subset.
 
 ```python
-alternative_params = {"C": 1.0, "max_iter": 1000}
+alternative_params = {"logisticregression__C": 1.0, "logisticregression__max_iter": 1000}
 alternative = train_model(
     "alternative",
     "target",
     selected_features,
     train_df,
     validation_df,
-    model="logistic_regression",
+    model=classifier,
     model_params=alternative_params,
     save_model_to="none",
 )
@@ -629,7 +658,7 @@ result = train_model(
     selected_features,
     development_df,
     oot_df,
-    model="logistic_regression",
+    model=classifier,
     model_params=best_params,
     save_model_to="none",
 )
@@ -690,7 +719,7 @@ includes an illustrative result and full output conventions.
 
 The walkthrough used `save_model_to="none"`. To persist the frozen final recipe,
 run that final fit with folder persistence enabled (or use `--save-dir` in the
-[runnable example](examples/journey/README.md)). This does not choose new settings.
+[separate fixture-based runnable example](examples/journey/README.md)). This does not choose new settings.
 
 ```python
 saved_result = train_model(
@@ -699,7 +728,7 @@ saved_result = train_model(
     selected_features,
     development_df,
     oot_df,
-    model="logistic_regression",
+    model=classifier,
     model_params=best_params,
     save_model_to="folder",
     model_format="pickle",
