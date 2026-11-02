@@ -23,6 +23,7 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
 
 ## Contents
 
+- [Custom feature quickstart](#custom-feature-quickstart)
 - [Spark guide](#spark-guide)
   - [Install and diagnose](#spark-install-and-diagnose)
   - [Prepare data](#spark-prepare-data)
@@ -43,6 +44,111 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
   - [Save, load, and score](#pandas-save-load-and-score)
 - [Reference and troubleshooting](#reference-and-troubleshooting)
 - [Project information](#project-information)
+
+## Custom feature quickstart
+
+This standalone example uses pandas and includes all its input data. From a
+checkout containing the new API, install the backend:
+
+```bash
+python -m pip install -e ".[pandas]"
+```
+
+Copy and run the complete block below, or run
+`python examples/temporal/custom_columns.py` from the repository root.
+Two accounts share a customer ID; the composite key keeps their histories separate.
+
+```python
+import pandas as pd
+
+from brainmodelkit.pandas import build_features
+
+df_base = pd.DataFrame(
+    {
+        "customer_id": ["c1", "c1", "c1", "c1"],
+        "account_id": ["a1", "a1", "a1", "a2"],
+        "observation_date": ["2026-01-01", "2026-02-01", "2026-03-01", "2026-03-01"],
+        "used_balance": [10.0, None, 20.0, 90.0],
+        "overdue_balance": [1.0, 2.0, None, 5.0],
+        "credit_limit": [100.0, 0.0, 100.0, 200.0],
+    }
+)
+df_spine = pd.DataFrame(
+    {
+        "customer_id": ["c1", "c1"],
+        "account_id": ["a1", "a2"],
+        "dt_ref": ["2026-03-01", "2026-03-01"],
+    }
+)
+create_cols = {
+    "total_balance": {
+        "op": "sum",
+        "args": [{"col": "used_balance"}, {"col": "overdue_balance"}],
+    },
+    "total_utilization": {
+        "op": "divide",
+        "args": [
+            {
+                "op": "sum",
+                "args": [{"col": "used_balance"}, {"col": "overdue_balance"}],
+            },
+            {"col": "credit_limit"},
+        ],
+    },
+}
+# These options do not duplicate any explicitly passed keyword arguments.
+feature_options = dict(windows=[3], lags=[1], period_unit="months")
+enriched = build_features(
+    df_base=df_base,
+    df_spine=df_spine,
+    key_cols=["customer_id", "account_id"],
+    value_cols=["used_balance", "credit_limit", "total_balance", "total_utilization"],
+    create_cols=create_cols,
+    nullable=False,
+    relative_historico=True,
+    **feature_options,
+)
+default = build_features(
+    df_base=df_base,
+    df_spine=df_spine,
+    key_cols=["customer_id", "account_id"],
+    value_cols=["used_balance", "credit_limit"],
+    create_cols=None,
+    nullable=True,
+    **feature_options,
+)
+assert enriched.loc[0, "used_balance_mean_3_months"] == 10
+assert default.loc[0, "used_balance_mean_3_months"] == 15
+print(
+    enriched[
+        [
+            "customer_id",
+            "account_id",
+            "total_balance_mean_3_months",
+            "total_utilization_mean_3_months",
+        ]
+    ].to_string(index=False)
+)
+```
+
+Expected output (rounded here):
+
+| customer_id | account_id | total_balance_mean_3_months | total_utilization_mean_3_months |
+| --- | --- | ---: | ---: |
+| c1 | a1 | 11.0 | 0.103333 |
+| c1 | a2 | 95.0 | 0.475000 |
+
+`sum` adds operands on each historical row. Both custom names must appear in
+`value_cols`; `overdue_balance` is only an operand and needs no temporal outputs.
+The nested utilization expression uses original columns, since custom expressions
+cannot reference another newly declared custom column.
+
+With `nullable=False`, the existing null observations become zero before arithmetic.
+February's zero credit limit produces a null utilization, then zero before temporal
+aggregation. No absent periods are added. The assertions demonstrate that the mean
+of `[10, null, 20]` is 10 under this policy and 15 with the defaults.
+`relative_historico=True` additionally compares each series with its own past.
+For more options, see the [full parameter reference](docs/temporal.md).
 
 ## Spark guide
 
