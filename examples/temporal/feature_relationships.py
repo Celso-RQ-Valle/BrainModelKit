@@ -38,7 +38,7 @@ def main():
     enriched = build_features(
         df_base,
         df_spine,
-        key_cols="account_id",
+        key_cols=["account_id"],
         reference_date_col="reference_date",
         value_cols=["used_balance", "credit_limit"],
         windows=[1, 3, 6],
@@ -51,7 +51,7 @@ def main():
     generated_features = [c for c in enriched.columns if c not in df_spine.columns]
     credit_features = [f"feature_{i:02d}" for i in range(1, 21)]
     candidate_features = credit_features + generated_features
-    prefix = "used_balance__over__credit_limit__"
+    prefix = "used_balance_over_credit_limit_"
     print(
         enriched[
             [

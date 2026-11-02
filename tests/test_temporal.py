@@ -378,6 +378,12 @@ def test_autoregressive_base_spine_contract(backend, api, request):
                     pd.to_datetime(expected.as_of) - expected[name]
                 ).dt.days
                 expected.rename(columns={name: name + "_diff_days"}, inplace=True)
+        expected.rename(
+            columns={
+                name: name.replace("__", "_") for name in expected if name not in spine
+            },
+            inplace=True,
+        )
     if backend == "pyspark":
         spark = request.getfixturevalue("spark")
         base = spark.createDataFrame(
@@ -409,12 +415,13 @@ def test_autoregressive_base_spine_contract(backend, api, request):
     )
     assert len(actual) == len(spine)
     assert actual.score.eq(-999).all()
+    prefix = "score_" if api == "build_features" else "score__"
     first = actual[actual.payload == "first"].iloc[0]
-    assert first.score__current == 50
-    assert first.score__lag_1_weeks == 50
-    assert pd.isna(first.score__lag_2_weeks)
-    assert first.score__mean_8_weeks == 45
-    assert pd.isna(actual[actual.payload == "early"].iloc[0].score__current)
+    assert first[prefix + "current"] == 50
+    assert first[prefix + "lag_1_weeks"] == 50
+    assert pd.isna(first[prefix + "lag_2_weeks"])
+    assert first[prefix + "mean_8_weeks"] == 45
+    assert pd.isna(actual[actual.payload == "early"].iloc[0][prefix + "current"])
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
@@ -481,22 +488,22 @@ def test_generic_features_and_deprecation(backend, request):
         assert "revenue__current_date_diff_days" not in legacy.columns
         actual = result.to_dict("records")
     assert len(actual) == 3
-    assert actual[0]["revenue__current"] == 10000
-    assert actual[0]["revenue__lag_1_months"] == -20
-    assert actual[0]["revenue__sum_1_months"] == 10000
-    assert actual[0]["balance__current"] == 25000
-    assert actual[2]["balance__count_1_months"] == 0
-    assert actual[0]["revenue__current_date_diff_days"] == 30
-    assert actual[0]["revenue__lag_1_months_date_diff_days"] == 31
-    assert actual[0]["balance__current_date_diff_days"] == 30
-    assert pd.isna(actual[2]["revenue__current_date_diff_days"])
+    assert actual[0]["revenue_current"] == 10000
+    assert actual[0]["revenue_lag_1_months"] == -20
+    assert actual[0]["revenue_sum_1_months"] == 10000
+    assert actual[0]["balance_current"] == 25000
+    assert actual[2]["balance_count_1_months"] == 0
+    assert actual[0]["revenue_current_date_diff_days"] == 30
+    assert actual[0]["revenue_lag_1_months_date_diff_days"] == 31
+    assert actual[0]["balance_current_date_diff_days"] == 30
+    assert pd.isna(actual[2]["revenue_current_date_diff_days"])
     assert not any(name.endswith("_date") for name in result.columns)
     if backend == "pyspark":
         from pyspark.sql import functions as F
 
-        collision = spine.withColumn("revenue__current_date_diff_days", F.lit(0))
+        collision = spine.withColumn("revenue_current_date_diff_days", F.lit(0))
     else:
-        collision = spine.assign(revenue__current_date_diff_days=0)
+        collision = spine.assign(revenue_current_date_diff_days=0)
     with pytest.raises(ValueError, match="already exist"):
         module.build_features(base, collision, **options)
 
@@ -589,11 +596,11 @@ def test_integrated_relationship_options(backend, relative, reference, request):
         spine.sort_values("payload").reset_index(drop=True),
     )
     row = actual[actual.payload == "main"].iloc[0]
-    assert row.balance__current == 90  # No exact reference-date observation.
-    assert row.balance__current_date_diff_days == 6
-    assert row.balance__lag_1_months == 20
-    assert row.balance__current_minus_mean_2_months == pytest.approx(27.5)
-    assert not any("limit__over__limit" in name for name in actual)
+    assert row.balance_current == 90  # No exact reference-date observation.
+    assert row.balance_current_date_diff_days == 6
+    assert row.balance_lag_1_months == 20
+    assert row.balance_current_minus_mean_2_months == pytest.approx(27.5)
+    assert not any("limit_over_limit" in name for name in actual)
     if not relative and reference is None:
         legacy = temporal_features(
             spine,
@@ -606,26 +613,26 @@ def test_integrated_relationship_options(backend, relative, reference, request):
         )
         pd.testing.assert_frame_equal(expected, legacy)
     if relative:
-        assert row.balance__current_vs_lag_1_months_diff == 70
-        assert row.balance__current_vs_lag_1_months_ratio == 4.5
-        assert row.balance__current_vs_lag_1_months_pct_change == 350
-        assert row.balance__range_2_months == 70
-        assert row.balance__current_vs_median_2_months_diff == 20
-        assert row.balance__current_vs_min_2_months_diff == 70
-        assert row.balance__current_vs_max_2_months_diff == 0
-        assert row.balance__current_vs_mean_2_months_ratio == pytest.approx(90 / 62.5)
-        assert row.balance__standardized_deviation_2_months == pytest.approx(
+        assert row.balance_current_vs_lag_1_months_diff == 70
+        assert row.balance_current_vs_lag_1_months_ratio == 4.5
+        assert row.balance_current_vs_lag_1_months_pct_change == 350
+        assert row.balance_range_2_months == 70
+        assert row.balance_current_vs_median_2_months_diff == 20
+        assert row.balance_current_vs_min_2_months_diff == 70
+        assert row.balance_current_vs_max_2_months_diff == 0
+        assert row.balance_current_vs_mean_2_months_ratio == pytest.approx(90 / 62.5)
+        assert row.balance_standardized_deviation_2_months == pytest.approx(
             27.5 / pd.Series([20.0, 60.0, 80.0, 90.0]).std()
         )
-        assert row.balance__coefficient_of_variation_2_months == pytest.approx(
+        assert row.balance_coefficient_of_variation_2_months == pytest.approx(
             pd.Series([20.0, 60.0, 80.0, 90.0]).std() / 62.5
         )
-        assert pd.isna(row.balance__current_vs_lag_6_months_ratio)
-        assert "balance__current_vs_mean_2_months_diff" not in actual
+        assert pd.isna(row.balance_current_vs_lag_6_months_ratio)
+        assert "balance_current_vs_mean_2_months_diff" not in actual
     else:
         assert not any("_pct_change" in name for name in actual)
     if reference:
-        prefix = "balance__over__limit__"
+        prefix = "balance_over_limit_"
         assert row[prefix + "current"] == pytest.approx(0.3)
         assert row[prefix + "lag_1_months"] == pytest.approx(0.2)
         assert row[prefix + "current_date_diff_days"] == 13
@@ -634,8 +641,8 @@ def test_integrated_relationship_options(backend, relative, reference, request):
         assert row[prefix + "sum_2_months"] == pytest.approx(0.5)
         assert row[prefix + "count_2_months"] == 2
         assert pd.isna(row[prefix + "std_1_months"])
-        assert row["second__over__limit__current"] == pytest.approx(0.15)
-        assert row.limit__current == 400
+        assert row["second_over_limit_current"] == pytest.approx(0.15)
+        assert row.limit_current == 400
         if relative:
             assert row[prefix + "current_vs_lag_1_months_diff"] == pytest.approx(0.1)
             assert row[prefix + "current_vs_lag_1_months_diff_pp"] == pytest.approx(10)
@@ -645,7 +652,7 @@ def test_integrated_relationship_options(backend, relative, reference, request):
             assert row[prefix + "current_minus_mean_2_months"] == pytest.approx(0.05)
             assert row[prefix + "current_vs_mean_2_months_diff_pp"] == pytest.approx(5)
     else:
-        assert not any("__over__" in name for name in actual)
+        assert not any("_over_" in name for name in actual)
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
@@ -667,21 +674,21 @@ def test_relationship_partial_aggregations(backend, aggs, request):
         ref_col="limit",
     )
     row = result.iloc[0]
-    assert row.balance__current_minus_mean_2_months == pytest.approx(27.5)
-    for score in ("balance", "balance__over__limit"):
+    assert row.balance_current_minus_mean_2_months == pytest.approx(27.5)
+    for score in ("balance", "balance_over_limit"):
         for agg in ("mean", "median", "min", "max"):
-            assert (f"{score}__current_vs_{agg}_2_months_ratio" in result) == (
+            assert (f"{score}_current_vs_{agg}_2_months_ratio" in result) == (
                 agg in aggs
             )
-        assert (f"{score}__range_2_months" in result) == ({"min", "max"} <= set(aggs))
-        assert f"{score}__standardized_deviation_2_months" not in result
-        assert f"{score}__coefficient_of_variation_2_months" not in result
+        assert (f"{score}_range_2_months" in result) == ({"min", "max"} <= set(aggs))
+        assert f"{score}_standardized_deviation_2_months" not in result
+        assert f"{score}_coefficient_of_variation_2_months" not in result
         for agg in ("sum", "count", "std"):
-            assert not any(f"__current_vs_{agg}_" in name for name in result)
+            assert not any(f"_current_vs_{agg}_" in name for name in result)
         assert not any("_lag_" in name for name in result)
     if aggs == ["sum", "count"]:
-        assert row.balance__over__limit__sum_2_months == pytest.approx(0.5)
-        assert row.balance__over__limit__count_2_months == 2
+        assert row.balance_over_limit_sum_2_months == pytest.approx(0.5)
+        assert row.balance_over_limit_count_2_months == 2
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
@@ -700,19 +707,19 @@ def test_relationship_staleness_empty_and_nulls(backend, request):
         max_staleness_days=10,
     )
     main = result[result.payload == "main"].iloc[0]
-    assert main.balance__current == 90
+    assert main.balance_current == 90
     assert pd.isna(
-        main.balance__over__limit__current
+        main.balance_over_limit_current
     )  # Latest valid ratio is 13 days old.
     assert (
-        main.balance__over__limit__count_1_months == 1
+        main.balance_over_limit_count_1_months == 1
     )  # Staleness does not filter windows.
     for payload in ("stale", "missing"):
         row = result[result.payload == payload].iloc[0]
-        assert pd.isna(row.balance__over__limit__current)
-        assert pd.isna(row.balance__over__limit__current_date_diff_days)
-        assert row.balance__over__limit__count_1_months == 0
-        assert pd.isna(row.balance__over__limit__sum_1_months)
+        assert pd.isna(row.balance_over_limit_current)
+        assert pd.isna(row.balance_over_limit_current_date_diff_days)
+        assert row.balance_over_limit_count_1_months == 0
+        assert pd.isna(row.balance_over_limit_sum_1_months)
     empty = relationship_build(
         backend,
         request,
@@ -724,8 +731,8 @@ def test_relationship_staleness_empty_and_nulls(backend, request):
         relative_historico=True,
         ref_col="limit",
     )
-    assert empty.iloc[0].balance__over__limit__count_1_months == 0
-    assert pd.isna(empty.iloc[0].balance__over__limit__current)
+    assert empty.iloc[0].balance_over_limit_count_1_months == 0
+    assert pd.isna(empty.iloc[0].balance_over_limit_current)
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
@@ -777,11 +784,11 @@ def test_relationship_zero_statistics_and_no_driver_collection(
             relative_historico=True,
         )
         row = result.iloc[0]
-    assert pd.isna(row["balance__current_vs_lag_1_months_ratio"])
-    assert pd.isna(row["balance__current_vs_mean_2_months_pct_change"])
-    assert pd.isna(row["balance__standardized_deviation_2_months"])
-    assert pd.isna(row["balance__coefficient_of_variation_2_months"])
-    assert row["second__coefficient_of_variation_2_months"] == pytest.approx(2**0.5 / 3)
+    assert pd.isna(row["balance_current_vs_lag_1_months_ratio"])
+    assert pd.isna(row["balance_current_vs_mean_2_months_pct_change"])
+    assert pd.isna(row["balance_standardized_deviation_2_months"])
+    assert pd.isna(row["balance_coefficient_of_variation_2_months"])
+    assert row["second_coefficient_of_variation_2_months"] == pytest.approx(2**0.5 / 3)
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
@@ -822,15 +829,13 @@ def test_relationship_validation(backend, request):
     with pytest.raises(ValueError, match="ref_col must be numeric"):
         build(add(base, "limit", "text"), target, **options, ref_col="limit")
     for name in (
-        "balance__current_vs_lag_1_months_diff",
-        "balance__over__limit__current",
+        "balance_current_vs_lag_1_months_diff",
+        "balance_over_limit_current",
     ):
         with pytest.raises(ValueError, match="already exist"):
             build(base, add(target, name, 0.0), **options, ref_col="limit")
     with pytest.raises(ValueError, match="collide"):
-        build(
-            add(base, "balance__over__limit", 0.0), target, **options, ref_col="limit"
-        )
+        build(add(base, "balance_over_limit", 0.0), target, **options, ref_col="limit")
     with pytest.raises(ValueError, match="bool"):
         build(base, target, **(options | {"relative_historico": "yes"}))
     duplicate = (
@@ -861,7 +866,7 @@ def test_relationship_units_and_ratio_nulls(backend, unit, lag, window, request)
         ref_col="limit",
     )
     row = result.iloc[0]
-    prefix = "balance__over__limit__"
+    prefix = "balance_over_limit_"
     assert row[prefix + f"current_vs_lag_{lag}_{unit}_diff_pp"] == pytest.approx(10)
     assert row[prefix + f"mean_{window}_{unit}"] == pytest.approx(0.25)
     assert row[prefix + f"standardized_deviation_{window}_{unit}"] == pytest.approx(
@@ -899,3 +904,255 @@ def test_relationship_pandas_index_inputs_and_empty_spine():
     assert (
         len(no_windows.columns) == len(spine.columns) + 6
     )  # Three series, current + age.
+
+
+@pytest.fixture(params=["pandas", "pyspark"])
+def custom_backend(request):
+    from importlib import import_module
+
+    backend = request.param
+    module = import_module(f"brainmodelkit.{backend}")
+    rows = [
+        ("a", "x", "2026-01-01", 10.0, 2.0, 10.0),
+        ("a", "x", "2026-02-01", None, 3.0, 0.0),
+        ("a", "x", "2026-03-01", 20.0, None, 10.0),
+        ("a", "y", "2026-03-01", 99.0, 1.0, 10.0),
+        ("b", "x", "2026-03-01", None, None, 0.0),
+    ]
+    refs = [
+        ("a", "x", "2026-03-01"),
+        ("a", "x", "2026-03-01"),
+        ("a", "y", "2026-03-01"),
+        ("b", "x", "2026-03-01"),
+        ("a", "z", "2026-03-01"),
+        ("a", "x", "2026-06-01"),
+    ]
+    if backend == "pandas":
+        base = pd.DataFrame(
+            rows, columns=["id", "branch", "observation_date", "x", "y", "den"]
+        )
+        spine = pd.DataFrame(refs, columns=["id", "branch", "dt_ref"])
+    else:
+        spark = request.getfixturevalue("spark")
+        spark.conf.set("spark.sql.ansi.enabled", "true")
+        base = spark.createDataFrame(
+            rows,
+            "id string, branch string, observation_date string, "
+            "x double, y double, den double",
+        )
+        spine = spark.createDataFrame(refs, "id string, branch string, dt_ref string")
+    return module.build_features, base, spine
+
+
+def custom_trees():
+    return {
+        "total__exact": {"op": "sum", "args": [{"col": "x"}, {"col": "y"}]},
+        "ratio": {
+            "op": "divide",
+            "args": [
+                {
+                    "op": "multiply",
+                    "args": [
+                        {"op": "subtract", "args": [{"col": "x"}, {"lit": 1}]},
+                        {"lit": 2},
+                        {"lit": 5},
+                    ],
+                },
+                {"col": "den"},
+            ],
+        },
+        "zero": {"op": "divide", "args": [{"lit": 1}, {"lit": 0}]},
+    }
+
+
+@pytest.mark.parametrize("nullable", [True, False])
+def test_custom_arithmetic_and_observation_nulls(custom_backend, nullable):
+    build, base, spine = custom_backend
+    result = build(
+        base,
+        spine,
+        key_cols=["id", "branch"],
+        value_cols=["x", *custom_trees()],
+        create_cols=custom_trees(),
+        nullable=nullable,
+        windows=[3],
+        lags=[1, 6],
+        relative_historico=True,
+        ref_col="den",
+    )
+    result = (
+        result
+        if isinstance(result, pd.DataFrame)
+        else pd.DataFrame([r.asDict() for r in result.collect()])
+    )
+    assert len(result) == 6
+    assert not any("__" in col for col in result.columns)
+    row = result.query("id == 'a' and branch == 'x' and dt_ref == '2026-03-01'").iloc[0]
+    assert row.x_mean_3_months == (15 if nullable else 10)
+    assert row.x_count_3_months == (2 if nullable else 3)
+    assert row.x_min_3_months == (10 if nullable else 0)
+    assert row.total_exact_mean_3_months == pytest.approx(12 if nullable else 35 / 3)
+    assert row.total_exact_current == (12 if nullable else 20)
+    assert row.ratio_current == 19  # ((20 - 1) * 2 * 5) / 10
+    assert row.ratio_mean_3_months == pytest.approx(14 if nullable else 28 / 3)
+    assert row.x_over_den_mean_3_months == (1.5 if nullable else 1)
+    assert pd.isna(row.x_lag_6_months)
+    assert pd.isna(row.zero_standardized_deviation_3_months)
+    assert pd.isna(row.zero_coefficient_of_variation_3_months)
+    assert pd.isna(row.zero_std_3_months) if nullable else row.zero_std_3_months == 0
+    assert pd.isna(row.zero_mean_3_months) if nullable else row.zero_mean_3_months == 0
+    all_null = result.query("id == 'b'").iloc[0]
+    assert all_null.x_count_3_months == (0 if nullable else 1)
+    assert (
+        pd.isna(all_null.x_mean_3_months) if nullable else all_null.x_mean_3_months == 0
+    )
+    assert pd.isna(all_null.x_std_3_months)
+    for empty in [
+        result.query("branch == 'z'").iloc[0],
+        result.query("dt_ref == '2026-06-01'").iloc[0],
+    ]:
+        assert empty.x_count_3_months == 0
+        assert pd.isna(empty.x_mean_3_months)
+        assert pd.isna(empty.x_sum_3_months)
+    isolated = result.query("branch == 'y'").iloc[0]
+    assert isolated.x_current == 99
+    assert isolated.x_count_3_months == 1
+    assert pd.isna(isolated.x_lag_1_months)
+    assert "total__exact" not in base.columns  # Caller schema was not mutated.
+
+
+@pytest.mark.parametrize(
+    "expr,match",
+    [
+        ({"op": "unknown", "args": []}, "Unknown"),
+        ({"op": "sum", "args": [{"lit": 1}]}, "operand count"),
+        ({"op": "divide", "args": [{"lit": 1}] * 3}, "operand count"),
+        ({"op": "multiply", "args": "x"}, "operand count"),
+        ({"col": "absent"}, "missing"),
+        ({"col": "id"}, "numeric"),
+        ({"col": "custom"}, "newly declared"),
+        ({"lit": "1"}, "numeric"),
+        ({"lit": True}, "numeric"),
+        ({"lit": float("inf")}, "numeric"),
+        ({"col": "x", "lit": 1}, "Malformed"),
+        ([], "dictionary"),
+    ],
+)
+def test_custom_expression_validation(custom_backend, expr, match):
+    build, base, spine = custom_backend
+    with pytest.raises(ValueError, match=match):
+        build(
+            base,
+            spine,
+            key_cols=["id", "branch"],
+            value_cols=["custom"],
+            create_cols={"custom": expr},
+        )
+
+
+@pytest.mark.parametrize(
+    "options,match",
+    [
+        ({"create_cols": {"custom": {"lit": 1}}}, "value_cols"),
+        ({"create_cols": {"x": {"lit": 1}}}, "conflicts"),
+        ({"create_cols": {"dt_ref": {"lit": 1}}}, "conflicts"),
+        ({"create_cols": []}, "dictionary"),
+        ({"nullable": 0}, "bool"),
+        ({"key_cols": []}, "non-empty"),
+        ({"key_cols": ["id", "id"]}, "unique"),
+        ({"key_cols": ["id", 1]}, "column names"),
+        ({"key_cols": ["id", "missing"]}, "Missing"),
+        ({"key_cols": None}, "non-empty"),
+        (
+            {
+                "create_cols": {"a__b": {"lit": 1}, "a_b": {"lit": 2}},
+                "value_cols": ["a__b", "a_b"],
+            },
+            "collide",
+        ),
+        (
+            {
+                "create_cols": {"x_current": {"lit": 1}},
+                "value_cols": ["x", "x_current"],
+            },
+            "already exist",
+        ),
+        (
+            {
+                "create_cols": {"x_over_den": {"lit": 1}},
+                "value_cols": ["x", "x_over_den"],
+                "ref_col": "den",
+            },
+            "collide",
+        ),
+    ],
+)
+def test_custom_options_validation(custom_backend, options, match):
+    build, base, spine = custom_backend
+    defaults = dict(key_cols=["id", "branch"], value_cols=["x"])
+    with pytest.raises(ValueError, match=match):
+        build(base, spine, **(defaults | options))
+
+
+@pytest.mark.parametrize("keys", ["id", ["id"]])
+def test_custom_defaults_and_single_keys(keys):
+    from brainmodelkit.pandas import build_features
+
+    base = pd.DataFrame({"id": [1], "observation_date": ["2026-01-01"], "x": [2.0]})
+    spine = pd.DataFrame(
+        {"id": [1, 1], "dt_ref": ["2026-01-01"] * 2, "keep__name": [None, 7]}
+    )
+    options = dict(key_cols=keys, value_cols=["x"])
+    expected = build_features(base, spine, **options)
+    pd.testing.assert_frame_equal(
+        expected,
+        build_features(base, spine, **options, create_cols=None, nullable=True),
+    )
+    pd.testing.assert_frame_equal(
+        expected, build_features(base, spine, **options, create_cols={})
+    )
+    pd.testing.assert_frame_equal(expected[spine.columns], spine)
+
+
+def test_source_names_missing_periods_and_input_preservation(custom_backend):
+    build, base, spine = custom_backend
+    if isinstance(base, pd.DataFrame):
+        base = base.rename(columns={"x": "source__value"})
+        original = base.copy(deep=True)
+        target = spine.copy(deep=True)
+    else:
+        base = base.withColumnRenamed("x", "source__value")
+    result = build(
+        base,
+        spine,
+        key_cols=["id", "branch"],
+        value_cols=["source__value"],
+        create_cols=None,
+        nullable=False,
+        windows=[3],
+        lags=[1],
+    )
+    if isinstance(base, pd.DataFrame):
+        pd.testing.assert_frame_equal(base, original)
+        pd.testing.assert_frame_equal(spine, target)
+        pd.testing.assert_frame_equal(result[spine.columns], spine)
+    else:
+        result = pd.DataFrame([r.asDict() for r in result.collect()])
+    assert "source__value" in base.columns
+    row = result.query("branch == 'y'").iloc[0]
+    # Two absent months are not invented: only the March observation counts.
+    assert row.source_value_mean_3_months == 99
+    assert row.source_value_count_3_months == 1
+    assert pd.isna(row.source_value_lag_1_months)
+    missing_key_spine = (
+        spine.drop(columns="branch")
+        if isinstance(spine, pd.DataFrame)
+        else spine.drop("branch")
+    )
+    with pytest.raises(ValueError, match=r"Missing columns.*branch"):
+        build(
+            base,
+            missing_key_spine,
+            key_cols=["id", "branch"],
+            value_cols=["source__value"],
+        )

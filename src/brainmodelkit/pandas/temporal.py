@@ -14,7 +14,11 @@ from brainmodelkit._temporal import (
     as_date,
     build_config,
     columns,
+    custom_config,
+    custom_expression,
     feature_config,
+    feature_name,
+    names,
     shift,
     simulate_entity,
     simulation_config,
@@ -160,7 +164,9 @@ def temporal_features(
                         available = dates.iloc[position] >= shift(
                             cutoff, max_staleness_days, "days"
                         )
-                    name = f"{score}__" + ("current" if k == 0 else f"lag_{k}_{unit}")
+                    name = feature_name(
+                        score, "current" if k == 0 else f"lag_{k}_{unit}", _date_diff
+                    )
                     features[name] = valid[score].iloc[position] if available else None
                     date_suffix = "_date_diff_days" if _date_diff else "_date"
                     features[name + date_suffix] = (
@@ -182,12 +188,20 @@ def temporal_features(
                             if len(values)
                             else None
                         )
-                        features[f"{score}__{agg}_{k}_{unit}"] = value
-                    current = features[f"{score}__current"]
-                    features[f"{score}__current_minus_mean_{k}_{unit}"] = (
+                        features[
+                            feature_name(score, f"{agg}_{k}_{unit}", _date_diff)
+                        ] = value
+                    current = features[feature_name(score, "current", _date_diff)]
+                    features[
+                        feature_name(
+                            score, f"current_minus_mean_{k}_{unit}", _date_diff
+                        )
+                    ] = (
                         current
                         - (
-                            features[f"{score}__mean_{k}_{unit}"]
+                            features[
+                                feature_name(score, f"mean_{k}_{unit}", _date_diff)
+                            ]
                             if "mean" in aggs
                             else values.mean()
                         )
@@ -223,6 +237,8 @@ def build_features(
     max_staleness_days: int | None = None,
     relative_historico: bool = False,
     ref_col: str | None = None,
+    create_cols: dict | None = None,
+    nullable: bool = True,
 ) -> pd.DataFrame:
     """Enrich df_spine with point-in-time features sourced only from df_base.
 
@@ -243,16 +259,60 @@ def build_features(
     relative_historico adds comparisons with requested lags and level statistics.
     ref_col adds same-observation value/ref_col series to the temporal engine.
     Both options together also compare ratio series with their own histories.
+    create_cols defines named row-level arithmetic trees (recommended for custom
+    calculations); each name must be explicitly included in value_cols.
+    nullable=False zero-fills numerical observations before arithmetic and temporal
+    calculations, never absent periods or undefined final statistics.
+    Generated names use single underscores; source/custom names are preserved.
     Zero/null denominators produce null; ratios stay on the ratio scale.
 
     Returns df_spine with its original rows and columns plus feature columns.
     See docs/temporal.md for naming, validation, and backend execution details.
     """
+    key_cols = names(key_cols, "key_cols")
+    scores, custom, operands = custom_config(
+        df_base,
+        df_spine,
+        value_cols,
+        create_cols,
+        nullable,
+        lambda name: (
+            is_numeric_dtype(df_base[name]) and df_base[name].dtype.kind != "b"
+        ),
+    )
+
+    def divide(left, right):
+        return left / right.where(right.notna() & right.ne(0))
+
+    used = operands | (set(scores) - set(custom))
+    if isinstance(ref_col, str) and ref_col in df_base.columns:
+        used.add(ref_col)
+    if not nullable:
+        df_base = df_base.assign(
+            **{
+                name: df_base[name].fillna(0)
+                for name in used
+                if is_numeric_dtype(df_base[name])
+                and name not in [*key_cols, date_col, reference_date_col]
+            }
+        )
+    if custom:
+        df_base = df_base.assign(
+            **{
+                name: custom_expression(
+                    expr,
+                    lambda col: df_base[col].astype(float),
+                    lambda value: pd.Series(float(value), index=df_base.index),
+                    divide,
+                )
+                for name, expr in custom.items()
+            }
+        )
     keys, scores, all_scores, windows, lags, aggregations, ratios, specs = build_config(
         df_base,
         df_spine,
         key_cols,
-        value_cols,
+        scores,
         date_col,
         reference_date_col,
         period_unit,
@@ -268,15 +328,16 @@ def build_features(
     if any(not is_numeric_dtype(df_base[s]) for s in scores):
         raise ValueError("Value columns must be numeric")
 
-    def divide(left, right):
-        return left / right.where(right.notna() & right.ne(0))
-
     if ratios:
         df_base = df_base.assign(
             **{
                 name: divide(df_base[source], df_base[ref_col])
                 for name, source in ratios.items()
             }
+        )
+    if not nullable:
+        df_base = df_base.assign(
+            **{name: df_base[name].fillna(0) for name in all_scores}
         )
     result = temporal_features(
         spine=df_spine,

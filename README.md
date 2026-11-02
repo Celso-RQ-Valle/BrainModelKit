@@ -137,7 +137,7 @@ from brainmodelkit.pyspark import build_features
 enriched = build_features(
     df_base,
     df_spine,
-    key_cols="account_id",
+    key_cols=["account_id"],
     value_cols=["bureau_score"],
     reference_date_col="reference_date",
     windows=[1, 3, 6],
@@ -149,11 +149,19 @@ history_features = [c for c in enriched.columns if c not in df_spine.columns]
 candidate_features = credit_features + history_features
 ```
 
+For explicit row-level arithmetic, use `create_cols` with nested operation
+dictionaries; see the [runnable composite-key example](examples/temporal/custom_columns.py)
+and [parameter reference](docs/temporal.md#custom-row-level-arithmetic).
+Defaults `create_cols=None, nullable=True` preserve temporal values. Set
+`nullable=False` to zero-fill existing numerical observations before calculations,
+without creating absent periods. Generated feature names now use single
+underscores; update downstream feature lists (see [migration](docs/temporal.md#migration)).
+
 Enable comparisons with each variable's own history using the same inputs:
 
 ```python
 feature_options = dict(
-    key_cols="account_id",
+    key_cols=["account_id"],
     reference_date_col="reference_date",
     windows=[1, 3, 6],
     lags=[1, 2, 3],
@@ -557,7 +565,7 @@ from brainmodelkit.pandas import build_features
 enriched = build_features(
     df_base,
     df_spine,
-    key_cols="account_id",
+    key_cols=["account_id"],
     value_cols=["bureau_score"],
     reference_date_col="reference_date",
     windows=[1, 3, 6],
@@ -569,11 +577,19 @@ history_features = [c for c in enriched.columns if c not in df_spine.columns]
 candidate_features = credit_features + history_features
 ```
 
+For explicit row-level arithmetic, use `create_cols` with nested operation
+dictionaries; see the [runnable composite-key example](examples/temporal/custom_columns.py)
+and [parameter reference](docs/temporal.md#custom-row-level-arithmetic).
+Defaults `create_cols=None, nullable=True` preserve temporal values. Set
+`nullable=False` to zero-fill existing numerical observations before calculations,
+without creating absent periods. Generated feature names now use single
+underscores; update downstream feature lists (see [migration](docs/temporal.md#migration)).
+
 Enable comparisons with each variable's own history using the same inputs:
 
 ```python
 feature_options = dict(
-    key_cols="account_id",
+    key_cols=["account_id"],
     reference_date_col="reference_date",
     windows=[1, 3, 6],
     lags=[1, 2, 3],

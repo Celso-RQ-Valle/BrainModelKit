@@ -6,18 +6,126 @@ import calendar
 import hashlib
 import math
 import random
+import re
 from datetime import date, datetime, timedelta
+from numbers import Real
 
 AGGREGATIONS = ("mean", "median", "max", "min", "std", "sum", "count")
 
 
 def names(values, label):
-    values = [values] if isinstance(values, str) else list(values)
+    try:
+        values = [values] if isinstance(values, str) else list(values)
+    except TypeError as error:
+        raise ValueError(
+            f"{label} must be a non-empty sequence of column names"
+        ) from error
     if not values or any(not isinstance(v, str) or not v for v in values):
         raise ValueError(f"{label} must contain non-empty column names")
     if len(set(values)) != len(values):
         raise ValueError(f"{label} must be unique")
     return values
+
+
+def feature_name(score, suffix, modern=True):
+    """Normalize generated separators only; never rename input columns."""
+    if not modern:
+        return f"{score}__{suffix}"
+    return re.sub(r"_+", "_", f"{score}_{suffix}")
+
+
+def custom_config(base, spine, value_cols, create_cols, nullable, is_numeric):
+    """Validate the expression tree against the original schema, without data scans."""
+    columns(base, [])
+    columns(spine, [])
+    if type(nullable) is not bool:
+        raise ValueError("nullable must be a bool")
+    if create_cols is None:
+        create_cols = {}
+    if not isinstance(create_cols, dict):
+        raise ValueError("create_cols must be a dictionary or None")
+    scores = names(value_cols, "value_cols")
+    operands = set()
+    for name in create_cols:
+        if not isinstance(name, str) or not name:
+            raise ValueError("Custom column names must be non-empty strings")
+        if name in base.columns or name in spine.columns:
+            raise ValueError(
+                f"Custom column {name!r} conflicts with an existing column"
+            )
+        if name not in scores:
+            raise ValueError(f"Custom column {name!r} must appear in value_cols")
+
+    def validate(expr):
+        if not isinstance(expr, dict):
+            raise ValueError("Each expression must be a dictionary")
+        if set(expr) == {"col"}:
+            name = expr["col"]
+            if not isinstance(name, str):
+                raise ValueError("Column references must be strings")
+            if name in create_cols:
+                raise ValueError(
+                    f"Cannot reference newly declared custom column {name!r}"
+                )
+            if name not in base.columns:
+                raise ValueError(f"Expression column {name!r} is missing from df_base")
+            if not is_numeric(name):
+                raise ValueError(f"Expression column {name!r} must be numeric")
+            operands.add(name)
+        elif set(expr) == {"lit"}:
+            value = expr["lit"]
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not math.isfinite(value)
+            ):
+                raise ValueError("Expression literals must be finite numeric values")
+        elif set(expr) == {"op", "args"}:
+            op, args = expr["op"], expr["args"]
+            if not isinstance(op, str) or op not in (
+                "sum",
+                "subtract",
+                "multiply",
+                "divide",
+            ):
+                raise ValueError(f"Unknown expression operation: {op!r}")
+            if (
+                not isinstance(args, list)
+                or len(args) < 2
+                or (op in ("subtract", "divide") and len(args) != 2)
+            ):
+                raise ValueError(f"Invalid operand count for {op!r}")
+            for arg in args:
+                validate(arg)
+        else:
+            raise ValueError("Malformed expression: expected col, lit, or op and args")
+
+    for expr in create_cols.values():
+        validate(expr)
+    columns(base, [s for s in scores if s not in create_cols])
+    return scores, create_cols, operands
+
+
+def custom_expression(expr, column, literal, divide):
+    """Compile a validated tree with backend-native arithmetic operators."""
+    if "col" in expr:
+        return column(expr["col"])
+    if "lit" in expr:
+        return literal(expr["lit"])
+    args = [custom_expression(arg, column, literal, divide) for arg in expr["args"]]
+    value = args[0]
+    for right in args[1:]:
+        op = expr["op"]
+        value = (
+            value + right
+            if op == "sum"
+            else value - right
+            if op == "subtract"
+            else value * right
+            if op == "multiply"
+            else divide(value, right)
+        )
+    return value
 
 
 def columns(frame, required):
@@ -87,10 +195,19 @@ def feature_config(
     for score in scores:
         for suffix in ["current", *(f"lag_{k}_{unit}" for k in lags)]:
             date_suffix = "_date_diff_days" if date_diff else "_date"
-            output.extend([f"{score}__{suffix}", f"{score}__{suffix}{date_suffix}"])
+            output.extend(
+                [
+                    feature_name(score, f"{suffix}", date_diff),
+                    feature_name(score, f"{suffix}{date_suffix}", date_diff),
+                ]
+            )
         for k in windows:
-            output.extend(f"{score}__{a}_{k}_{unit}" for a in aggregations)
-            output.append(f"{score}__current_minus_mean_{k}_{unit}")
+            output.extend(
+                feature_name(score, f"{a}_{k}_{unit}", date_diff) for a in aggregations
+            )
+            output.append(
+                feature_name(score, f"current_minus_mean_{k}_{unit}", date_diff)
+            )
     if len(set(output)) != len(output):
         raise ValueError("Generated feature names collide")
     return keys, scores, windows, lags, aggregations, output
@@ -100,7 +217,7 @@ def relationship_config(scores, ratio_scores, windows, lags, aggs, unit):
     """Return backend-neutral (name, operation, left, right) expressions."""
     specs = []
     for score in scores:
-        current = f"{score}__current"
+        current = feature_name(score, "current")
         comparisons = [(f"lag_{k}_{unit}", False) for k in lags]
         comparisons += [
             (f"{agg}_{k}_{unit}", agg == "mean")
@@ -109,8 +226,8 @@ def relationship_config(scores, ratio_scores, windows, lags, aggs, unit):
             if agg in ("mean", "median", "min", "max")
         ]
         for suffix, existing_mean in comparisons:
-            other = f"{score}__{suffix}"
-            prefix = f"{score}__current_vs_{suffix}"
+            other = feature_name(score, f"{suffix}")
+            prefix = feature_name(score, f"current_vs_{suffix}")
             # The legacy current_minus_mean already supplies this difference.
             if not existing_mean:
                 specs.append((prefix + "_diff", "diff", current, other))
@@ -124,28 +241,28 @@ def relationship_config(scores, ratio_scores, windows, lags, aggs, unit):
             )
         for k in windows:
             suffix = f"{k}_{unit}"
-            mean = f"{score}__mean_{suffix}"
-            std = f"{score}__std_{suffix}"
+            mean = feature_name(score, f"mean_{suffix}")
+            std = feature_name(score, f"std_{suffix}")
             if {"min", "max"} <= set(aggs):
                 specs.append(
                     (
-                        f"{score}__range_{suffix}",
+                        feature_name(score, f"range_{suffix}"),
                         "diff",
-                        f"{score}__max_{suffix}",
-                        f"{score}__min_{suffix}",
+                        feature_name(score, f"max_{suffix}"),
+                        feature_name(score, f"min_{suffix}"),
                     )
                 )
             if {"mean", "std"} <= set(aggs):
                 specs.extend(
                     [
                         (
-                            f"{score}__standardized_deviation_{suffix}",
+                            feature_name(score, f"standardized_deviation_{suffix}"),
                             "ratio",
-                            f"{score}__current_minus_mean_{suffix}",
+                            feature_name(score, f"current_minus_mean_{suffix}"),
                             std,
                         ),
                         (
-                            f"{score}__coefficient_of_variation_{suffix}",
+                            feature_name(score, f"coefficient_of_variation_{suffix}"),
                             "abs_ratio",
                             std,
                             mean,
@@ -198,8 +315,12 @@ def build_config(
                 "ref_col must be a numeric value column, not a key or date"
             )
         ratios = {
-            f"{score}__over__{ref_col}": score for score in scores if score != ref_col
+            feature_name(score, f"over_{ref_col}"): score
+            for score in scores
+            if score != ref_col
         }
+        if len(ratios) != sum(score != ref_col for score in scores):
+            raise ValueError("Derived ratio series names collide")
         if set(ratios) & (set(base.columns) | set(spine.columns)):
             raise ValueError("Derived ratio series names collide with existing columns")
     all_scores = [*scores, *ratios]
@@ -223,8 +344,10 @@ def build_config(
     output += [spec[0] for spec in specs]
     if len(set(output)) != len(output):
         raise ValueError("Generated feature names collide")
-    if set(output) & set(spine.columns):
-        raise ValueError("Feature columns already exist in spine")
+    if conflicts := set(output) & (set(spine.columns) | set(base.columns)):
+        raise ValueError(
+            f"Feature columns already exist in base or spine: {sorted(conflicts)}"
+        )
     # A derived input must not masquerade as another generated feature.
     if set(ratios) & set(output):
         raise ValueError("Derived ratio series names collide with generated features")

@@ -12,7 +12,11 @@ from brainmodelkit._temporal import (
     AGGREGATIONS,
     build_config,
     columns,
+    custom_config,
+    custom_expression,
     feature_config,
+    feature_name,
+    names,
     simulate_entity,
     simulation_config,
 )
@@ -219,7 +223,9 @@ def temporal_features(
                     F.col("d") >= F.date_sub(cutoff(k), max_staleness_days)
                 )
             latest = F.max(F.when(eligible, F.struct(F.col("d"), value.alias("value"))))
-            name = f"{score}__" + ("current" if k == 0 else f"lag_{k}_{unit}")
+            name = feature_name(
+                score, "current" if k == 0 else f"lag_{k}_{unit}", _date_diff
+            )
             lookup_date = latest["d"]
             latency = (
                 F.datediff(F.col("r"), lookup_date).alias(name + "_date_diff_days")
@@ -240,14 +246,17 @@ def temporal_features(
                     "count": F.count,
                 }[agg]
                 expressions.append(
-                    function(selected).alias(f"{score}__{agg}_{k}_{unit}")
+                    function(selected).alias(
+                        feature_name(score, f"{agg}_{k}_{unit}", _date_diff)
+                    )
                 )
     features = joined.groupBy(*internal, "r").agg(*expressions)
     for score in scores:
         for k in windows:
             features = features.withColumn(
-                f"{score}__current_minus_mean_{k}_{unit}",
-                _col(f"{score}__current") - _col(f"{score}__mean_{k}_{unit}"),
+                feature_name(score, f"current_minus_mean_{k}_{unit}", _date_diff),
+                _col(feature_name(score, "current", _date_diff))
+                - _col(feature_name(score, f"mean_{k}_{unit}", _date_diff)),
             )
     left, right = spine.alias("spine"), features.alias("features")
     condition = reduce(
@@ -275,6 +284,8 @@ def build_features(
     max_staleness_days: int | None = None,
     relative_historico: bool = False,
     ref_col: str | None = None,
+    create_cols: dict | None = None,
+    nullable: bool = True,
 ) -> DataFrame:
     """Enrich df_spine with point-in-time features sourced only from df_base.
 
@@ -295,16 +306,69 @@ def build_features(
     relative_historico adds comparisons with requested lags and level statistics.
     ref_col adds same-observation value/ref_col series to the temporal engine.
     Both options together also compare ratio series with their own histories.
+    create_cols defines named row-level arithmetic trees (recommended for custom
+    calculations); each name must be explicitly included in value_cols.
+    nullable=False zero-fills numerical observations before arithmetic and temporal
+    calculations, never absent periods or undefined final statistics.
+    Generated names use single underscores; source/custom names are preserved.
     Zero/null denominators produce null; ratios stay on the ratio scale.
 
     Returns df_spine with its original rows and columns plus feature columns.
     See docs/temporal.md for naming, validation, and backend execution details.
     """
+    from pyspark.sql import functions as F
+    from pyspark.sql.types import NumericType
+
+    key_cols = names(key_cols, "key_cols")
+    scores, custom, operands = custom_config(
+        df_base,
+        df_spine,
+        value_cols,
+        create_cols,
+        nullable,
+        lambda name: isinstance(df_base.schema[name].dataType, NumericType),
+    )
+
+    def divide(left, right):
+        return left / F.when((right != 0) & ~F.isnan(right), right)
+
+    def clean(value):
+        return F.when(value.isNull() | F.isnan(value), F.lit(0.0)).otherwise(value)
+
+    used = operands | (set(scores) - set(custom))
+    if isinstance(ref_col, str) and ref_col in df_base.columns:
+        used.add(ref_col)
+    if not nullable:
+        df_base = df_base.select(
+            *[
+                clean(_col(name)).alias(name)
+                if name in used
+                and isinstance(df_base.schema[name].dataType, NumericType)
+                and name not in [*key_cols, date_col, reference_date_col]
+                else _col(name)
+                for name in df_base.columns
+            ]
+        )
+    if custom:
+        df_base = df_base.select(
+            "*",
+            *[
+                custom_expression(
+                    expr,
+                    lambda name: F.when(
+                        ~F.isnan(_col(name)), _col(name).cast("double")
+                    ),
+                    lambda value: F.lit(float(value)),
+                    divide,
+                ).alias(name)
+                for name, expr in custom.items()
+            ],
+        )
     keys, scores, all_scores, windows, lags, aggregations, ratios, specs = build_config(
         df_base,
         df_spine,
         key_cols,
-        value_cols,
+        scores,
         date_col,
         reference_date_col,
         period_unit,
@@ -315,8 +379,6 @@ def build_features(
         relative_historico,
         ref_col,
     )
-    from pyspark.sql import functions as F
-    from pyspark.sql.types import NumericType
 
     if ref_col is not None and not isinstance(
         df_base.schema[ref_col].dataType, NumericType
@@ -324,10 +386,6 @@ def build_features(
         raise ValueError("ref_col must be numeric")
     if any(not isinstance(df_base.schema[s].dataType, NumericType) for s in scores):
         raise ValueError("Value columns must be numeric")
-
-    def divide(left, right):
-        # Null the denominator before division, including under Spark ANSI mode.
-        return left / F.when((right != 0) & ~F.isnan(right), right)
 
     if ratios:
         df_base = df_base.select(
@@ -338,6 +396,13 @@ def build_features(
                 )
                 for name, source in ratios.items()
             ],
+        )
+    if not nullable:
+        df_base = df_base.select(
+            *[
+                clean(_col(name)).alias(name) if name in all_scores else _col(name)
+                for name in df_base.columns
+            ]
         )
     result = temporal_features(
         spine=df_spine,

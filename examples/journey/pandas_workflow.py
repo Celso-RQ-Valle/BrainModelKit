@@ -24,7 +24,7 @@ def main(save_dir=None):
     enriched = build_features(
         df_base,
         df_spine,
-        key_cols="account_id",
+        key_cols=["account_id"],
         value_cols=["revenue", "balance"],
         reference_date_col="reference_date",
         windows=[3],

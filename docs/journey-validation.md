@@ -25,7 +25,7 @@ from brainmodelkit.model_selection.pyspark import cross_validate
 from brainmodelkit.optimization.pyspark import optimize
 from brainmodelkit.training.pyspark import train_model
 
-fixed_features = ["revenue__current", "balance__current"]
+fixed_features = ["revenue_current", "balance_current"]
 cv_result = cross_validate(
     train_df,
     "target",
@@ -88,7 +88,7 @@ from brainmodelkit.model_selection.pandas import cross_validate
 from brainmodelkit.optimization.pandas import optimize
 from brainmodelkit.training.pandas import train_model
 
-fixed_features = ["revenue__current", "balance__current"]
+fixed_features = ["revenue_current", "balance_current"]
 cv_result = cross_validate(
     train_df,
     "target",

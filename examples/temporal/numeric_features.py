@@ -38,6 +38,8 @@ enriched = build_features(
     lags=[1, 2],
     aggregations=["mean", "median", "min", "max", "std", "sum", "count"],
     max_staleness_days=60,
+    create_cols=None,
+    nullable=True,
 )
 
 # Display all generated outputs for this reference row, including lookup latency.

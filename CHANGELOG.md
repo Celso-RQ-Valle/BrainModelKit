@@ -10,6 +10,16 @@ The project is experimental and pre-1.0; public APIs remain unstable.
 
 ### Changed
 
+- **Compatibility:** `build_features` generated names now use single underscores,
+  e.g. `used_balance_over_credit_limit_standardized_deviation_6_months`.
+  Update downstream feature lists/models; input and explicit custom names are
+  unchanged. Legacy `temporal_features`/`build_autoregressive_features` names stay
+  unchanged. Normalized output collisions raise `ValueError`.
+- Both pandas and Spark support validated `create_cols` arithmetic trees and
+  `nullable=False` observation-level zero replacement. Defaults preserve temporal
+  values and missing-history semantics. Composite key lists are recommended;
+  legacy string keys remain accepted.
+
 - `build_features` now returns numeric lookup latency (`_date_diff_days`) instead
   of lookup dates, measured against the spine reference date for current and lag
   values. Legacy APIs retain their original date outputs.

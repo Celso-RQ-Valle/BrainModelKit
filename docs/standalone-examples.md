@@ -256,10 +256,10 @@ enriched.select(
     "company_id",
     "reference_date",
     "default_flag",
-    "bureau_score__current",
-    "bureau_score__lag_1_months",
-    "bureau_score__mean_3_months",
-    "bureau_score__count_3_months",
+    "bureau_score_current",
+    "bureau_score_lag_1_months",
+    "bureau_score_mean_3_months",
+    "bureau_score_count_3_months",
 ).orderBy("company_id").show(5, truncate=False)
 ```
 
@@ -465,20 +465,20 @@ For revenue at the March 31 reference date, the outputs are:
 
 | Output | Example value | Meaning |
 | --- | --- | --- |
-| `revenue__current` | `650` | Latest non-null value on or before March 31. |
-| `revenue__current_date_diff_days` | `0` | Days from the current observation to the reference date. |
-| `revenue__lag_1_months` | `620` | Latest non-null value on or before February 28. |
-| `revenue__lag_1_months_date_diff_days` | `31` | Days from the lag observation to the reference date. |
-| `revenue__lag_2_months` | `600` | Latest non-null value on or before January 31. |
-| `revenue__lag_2_months_date_diff_days` | `59` | Days from the lag observation to the reference date. |
-| `revenue__mean_3_months` | `623.3333` | Arithmetic mean of the three window observations. |
-| `revenue__median_3_months` | `620` | Exact median. |
-| `revenue__min_3_months` | `600` | Minimum value. |
-| `revenue__max_3_months` | `650` | Maximum value. |
-| `revenue__std_3_months` | `25.1661` | Sample standard deviation (`ddof=1`). |
-| `revenue__sum_3_months` | `1870` | Sum of non-null values. |
-| `revenue__count_3_months` | `3` | Number of non-null observations. |
-| `revenue__current_minus_mean_3_months` | `26.6667` | Current value minus the window mean. |
+| `revenue_current` | `650` | Latest non-null value on or before March 31. |
+| `revenue_current_date_diff_days` | `0` | Days from the current observation to the reference date. |
+| `revenue_lag_1_months` | `620` | Latest non-null value on or before February 28. |
+| `revenue_lag_1_months_date_diff_days` | `31` | Days from the lag observation to the reference date. |
+| `revenue_lag_2_months` | `600` | Latest non-null value on or before January 31. |
+| `revenue_lag_2_months_date_diff_days` | `59` | Days from the lag observation to the reference date. |
+| `revenue_mean_3_months` | `623.3333` | Arithmetic mean of the three window observations. |
+| `revenue_median_3_months` | `620` | Exact median. |
+| `revenue_min_3_months` | `600` | Minimum value. |
+| `revenue_max_3_months` | `650` | Maximum value. |
+| `revenue_std_3_months` | `25.1661` | Sample standard deviation (`ddof=1`). |
+| `revenue_sum_3_months` | `1870` | Sum of non-null values. |
+| `revenue_count_3_months` | `3` | Number of non-null observations. |
+| `revenue_current_minus_mean_3_months` | `26.6667` | Current value minus the window mean. |
 
 The seven statistics and current-minus-mean difference also appear with the
 `_1_months` suffix. That window is `(2026-02-28, 2026-03-31]`, so it contains

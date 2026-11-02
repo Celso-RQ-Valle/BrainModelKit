@@ -50,10 +50,10 @@ print(
         [
             "cnpj",
             "dt_ref",
-            "score__current",
-            "score__current_date_diff_days",
-            "score__lag_1_months",
-            "score__mean_3_months",
+            "score_current",
+            "score_current_date_diff_days",
+            "score_lag_1_months",
+            "score_mean_3_months",
         ]
     ]
 )
@@ -92,7 +92,148 @@ clipped or normalized. Defaults are `date_col="observation_date"`,
 `reference_date_col="dt_ref"`, and `period_unit="months"`.
 Lists and single strings are accepted for column names.
 
+### Public signature (pandas and Spark)
+
+```python
+def build_features(
+    df_base,
+    df_spine,
+    *,
+    key_cols,
+    date_col="observation_date",
+    reference_date_col="dt_ref",
+    value_cols,
+    period_unit="months",
+    windows=(3, 6, 9),
+    lags=(1, 2, 8),
+    aggregations=("mean", "median", "max", "min", "std", "sum", "count"),
+    max_staleness_days=None,
+    relative_historico=False,
+    ref_col=None,
+    create_cols=None,
+    nullable=True,
+): ...
+```
+
+Prefer `key_cols=["account_id"]` or `key_cols=["customer_id", "account_id"]`.
+The full key is used for grouping, lookups, joins, and alignment. Lists must be
+nonempty and contain unique nonempty string names present in both DataFrames.
+A legacy string is normalized to a one-element list.
+
+### Custom row-level arithmetic
+
+Use `create_cols` for explicit numerical calculations on each historical row,
+before its temporal features are computed. `None` and `{}` disable creation.
+Dictionary keys are exact custom series names; every one must also be explicitly
+listed in `value_cols`. Source operands need only exist in the original `df_base`;
+they need not be in `value_cols`. No input columns are overwritten or renamed.
+Like other source series, custom series receive temporal outputs rather than
+being copied directly into the spine.
+
+Each expression is exactly one of `{"col": "name"}`, `{"lit": 100}`, or
+`{"op": "sum", "args": [...]}`. `sum` and `multiply` require at least two
+operands; `subtract` and `divide` require exactly two. Operands can be nested
+expressions. `sum` is horizontal addition, not a temporal sum. Literals must be
+finite real numbers (not booleans); operands must have numeric column types.
+Expressions use floating-point native backend arithmetic. Unknown operations,
+extra expression fields, missing/nonnumeric columns, invalid arity, and name
+conflicts raise `ValueError`. References to newly declared custom columns are
+rejected, including self-references; repeat or nest the original expression
+instead. Results therefore do not depend on dictionary order.
+
+```python
+create_cols = {
+    "total_balance": {
+        "op": "sum",
+        "args": [{"col": "used_balance"}, {"col": "overdue_balance"}],
+    },
+    "total_utilization": {
+        "op": "divide",
+        "args": [
+            {
+                "op": "sum",
+                "args": [
+                    {"col": "used_balance"},
+                    {"col": "overdue_balance"},
+                ],
+            },
+            {"col": "credit_limit"},
+        ],
+    },
+}
+feature_options = dict(windows=[3, 6], lags=[1, 2], period_unit="months")
+enriched = build_features(
+    df_base=df_base,
+    df_spine=df_spine,
+    key_cols=["customer_id", "account_id"],
+    value_cols=["used_balance", "credit_limit", "total_balance", "total_utilization"],
+    create_cols=create_cols,
+    nullable=False,
+    relative_historico=True,
+    **feature_options,
+)
+default = build_features(
+    df_base=df_base,
+    df_spine=df_spine,
+    key_cols=["customer_id", "account_id"],
+    value_cols=["used_balance", "credit_limit"],
+    create_cols=None,
+    nullable=True,
+    **feature_options,
+)
+```
+
+Run the complete, self-contained example (including data) with
+`python examples/temporal/custom_columns.py`. For Spark use the same dictionaries
+with Spark DataFrames and `brainmodelkit.pyspark.build_features`.
+
+`create_cols` is recommended for custom row-level arithmetic. `ref_col` retains
+its same-row value/reference shortcut. When both are supplied, custom columns
+are calculated first and all selected values, including custom values, receive
+reference ratios (except the reference itself); conflicting names fail explicitly.
+`relative_historico` still compares each resulting series to its own past; it does
+not define row-level arithmetic. Custom ratio expressions are ordinary numerical
+series, so they do not automatically receive the reference shortcut's `_diff_pp`
+features.
+
+### Null observations and absent history
+
+With `nullable=True` (default), row-level arithmetic propagates any null/NaN
+operand, even for horizontal `sum`. Division by zero yields null, including in
+Spark ANSI mode. Temporal aggregations retain the existing behavior: ignore
+null observations and use the latest non-null current/lag value.
+
+With `nullable=False`, only numerical inputs used in calculations are zero-filled
+before custom arithmetic. Null custom results (including division by zero) and
+reference-ratio results become zero before entering the temporal engine. Keys,
+dates, unrelated columns, and the original input DataFrames remain untouched.
+An observed null now contributes a zero to the mean, count, sum, min, max, median,
+and sample std. This can change these metrics in different directions; it does
+not necessarily reduce them. For `[10, null, 20]`, the mean changes from 15 to 10
+and the count from 2 to 3. An all-null window with actual observations becomes
+an all-zero window: mean/sum/min/max are zero and count is the observation count.
+Sample std is zero for two or more such rows, but null for a single row.
+
+Neither mode creates missing daily/monthly rows. Empty windows still have null
+statistics (including sum) and count zero. Missing or stale lag/current lookups
+remain null. Lags are as-of lookups: an absent exact period can still use an older
+eligible observation. Under `nullable=False`, an actual null observation becomes
+a valid zero and can replace an older current/lag value. No final-output blanket
+fill is applied: standardized deviation with zero std and coefficient of variation
+with zero mean remain null, as do comparisons to unavailable history.
+
 ### Migration
+
+**Compatibility change:** `build_features` generated names now use single
+underscores, e.g. `used_balance_over_credit_limit_standardized_deviation_6_months`
+instead of `used_balance__over__credit_limit__standardized_deviation_6_months`.
+Update downstream feature lists and persisted model input schemas. Runs of
+underscores are collapsed only in generated names; original source/key/spine
+columns and declared custom series names are preserved. If normalization makes
+two outputs identical, or an output conflicts with a base/spine column, the call
+raises `ValueError`. Legacy `temporal_features` and `build_autoregressive_features`
+retain their original double-underscore naming. Default temporal values are
+unchanged.
 
 `build_autoregressive_features` remains available on both backends and emits a
 `DeprecationWarning` at the caller. It preserves its original defaults:
@@ -148,7 +289,8 @@ and noise finite and nonnegative.
 `period_unit` (`unit` in the original API) is `days`, `weeks` (seven days), or
 `months` (calendar subtraction, clipping
 to the last valid day). Window lengths and lag offsets must be unique positive
-integers; empty lists are allowed. For **each numeric value separately**:
+integers; empty lists are allowed. With default `nullable=True`, for **each numeric
+value separately**:
 
 - Current: latest non-null score at or before the reference date.
 - Lag k: latest non-null score at or before reference minus k periods.
@@ -163,13 +305,13 @@ August 13, and February 13 cutoffs. The eight-month window includes every
 observation after February 13 through October 13, not just lag snapshots.
 March 31 minus one month is February 28 (29 in a leap year).
 
-Names use double underscores between the original score and feature:
-`score__current`, `score__current_date_diff_days`, `score__lag_2_months`,
-`score__lag_2_months_date_diff_days`, `score__mean_6_months`,
-`score__current_minus_mean_6_months`. Existing spine column collisions fail.
+Generated names use single underscores between components:
+`score_current`, `score_current_date_diff_days`, `score_lag_2_months`,
+`score_lag_2_months_date_diff_days`, `score_mean_6_months`,
+`score_current_minus_mean_6_months`. Existing spine column collisions fail.
 
 Supported aggregations (also the defaults) are `mean`, exact `median`, `max`,
-`min`, `std`, `sum`, and `count`. NaN/null scores are ignored. Empty windows have
+`min`, `std`, `sum`, and `count`. With `nullable=True`, NaN/null scores are ignored. Empty windows have
 null statistics, including sum, and count zero. Standard deviation is the sample
 standard deviation (`ddof=1`), null with fewer than two observations. Unavailable
 lookups and their latency indicators are null. `max_staleness_days`, when supplied,
@@ -190,7 +332,7 @@ an arbitrary record. Duplicate spine entity/reference rows are fully preserved.
 
 `build_features` adds two keyword-only options on both backends:
 `relative_historico: bool = False` and `ref_col: str | None = None`.
-Existing calls and the legacy APIs retain their outputs. Neither option changes
+Temporal values are preserved by default; see the naming compatibility change below. Neither option changes
 window boundaries, as-of lookups, duplicate detection, or staleness rules.
 
 | Options | Additional features |
@@ -209,16 +351,16 @@ For every requested lag and every **enabled** level aggregation (`mean`, `median
 
 | Formula | Example name for `balance`, three-month mean or one-month lag |
 | --- | --- |
-| `C - H` | `balance__current_vs_lag_1_months_diff` |
-| `C - M` | `balance__current_minus_mean_3_months` (existing name, no duplicate `_diff`) |
-| `C / H` | `balance__current_vs_mean_3_months_ratio` |
-| `100 * (C - H) / H` | `balance__current_vs_lag_1_months_pct_change` |
-| `hi - lo`, if both `min`, `max` enabled | `balance__range_3_months` |
-| `(C - M) / S`, if both `mean`, `std` enabled | `balance__standardized_deviation_3_months` |
-| `S / abs(M)`, if both `mean`, `std` enabled | `balance__coefficient_of_variation_3_months` |
+| `C - H` | `balance_current_vs_lag_1_months_diff` |
+| `C - M` | `balance_current_minus_mean_3_months` (existing name, no duplicate `_diff`) |
+| `C / H` | `balance_current_vs_mean_3_months_ratio` |
+| `100 * (C - H) / H` | `balance_current_vs_lag_1_months_pct_change` |
+| `hi - lo`, if both `min`, `max` enabled | `balance_range_3_months` |
+| `(C - M) / S`, if both `mean`, `std` enabled | `balance_standardized_deviation_3_months` |
+| `S / abs(M)`, if both `mean`, `std` enabled | `balance_coefficient_of_variation_3_months` |
 
 For median/min/max differences, use e.g.
-`balance__current_vs_median_3_months_diff`. Names use the requested period unit,
+`balance_current_vs_median_3_months_diff`. Names use the requested period unit,
 including `days` and `weeks`. Only the requested lags/windows are considered;
 there are no automatic comparisons between pairs of windows.
 
@@ -234,15 +376,15 @@ relationships unless `mean` is requested.
 
 `ref_col` must name a numeric column in `df_base`, distinct from the key/date
 columns. For every requested source other than the reference column, form a
-same-row historical ratio, named `<value>__over__<ref_col>`. For example:
+same-row historical ratio, named `<value>_over_<ref_col>`. For example:
 
 ```text
-used_balance__over__credit_limit__current
-used_balance__over__credit_limit__current_date_diff_days
-used_balance__over__credit_limit__lag_1_months
-used_balance__over__credit_limit__mean_3_months
-used_balance__over__credit_limit__count_3_months
-used_balance__over__credit_limit__current_minus_mean_3_months
+used_balance_over_credit_limit_current
+used_balance_over_credit_limit_current_date_diff_days
+used_balance_over_credit_limit_lag_1_months
+used_balance_over_credit_limit_mean_3_months
+used_balance_over_credit_limit_count_3_months
+used_balance_over_credit_limit_current_minus_mean_3_months
 ```
 
 This derived series passes through the same temporal engine, with the same
@@ -262,7 +404,7 @@ When both options are enabled, ratio series also receive the own-history
 comparisons and one additional scale-specific difference per requested lag and
 enabled level statistic:
 
-| Interpretation (current 0.30, lag 0.20) | Value | Suffix after `used_balance__over__credit_limit__` |
+| Interpretation (current 0.30, lag 0.20) | Value | Suffix after `used_balance_over_credit_limit_` |
 | --- | ---: | --- |
 | Difference in ratio, `C - H` | 0.10 | `current_vs_lag_1_months_diff` |
 | Difference in percentage points, `100 * (C - H)` | 10 p.p. | `current_vs_lag_1_months_diff_pp` |
@@ -276,9 +418,12 @@ percentage scale. `ref_col` alone does not enable these optional comparisons.
 
 ### Missing values and validation
 
+The following describes the default `nullable=True` behavior; see the null-policy
+section above for observation-level zero replacement.
+
 A zero, NaN, or null denominator produces a null ratio; a missing numerator also
 produces null. Spark division is guarded before evaluation, including with ANSI
-mode enabled. The library never fills nulls with zero. Derived-series current/lag
+mode enabled. With the default `nullable=True`, nulls are not filled with zero. Derived-series current/lag
 values use the latest **valid ratio**, not the latest numerator or denominator
 individually, and their observation age refers to that actual historical row.
 A more recent invalid ratio does not hide an earlier valid ratio; staleness still
