@@ -7,6 +7,7 @@ from .temporal import (
     simulate_bureau_history,
     temporal_features,
 )
+from .validation import validate_external_dataframe
 
 __all__ = [
     "build_autoregressive_features",
@@ -14,4 +15,5 @@ __all__ = [
     "simulate_bureau_history",
     "simulate_credit_data",
     "temporal_features",
+    "validate_external_dataframe",
 ]

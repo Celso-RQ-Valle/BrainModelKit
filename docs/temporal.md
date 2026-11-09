@@ -109,7 +109,6 @@ def build_features(
     aggregations=("mean", "median", "max", "min", "std", "sum", "count"),
     max_staleness_days=None,
     relative_historico=False,
-    ref_col=None,
     create_cols=None,
     nullable=True,
 ): ...
@@ -187,14 +186,10 @@ Run the complete, self-contained example (including data) with
 `python examples/temporal/custom_columns.py`. For Spark use the same dictionaries
 with Spark DataFrames and `brainmodelkit.pyspark.build_features`.
 
-`create_cols` is recommended for custom row-level arithmetic. `ref_col` retains
-its same-row value/reference shortcut. When both are supplied, custom columns
-are calculated first and all selected values, including custom values, receive
-reference ratios (except the reference itself); conflicting names fail explicitly.
-`relative_historico` still compares each resulting series to its own past; it does
-not define row-level arithmetic. Custom ratio expressions are ordinary numerical
-series, so they do not automatically receive the reference shortcut's `_diff_pp`
-features.
+`create_cols` defines custom row-level arithmetic. `relative_historico` compares
+selected series to their own past, including custom series. Cross-column
+relationships are never inferred. Custom ratios are ordinary numeric series;
+percentage-point differences are not generated automatically.
 
 ### Null observations and absent history
 
@@ -223,6 +218,13 @@ fill is applied: standardized deviation with zero std and coefficient of variati
 with zero mean remain null, as do comparisons to unavailable history.
 
 ### Migration
+
+`ref_col` was removed from both public `build_features` APIs. Update calls such
+as `ref_col="credit_limit"` to explicit `create_cols` divide expressions (above),
+and include each custom series name in `value_cols`. No automatic cross-column
+ratios or ratio-specific `_diff_pp` features remain. Multiply an ordinary ratio
+difference by 100 explicitly downstream if percentage points are needed.
+
 
 **Compatibility change:** `build_features` generated names now use single
 underscores, e.g. `used_balance_over_credit_limit_standardized_deviation_6_months`
@@ -330,17 +332,10 @@ an arbitrary record. Duplicate spine entity/reference rows are fully preserved.
 
 ## Optional relationship families
 
-`build_features` adds two keyword-only options on both backends:
-`relative_historico: bool = False` and `ref_col: str | None = None`.
-Temporal values are preserved by default; see the naming compatibility change below. Neither option changes
-window boundaries, as-of lookups, duplicate detection, or staleness rules.
-
-| Options | Additional features |
-| --- | --- |
-| Both disabled | None; existing `current_minus_mean` remains for every window. |
-| `relative_historico=True` | Historical comparisons for each `value_cols` series. |
-| `ref_col="credit_limit"` | Temporal features for each `value_cols / credit_limit` series. |
-| Both enabled | Both families, including historical comparisons of ratio series. |
+`relative_historico: bool = False` enables own-history comparisons on both
+backends. It preserves window boundaries, as-of lookups and staleness rules.
+By default, current/lag values, observation ages, requested window statistics,
+and current-minus-mean features are generated for each selected series.
 
 ### Own-history comparisons
 
@@ -372,49 +367,23 @@ comparisons. The existing `current_minus_mean` is always retained, even when
 exception to the selected-statistics rule. It does not enable other mean-based
 relationships unless `mean` is requested.
 
-### Reference-column series
+### Explicit cross-column relationships
 
-`ref_col` must name a numeric column in `df_base`, distinct from the key/date
-columns. For every requested source other than the reference column, form a
-same-row historical ratio, named `<value>_over_<ref_col>`. For example:
+Define ratios through `create_cols` and include their names in `value_cols`:
 
-```text
-used_balance_over_credit_limit_current
-used_balance_over_credit_limit_current_date_diff_days
-used_balance_over_credit_limit_lag_1_months
-used_balance_over_credit_limit_mean_3_months
-used_balance_over_credit_limit_count_3_months
-used_balance_over_credit_limit_current_minus_mean_3_months
+```python
+create_cols = {
+    "utilization": {
+        "op": "divide",
+        "args": [{"col": "used_balance"}, {"col": "credit_limit"}],
+    }
+}
 ```
 
-This derived series passes through the same temporal engine, with the same
-requested windows, lags, aggregations, and observation-age indicators as the
-original series. Historical numerator and denominator always come from the same
-entity and observation date. No join pairs values from different dates and no
-historical numerator is divided by a current denominator. If `ref_col` also
-appears in `value_cols`, its individual features remain, but no self-ratio is made.
-
-January balance 20 / limit 100 gives **0.20**; February balance 60 / limit 200
-gives **0.30**. The two-observation mean ratio is **0.25**, not
-`mean(balance) / mean(limit) = 40 / 150`. Ratios remain on the ratio scale: 0.20
-represents 20%. Every requested aggregation is supported; the sum is **0.50**
-here, a sum of ratio observations, **not accumulated utilization**.
-
-When both options are enabled, ratio series also receive the own-history
-comparisons and one additional scale-specific difference per requested lag and
-enabled level statistic:
-
-| Interpretation (current 0.30, lag 0.20) | Value | Suffix after `used_balance_over_credit_limit_` |
-| --- | ---: | --- |
-| Difference in ratio, `C - H` | 0.10 | `current_vs_lag_1_months_diff` |
-| Difference in percentage points, `100 * (C - H)` | 10 p.p. | `current_vs_lag_1_months_diff_pp` |
-| Ratio, `C / H` | 1.50 | `current_vs_lag_1_months_ratio` |
-| Percentage change, `100 * (C - H) / H` | 50% | `current_vs_lag_1_months_pct_change` |
-
-For window means, the absolute ratio difference keeps the existing
-`current_minus_mean_<k>_<unit>` name. Its percentage-point counterpart is
-`current_vs_mean_<k>_<unit>_diff_pp`. Aggregations are not duplicated on a
-percentage scale. `ref_col` alone does not enable these optional comparisons.
+The expression is evaluated on each historical observation before temporal
+aggregation. A mean of ratios is not a ratio of means. All selected custom
+series receive the usual temporal features and, when enabled, own-history
+comparisons. Identical arithmetic is supported on pandas and Spark.
 
 ### Missing values and validation
 
@@ -434,7 +403,7 @@ null with count zero. Sample std is null with fewer than two valid observations.
 Standardized deviation is null for zero std, and coefficient of variation is
 null for zero mean. Comparisons with a missing current, lag, or statistic are null.
 
-Missing/non-numeric reference columns fail with a `ValueError`. Duplicate
+Missing/non-numeric expression operands fail with a `ValueError`. Duplicate
 entity/date records remain errors even if one row has an invalid ratio. Generated
 series names cannot collide with existing base or spine columns; generated output
 names cannot collide with spine columns or one another. Original spine columns,
@@ -464,7 +433,7 @@ lookups; exact median also has group-size memory costs. Partition by entity and
 process bounded spine batches for large workloads. Validation adds scans/shuffles.
 Spark output order is unspecified; use `orderBy` explicitly when needed.
 
-Reference ratios are projected once before the temporal engine. Spark uses native
+Custom expressions are projected once before the temporal engine. Spark uses native
 expressions and includes all original/derived series in the existing history join
 and grouped aggregation; it does not collect historical records or call
 `toPandas()`. Historical relationships are a final projection over computed

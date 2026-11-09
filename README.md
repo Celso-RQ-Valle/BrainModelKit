@@ -42,6 +42,7 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
   - [Evaluate metrics](#pandas-evaluate-metrics)
   - [Analyze segments](#pandas-analyze-segments)
   - [Save, load, and score](#pandas-save-load-and-score)
+- [External dataframe validation](#external-dataframe-validation)
 - [Reference and troubleshooting](#reference-and-troubleshooting)
 - [Project information](#project-information)
 
@@ -286,8 +287,8 @@ candidate_features = credit_features + history_features
 ```
 
 For a utilization example, derive reproducible illustrative balances and changing
-limits from the simulated history, then enable the reference-column family.
-The following version enables both options; set `relative_historico=False` for
+limits from the simulated history, then define a custom ratio expression.
+Set `relative_historico=False` for
 ratio-series temporal features alone.
 
 ```python
@@ -297,8 +298,13 @@ df_base = df_base.withColumn(
 enriched = build_features(
     df_base,
     df_spine,
-    value_cols=["used_balance", "credit_limit"],
-    ref_col="credit_limit",
+    value_cols=["used_balance", "credit_limit", "used_balance_over_credit_limit"],
+    create_cols={
+        "used_balance_over_credit_limit": {
+            "op": "divide",
+            "args": [{"col": "used_balance"}, {"col": "credit_limit"}],
+        }
+    },
     relative_historico=True,
     **feature_options,
 )
@@ -308,8 +314,8 @@ candidate_features = credit_features + history_features
 
 Each call replaces `enriched`; continue below with the version you want to model.
 The last call includes original features, per-observation ratios, and historical
-comparisons for both. Used-balance/limit is utilization; the reference column
-retains its own features without a self-ratio.
+comparisons for each selected series. Used-balance/limit is utilization;
+cross-column relationships require explicit expressions.
 See [relationships and naming](docs/temporal.md#optional-relationship-families)
 for formulas, ratio scales, and missing-value rules.
 
@@ -356,10 +362,20 @@ The same parameters apply to both backends:
 | `aggregations` | `("mean", "median", "max", "min", "std", "sum", "count")` | Requested window statistics. |
 | `max_staleness_days` | `None` | Optional maximum age relative to each lookup cutoff. |
 | `relative_historico` | `False` | Compare current values with requested lags and enabled level statistics. |
-| `ref_col` | `None` | Add temporal features for same-observation `value / ref_col` series. |
+| `create_cols` | `None` | Named arithmetic expressions; include each name in `value_cols`. |
+| `nullable` | `True` | Preserve missing observations; `False` zero-fills numeric observations. |
 
-Both options default off, preserving existing outputs, including `current_minus_mean`.
-With both on, ratio comparisons also include percentage-point differences.
+Current/lag values, observation ages, requested window statistics, and
+`current_minus_mean` are automatic. Own-history comparisons require
+`relative_historico=True`; cross-column ratios require `create_cols`.
+
+**Migration:** `ref_col` has been removed on both backends. Calls such as
+`ref_col="credit_limit"` must use an explicit divide expression as above and
+include its name in `value_cols`. Percentage-point differences are no longer
+automatically generated. See [migration](docs/temporal.md#migration).
+
+Validate provider returns before generating features with
+[external dataframe validation](#external-dataframe-validation).
 
 #### Spark select features
 
@@ -713,8 +729,8 @@ history_features = [c for c in enriched.columns if c not in df_spine.columns]
 candidate_features = credit_features + history_features
 ```
 
-Enable both families on reproducible balances and limits derived from the
-simulated history. For ratios alone, set `relative_historico=False`.
+Define explicit ratios and enable historical comparisons on balances and limits
+from the simulated history. For ratios alone, set `relative_historico=False`.
 
 ```python
 df_base = df_base.assign(
@@ -724,8 +740,13 @@ df_base = df_base.assign(
 enriched = build_features(
     df_base,
     df_spine,
-    value_cols=["used_balance", "credit_limit"],
-    ref_col="credit_limit",
+    value_cols=["used_balance", "credit_limit", "used_balance_over_credit_limit"],
+    create_cols={
+        "used_balance_over_credit_limit": {
+            "op": "divide",
+            "args": [{"col": "used_balance"}, {"col": "credit_limit"}],
+        }
+    },
     relative_historico=True,
     **feature_options,
 )
@@ -1037,3 +1058,50 @@ Feature engineering: [Spark](#spark-build-features), [pandas](#pandas-build-feat
 - [Development and contribution](CONTRIBUTING.md), [development commands and notebooks](docs/project.md#development).
 - [Project layout](docs/project.md#project-layout), [changelog](CHANGELOG.md), [security policy](SECURITY.md).
 - [MIT License](LICENSE).
+
+## External dataframe validation
+
+Use `brainmodelkit.pyspark.validate_external_dataframe` to check provider key
+coverage, missing scores, monthly volume, baseline score-band stability and
+fixed-bin score density. Install `matplotlib` for charts; notebooks display the
+report automatically. The returned dictionary exposes metrics, aggregated tables,
+thresholds, figures and warnings for reuse.
+
+```python
+from brainmodelkit.pyspark import validate_external_dataframe
+
+report = validate_external_dataframe(
+    df_sent=df_sent,
+    df_received=df_received,
+    key_cols=["customer_id", "reference_date"],
+    date_col="reference_date",
+    score_col="bureau_score",
+)
+
+report = validate_external_dataframe(
+    df_sent=df_sent,
+    df_received=df_received,
+    key_cols=["customer_id", "reference_date"],
+    date_col="reference_date",
+    score_col="bureau_score",
+    baseline="202601",
+)
+```
+
+The default baseline is the earliest valid received month, even if that month
+has no valid scores. Coverage rates use distinct valid submitted/received keys
+as separate denominators, excluding null-key rows and reporting duplicates
+separately. All received rows still contribute to overall score analyses.
+
+The stability chart freezes baseline percentiles, using upper-inclusive bands;
+ties stay together and empty deciles remain visible. SQL null/NaN scores form a
+Missing band. Invalid dates are excluded only from monthly analyses; infinities
+make dated band analysis unavailable. Nonnumeric scores are rejected. The density
+histogram uses fixed 100-point bins over [0,1000], including 1000, normalized over
+finite in-range scores; out-of-range scores are counted separately.
+
+See the [parameter and return reference](docs/external_validation.md), including
+chart interpretation and Spark scalability, and run the
+[complete simulated example](examples/external_validation.py) for three monthly
+cohorts with missing/unexpected keys, duplicates, missing scores and a score shift.
+Only aggregated summaries are collected to the driver.

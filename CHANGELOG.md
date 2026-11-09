@@ -10,6 +10,15 @@ The project is experimental and pre-1.0; public APIs remain unstable.
 
 ### Changed
 
+- **Breaking:** removed `ref_col` from pandas and Spark `build_features`. Use
+  existing `create_cols` expressions and select their names in `value_cols`.
+  Automatic reference-ratio and ratio-specific percentage-point features were
+  removed; ordinary temporal features and own-history comparisons are preserved.
+- Added `brainmodelkit.pyspark.validate_external_dataframe` for provider key
+  coverage, score missingness, monthly volume, frozen baseline decile stability,
+  and fixed-bin density. Returns metrics, tables, thresholds, optional figures
+  and data-quality warnings without collecting raw Spark rows.
+
 - **Compatibility:** `build_features` generated names now use single underscores,
   e.g. `used_balance_over_credit_limit_standardized_deviation_6_months`.
   Update downstream feature lists/models; input and explicit custom names are

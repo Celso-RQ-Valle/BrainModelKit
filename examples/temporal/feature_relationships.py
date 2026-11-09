@@ -40,12 +40,17 @@ def main():
         df_spine,
         key_cols=["account_id"],
         reference_date_col="reference_date",
-        value_cols=["used_balance", "credit_limit"],
+        value_cols=["used_balance", "credit_limit", "used_balance_over_credit_limit"],
         windows=[1, 3, 6],
         lags=[1, 2, 3],
         period_unit="months",
         aggregations=["mean", "median", "min", "max", "std", "sum", "count"],
-        ref_col="credit_limit",
+        create_cols={
+            "used_balance_over_credit_limit": {
+                "op": "divide",
+                "args": [{"col": "used_balance"}, {"col": "credit_limit"}],
+            }
+        },
         relative_historico=True,
     )
     generated_features = [c for c in enriched.columns if c not in df_spine.columns]
@@ -60,7 +65,6 @@ def main():
                 prefix + "current",
                 prefix + "mean_3_months",
                 prefix + "current_vs_lag_1_months_diff",
-                prefix + "current_vs_lag_1_months_diff_pp",
                 prefix + "current_vs_lag_1_months_pct_change",
             ]
         ]

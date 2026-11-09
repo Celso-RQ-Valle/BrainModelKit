@@ -213,7 +213,7 @@ def feature_config(
     return keys, scores, windows, lags, aggregations, output
 
 
-def relationship_config(scores, ratio_scores, windows, lags, aggs, unit):
+def relationship_config(scores, windows, lags, aggs, unit):
     """Return backend-neutral (name, operation, left, right) expressions."""
     specs = []
     for score in scores:
@@ -231,8 +231,6 @@ def relationship_config(scores, ratio_scores, windows, lags, aggs, unit):
             # The legacy current_minus_mean already supplies this difference.
             if not existing_mean:
                 specs.append((prefix + "_diff", "diff", current, other))
-            if score in ratio_scores:
-                specs.append((prefix + "_diff_pp", "diff_pp", current, other))
             specs.extend(
                 [
                     (prefix + "_ratio", "ratio", current, other),
@@ -285,12 +283,11 @@ def build_config(
     aggregations,
     max_staleness_days,
     relative_historico,
-    ref_col,
 ):
     """Validate optional families and reserve all names before backend work."""
     if type(relative_historico) is not bool:
         raise ValueError("relative_historico must be a bool")
-    keys, scores, windows, lags, aggs, _ = feature_config(
+    keys, scores, windows, lags, aggs, output = feature_config(
         key_cols,
         value_cols,
         reference_date_col,
@@ -304,40 +301,8 @@ def build_config(
     )
     columns(base, [*keys, date_col, *scores])
     columns(spine, [*keys, reference_date_col])
-    ratios = {}
-    if ref_col is not None:
-        if not isinstance(ref_col, str) or not ref_col:
-            raise ValueError("ref_col must be a non-empty column name or None")
-        if ref_col not in base.columns:
-            raise ValueError(f"ref_col column {ref_col!r} is missing from df_base")
-        if ref_col in [*keys, date_col, reference_date_col]:
-            raise ValueError(
-                "ref_col must be a numeric value column, not a key or date"
-            )
-        ratios = {
-            feature_name(score, f"over_{ref_col}"): score
-            for score in scores
-            if score != ref_col
-        }
-        if len(ratios) != sum(score != ref_col for score in scores):
-            raise ValueError("Derived ratio series names collide")
-        if set(ratios) & (set(base.columns) | set(spine.columns)):
-            raise ValueError("Derived ratio series names collide with existing columns")
-    all_scores = [*scores, *ratios]
-    _, _, _, _, _, output = feature_config(
-        keys,
-        all_scores,
-        reference_date_col,
-        date_col,
-        period_unit,
-        windows,
-        lags,
-        aggs,
-        max_staleness_days,
-        date_diff=True,
-    )
     specs = (
-        relationship_config(all_scores, ratios, windows, lags, aggs, period_unit)
+        relationship_config(scores, windows, lags, aggs, period_unit)
         if relative_historico
         else []
     )
@@ -348,10 +313,7 @@ def build_config(
         raise ValueError(
             f"Feature columns already exist in base or spine: {sorted(conflicts)}"
         )
-    # A derived input must not masquerade as another generated feature.
-    if set(ratios) & set(output):
-        raise ValueError("Derived ratio series names collide with generated features")
-    return keys, scores, all_scores, windows, lags, aggs, ratios, specs
+    return keys, scores, windows, lags, aggs, specs
 
 
 def simulation_config(

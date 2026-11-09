@@ -283,7 +283,6 @@ def build_features(
     aggregations: Sequence[str] = AGGREGATIONS,
     max_staleness_days: int | None = None,
     relative_historico: bool = False,
-    ref_col: str | None = None,
     create_cols: dict | None = None,
     nullable: bool = True,
 ) -> DataFrame:
@@ -304,8 +303,6 @@ def build_features(
     current minus window mean. Duplicate base entity/date records are rejected.
 
     relative_historico adds comparisons with requested lags and level statistics.
-    ref_col adds same-observation value/ref_col series to the temporal engine.
-    Both options together also compare ratio series with their own histories.
     create_cols defines named row-level arithmetic trees (recommended for custom
     calculations); each name must be explicitly included in value_cols.
     nullable=False zero-fills numerical observations before arithmetic and temporal
@@ -336,8 +333,6 @@ def build_features(
         return F.when(value.isNull() | F.isnan(value), F.lit(0.0)).otherwise(value)
 
     used = operands | (set(scores) - set(custom))
-    if isinstance(ref_col, str) and ref_col in df_base.columns:
-        used.add(ref_col)
     if not nullable:
         df_base = df_base.select(
             *[
@@ -364,7 +359,7 @@ def build_features(
                 for name, expr in custom.items()
             ],
         )
-    keys, scores, all_scores, windows, lags, aggregations, ratios, specs = build_config(
+    keys, scores, windows, lags, aggregations, specs = build_config(
         df_base,
         df_spine,
         key_cols,
@@ -377,30 +372,15 @@ def build_features(
         aggregations,
         max_staleness_days,
         relative_historico,
-        ref_col,
     )
 
-    if ref_col is not None and not isinstance(
-        df_base.schema[ref_col].dataType, NumericType
-    ):
-        raise ValueError("ref_col must be numeric")
     if any(not isinstance(df_base.schema[s].dataType, NumericType) for s in scores):
         raise ValueError("Value columns must be numeric")
 
-    if ratios:
-        df_base = df_base.select(
-            "*",
-            *[
-                divide(_col(source).cast("double"), _col(ref_col).cast("double")).alias(
-                    name
-                )
-                for name, source in ratios.items()
-            ],
-        )
     if not nullable:
         df_base = df_base.select(
             *[
-                clean(_col(name)).alias(name) if name in all_scores else _col(name)
+                clean(_col(name)).alias(name) if name in scores else _col(name)
                 for name in df_base.columns
             ]
         )
@@ -408,7 +388,7 @@ def build_features(
         spine=df_spine,
         history=df_base,
         entity_cols=keys,
-        score_cols=all_scores,
+        score_cols=scores,
         reference_col=reference_date_col,
         observation_col=date_col,
         unit=period_unit,
@@ -424,8 +404,6 @@ def build_features(
         value = (
             a - b
             if operation == "diff"
-            else 100 * (a - b)
-            if operation == "diff_pp"
             else 100 * divide(a - b, b)
             if operation == "pct_change"
             else divide(a, F.abs(b))

@@ -567,6 +567,23 @@ def relationship_build(backend, request, spine, history, **options):
     return result
 
 
+def ratio_options(sources, denominator):
+    """Explicit expressions replacing the removed reference shortcut in fixtures."""
+    return (
+        {
+            "create_cols": {
+                f"{source}_over_{denominator}": {
+                    "op": "divide",
+                    "args": [{"col": source}, {"col": denominator}],
+                }
+                for source in sources
+            }
+        }
+        if denominator
+        else {}
+    )
+
+
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
 @pytest.mark.parametrize(
     "relative,reference",
@@ -577,11 +594,12 @@ def test_integrated_relationship_options(backend, relative, reference, request):
 
     spine, history = relationship_inputs()
     options = dict(
-        value_cols=["balance", "second", "limit"],
+        value_cols=["balance", "second", "limit"]
+        + (["balance_over_limit", "second_over_limit"] if reference else []),
         windows=[1, 2],
         lags=[1, 6],
         relative_historico=relative,
-        ref_col=reference,
+        **ratio_options(["balance", "second"], reference),
     )
     actual = relationship_build(backend, request, spine, history, **options)
     expected = build_features(history, spine, key_cols="id", **options)
@@ -645,12 +663,10 @@ def test_integrated_relationship_options(backend, relative, reference, request):
         assert row.limit_current == 400
         if relative:
             assert row[prefix + "current_vs_lag_1_months_diff"] == pytest.approx(0.1)
-            assert row[prefix + "current_vs_lag_1_months_diff_pp"] == pytest.approx(10)
             assert row[prefix + "current_vs_lag_1_months_pct_change"] == pytest.approx(
                 50
             )
             assert row[prefix + "current_minus_mean_2_months"] == pytest.approx(0.05)
-            assert row[prefix + "current_vs_mean_2_months_diff_pp"] == pytest.approx(5)
     else:
         assert not any("_over_" in name for name in actual)
 
@@ -666,12 +682,12 @@ def test_relationship_partial_aggregations(backend, aggs, request):
         request,
         spine.iloc[:1],
         history,
-        value_cols=["balance"],
+        value_cols=["balance", "balance_over_limit"],
         windows=[2],
         lags=[],
         aggregations=aggs,
         relative_historico=True,
-        ref_col="limit",
+        **ratio_options(["balance"], "limit"),
     )
     row = result.iloc[0]
     assert row.balance_current_minus_mean_2_months == pytest.approx(27.5)
@@ -699,11 +715,11 @@ def test_relationship_staleness_empty_and_nulls(backend, request):
         request,
         spine,
         history,
-        value_cols=["balance"],
+        value_cols=["balance", "balance_over_limit"],
         windows=[1],
         lags=[1],
         relative_historico=True,
-        ref_col="limit",
+        **ratio_options(["balance"], "limit"),
         max_staleness_days=10,
     )
     main = result[result.payload == "main"].iloc[0]
@@ -725,11 +741,11 @@ def test_relationship_staleness_empty_and_nulls(backend, request):
         request,
         spine.iloc[:1],
         history.iloc[:0],
-        value_cols=["balance"],
+        value_cols=["balance", "balance_over_limit"],
         windows=[1],
         lags=[1],
         relative_historico=True,
-        ref_col="limit",
+        **ratio_options(["balance"], "limit"),
     )
     assert empty.iloc[0].balance_over_limit_count_1_months == 0
     assert pd.isna(empty.iloc[0].balance_over_limit_current)
@@ -765,10 +781,15 @@ def test_relationship_zero_statistics_and_no_driver_collection(
                 base,
                 target,
                 key_cols="id",
-                value_cols=["balance", "second"],
+                value_cols=[
+                    "balance",
+                    "second",
+                    "balance_over_limit",
+                    "second_over_limit",
+                ],
                 windows=[2],
                 lags=[1],
-                ref_col="limit",
+                **ratio_options(["balance", "second"], "limit"),
                 relative_historico=True,
             )
         row = result.first().asDict()
@@ -777,10 +798,10 @@ def test_relationship_zero_statistics_and_no_driver_collection(
             history,
             spine,
             key_cols="id",
-            value_cols=["balance", "second"],
+            value_cols=["balance", "second", "balance_over_limit", "second_over_limit"],
             windows=[2],
             lags=[1],
-            ref_col="limit",
+            **ratio_options(["balance", "second"], "limit"),
             relative_historico=True,
         )
         row = result.iloc[0]
@@ -823,19 +844,10 @@ def test_relationship_validation(backend, request):
         lags=[1],
         relative_historico=True,
     )
-    for ref in ("missing", "payload", "id", "", 3):
-        with pytest.raises(ValueError, match="ref_col"):
-            build(base, target, **options, ref_col=ref)
-    with pytest.raises(ValueError, match="ref_col must be numeric"):
-        build(add(base, "limit", "text"), target, **options, ref_col="limit")
-    for name in (
-        "balance_current_vs_lag_1_months_diff",
-        "balance_over_limit_current",
-    ):
-        with pytest.raises(ValueError, match="already exist"):
-            build(base, add(target, name, 0.0), **options, ref_col="limit")
-    with pytest.raises(ValueError, match="collide"):
-        build(add(base, "balance_over_limit", 0.0), target, **options, ref_col="limit")
+    with pytest.raises(TypeError, match="ref_col"):
+        build(base, target, **options, ref_col="limit")
+    with pytest.raises(ValueError, match="already exist"):
+        build(base, add(target, "balance_current_vs_lag_1_months_diff", 0.0), **options)
     with pytest.raises(ValueError, match="bool"):
         build(base, target, **(options | {"relative_historico": "yes"}))
     duplicate = (
@@ -844,7 +856,7 @@ def test_relationship_validation(backend, request):
         else base.union(base)
     )
     with pytest.raises(ValueError, match="Duplicate"):
-        build(duplicate, target, **options, ref_col="limit")
+        build(duplicate, target, **options)
 
 
 @pytest.mark.parametrize("backend", ["pandas", "pyspark"])
@@ -857,17 +869,17 @@ def test_relationship_units_and_ratio_nulls(backend, unit, lag, window, request)
         request,
         spine.iloc[:1],
         history,
-        value_cols=["balance"],
+        value_cols=["balance", "balance_over_limit"],
         windows=[window],
         lags=[lag],
         period_unit=unit,
         aggregations=["mean", "std"],
         relative_historico=True,
-        ref_col="limit",
+        **ratio_options(["balance"], "limit"),
     )
     row = result.iloc[0]
     prefix = "balance_over_limit_"
-    assert row[prefix + f"current_vs_lag_{lag}_{unit}_diff_pp"] == pytest.approx(10)
+    assert row[prefix + f"current_vs_lag_{lag}_{unit}_diff"] == pytest.approx(0.1)
     assert row[prefix + f"mean_{window}_{unit}"] == pytest.approx(0.25)
     assert row[prefix + f"standardized_deviation_{window}_{unit}"] == pytest.approx(
         2**-0.5
@@ -885,11 +897,11 @@ def test_relationship_pandas_index_inputs_and_empty_spine():
     original_spine, original_history = spine.copy(deep=True), history.copy(deep=True)
     options = dict(
         key_cols="id",
-        value_cols=["balance", "limit"],
+        value_cols=["balance", "limit", "balance_over_limit"],
         windows=[2],
         lags=[1],
         relative_historico=True,
-        ref_col="limit",
+        **ratio_options(["balance"], "limit"),
     )
     result = build_features(history, spine, **options)
     pd.testing.assert_frame_equal(result[spine.columns], spine)
@@ -978,7 +990,6 @@ def test_custom_arithmetic_and_observation_nulls(custom_backend, nullable):
         windows=[3],
         lags=[1, 6],
         relative_historico=True,
-        ref_col="den",
     )
     result = (
         result
@@ -995,7 +1006,6 @@ def test_custom_arithmetic_and_observation_nulls(custom_backend, nullable):
     assert row.total_exact_current == (12 if nullable else 20)
     assert row.ratio_current == 19  # ((20 - 1) * 2 * 5) / 10
     assert row.ratio_mean_3_months == pytest.approx(14 if nullable else 28 / 3)
-    assert row.x_over_den_mean_3_months == (1.5 if nullable else 1)
     assert pd.isna(row.x_lag_6_months)
     assert pd.isna(row.zero_standardized_deviation_3_months)
     assert pd.isna(row.zero_coefficient_of_variation_3_months)
@@ -1076,14 +1086,6 @@ def test_custom_expression_validation(custom_backend, expr, match):
                 "value_cols": ["x", "x_current"],
             },
             "already exist",
-        ),
-        (
-            {
-                "create_cols": {"x_over_den": {"lit": 1}},
-                "value_cols": ["x", "x_over_den"],
-                "ref_col": "den",
-            },
-            "collide",
         ),
     ],
 )

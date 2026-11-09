@@ -8,6 +8,7 @@ lifecycle; their parameters and algorithms are not interchangeable.
 | --- | --- | --- |
 | Install and diagnose | [Setup](setup.md) | [Compatibility and release checks](release-readiness.md) |
 | Prepare data | [Runnable walkthroughs](../examples/journey/README.md) | [Standalone simulations](standalone-examples.md) |
+| Validate provider returns | [Simulated example](../examples/external_validation.py) | [External validation](external_validation.md) |
 | Build features | [Temporal catalog](temporal.md) | [Boundaries and scale](temporal.md#temporal-semantics) |
 | Select features | [Cost and purpose comparison](selection-costs.md) | [All sixteen method guides](feature_selection.md#api-quick-reference) |
 | Train | [Backend examples](../examples/journey/README.md) | [Models, parameters, outputs](training.md) |
