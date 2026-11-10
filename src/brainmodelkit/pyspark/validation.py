@@ -29,7 +29,11 @@ def validate_external_dataframe(
     Spark date/timestamp types and strict YYYY-MM-DD strings (session timezone).
     Baseline defaults to the earliest valid month, even without valid scores.
     Percentiles use Spark percentile_approx with accuracy 10000 (relative rank
-    error 1/10000). Bands are (-inf, p10], (p10, p20], ..., (p90, inf).
+    error 1/10000), using only finite baseline scores in [0, 1000].
+    Bands are [0, p10], (p10, p20], ..., (p90, 1000].
+    Out-of-range scores trigger a bold red notebook warning (plain text in
+    scripts) and separate monthly quality categories, with all dated rows in
+    monthly denominators. Range percentages use all received rows.
     Ties stay together; empty bands are preserved. Histogram density integrates
     to one over finite scores in [0, 1000], using 100-point bins.
 
@@ -142,6 +146,9 @@ def validate_external_dataframe(
     missing = score.isNull() | F.isnan(score)
     invalid = ~missing & (F.abs(score) == float("inf"))
     valid = ~missing & ~invalid
+    below = ~missing & (score < 0)
+    above = ~missing & (score > 1000)
+    valid_in_range = valid & score.between(0, 1000)
 
     def count_if(condition, name):
         return F.count(F.when(condition, 1)).alias(name)
@@ -151,8 +158,9 @@ def validate_external_dataframe(
             count_if(missing, "missing"),
             count_if(invalid, "invalid"),
             count_if(valid, "valid"),
-            count_if(valid & (score < 0), "below_range"),
-            count_if(valid & (score > 1000), "above_range"),
+            count_if(below, "below_range"),
+            count_if(above, "above_range"),
+            count_if(valid_in_range, "valid_in_range"),
             count_if(col("date_missing"), "missing_dates"),
             count_if(col("cohort").isNull() & ~col("date_missing"), "invalid_dates"),
         )
@@ -160,7 +168,13 @@ def validate_external_dataframe(
         .asDict()
     )
     dates = {k: counts.pop(k) for k in ("missing_dates", "invalid_dates")}
-    counts["missing_percentage"] = pct(counts["missing"], received["rows"])
+    for metric in ("missing", "below_range", "above_range"):
+        counts[f"{metric}_percentage"] = pct(counts[metric], received["rows"])
+    distribution_bands = BANDS + (
+        ["Below 0", "Above 1000"]
+        if counts["below_range"] or counts["above_range"]
+        else []
+    )
     monthly = [
         r.asDict()
         for r in data.filter(col("cohort").isNotNull())
@@ -183,7 +197,7 @@ def validate_external_dataframe(
         status = f"Baseline {selected} does not exist in received cohorts."
     else:
         cutoffs = (
-            data.filter((col("cohort") == selected) & valid)
+            data.filter((col("cohort") == selected) & valid_in_range)
             .agg(
                 F.percentile_approx(
                     "score", [i / 10 for i in range(1, 10)], 10000
@@ -194,31 +208,29 @@ def validate_external_dataframe(
         )
         if not cutoffs:
             status = (
-                f"Baseline {selected} has no valid scores; "
+                f"Baseline {selected} has no valid in-range scores in [0, 1000]; "
                 "deciles cannot be calculated."
-            )
-        elif data.filter(col("cohort").isNotNull() & invalid).limit(1).count():
-            status = (
-                "Invalid scores in dated rows prevent complete eleven-band assignment."
             )
     definitions = []
     if cutoffs:
         definitions = [
             dict(band="Missing", lower=None, upper=None, interval="SQL null or NaN")
         ]
-        edges = [float("-inf"), *cutoffs, float("inf")]
+        edges = [0, *cutoffs, 1000]
         definitions += [
             dict(
                 band=f"D{i + 1}",
                 lower=edges[i],
                 upper=edges[i + 1],
-                interval="(lower, upper]",
+                interval="[lower, upper]" if i == 0 else "(lower, upper]",
             )
             for i in range(10)
         ]
     bands = []
     if status == "available":
-        band = F.when(missing, "Missing")
+        band = (
+            F.when(missing, "Missing").when(below, "Below 0").when(above, "Above 1000")
+        )
         for i, cutoff in enumerate(cutoffs, 1):
             band = band.when(score <= cutoff, f"D{i}")
         aggregated = (
@@ -236,11 +248,11 @@ def validate_external_dataframe(
                 percentage=100.0 * lookup.get((r["cohort"], b), 0) / r["count"],
             )
             for r in monthly
-            for b in BANDS
+            for b in distribution_bands
         ]
     else:
         warnings.append(status)
-    in_range = data.filter(valid & score.between(0, 1000))
+    in_range = data.filter(valid_in_range)
     bin_id = F.least(F.floor(score / 100).cast("int"), F.lit(9))
     bins = {
         r["bin"]: r["count"]
@@ -270,9 +282,20 @@ def validate_external_dataframe(
                 f"{label}: {metrics['null_key_rows']} null-key rows; "
                 f"{metrics['duplicate_key_rows']} duplicate excess rows."
             )
+    range_warning = bool(counts["below_range"] or counts["above_range"])
+    range_status = (
+        f"{'SCORE RANGE WARNING' if range_warning else 'SCORE RANGE OK'}: "
+        f"{counts['below_range']} received scores are below 0; "
+        f"{counts['above_range']} received scores are above 1000. "
+        "The valid score range is [0, 1000]."
+    )
+    if range_warning:
+        warnings.append(range_status)
     report = dict(
         matching=matching,
         scores=counts,
+        range_status=range_status,
+        range_warning=range_warning,
         dates=dates,
         monthly_volume=monthly,
         baseline=selected,
@@ -329,7 +352,10 @@ def _render_report(report):
                         "#999999",
                         *[colormaps["viridis"](i / 9) for i in range(10)],
                     ]
-                    for band, color in zip(BANDS, colors, strict=True):
+                    labels = list(dict.fromkeys(r["band"] for r in report[name]))
+                    if "Below 0" in labels:
+                        colors += ["#e65100", "#c62828"]
+                    for band, color in zip(labels, colors, strict=True):
                         values = [
                             r["percentage"] for r in report[name] if r["band"] == band
                         ]
@@ -373,8 +399,10 @@ def _render_report(report):
         from IPython import get_ipython
         from IPython.display import HTML, Markdown, display
     except ImportError:
+        print(report["range_status"])
         return
     if get_ipython() is None:
+        print(report["range_status"])
         return
 
     def show_table(rows):
@@ -438,7 +466,21 @@ def _render_report(report):
             )
         elif key == "scores":
             show_table([report[key]])
-            display(Markdown("Missing percentage uses all received rows."))
+            display(Markdown("Missing and range percentages use all received rows."))
+            try:
+                if report["range_warning"]:
+                    display(
+                        HTML(
+                            '<p style="color: red; font-weight: bold;">'
+                            + report["range_status"]
+                            + "</p>"
+                        )
+                    )
+                else:
+                    display(Markdown(report["range_status"]))
+            except Exception:
+                # Some notebook frontends cannot render rich output.
+                print(report["range_status"])
         elif key == "warnings":
             show_table([{"warning": warning} for warning in report[key]])
         else:
@@ -456,7 +498,9 @@ def _render_report(report):
             display(
                 Markdown(
                     "Density is normalized over finite scores in [0, 1000]. "
-                    "Missing, invalid and out-of-range counts are reported above."
+                    f"Excluded out-of-range scores: {report['scores']['below_range']} "
+                    f"below 0; {report['scores']['above_range']} above 1000. "
+                    "Missing and nonfinite diagnostics are reported above."
                 )
             )
         if key in report["figures"]:

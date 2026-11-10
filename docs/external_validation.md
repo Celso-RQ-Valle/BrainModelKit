@@ -19,8 +19,8 @@ in scripts, use the returned dictionary and figures.
 | `baseline` | Optional `YYYYMM` string. `None` chooses the earliest valid received month. |
 
 Malformed baseline arguments raise `ValueError`. A nonexistent cohort or a
-baseline without finite scores makes stability unavailable, while the other
-sections remain usable. The default never skips an early month with no scores.
+baseline without finite in-range scores makes stability unavailable, while
+the other sections remain usable. The default never skips an early month with no scores.
 Missing required columns, duplicate column names and incompatible types raise
 `ValueError` before analysis.
 
@@ -33,7 +33,9 @@ Zero-denominator percentages are `None`, not zero.
 1. `matching`: `submitted` and `received` summaries, matched distinct keys,
    missing submitted keys, unexpected received keys, and match percentages.
 2. `scores`: missing, invalid, valid, below-range and above-range counts plus
-   `missing_percentage` over **all received rows**.
+   `missing_percentage`, `below_range_percentage`, and `above_range_percentage`
+   over **all received rows**. `valid` retains the finite-score count;
+   `valid_in_range` counts finite scores in [0, 1000].
 3. `monthly_volume`: chronological `cohort`, `count` table; `dates` separately
    reports `missing_dates` and `invalid_dates`.
 4. `baseline`, `cutoffs`, `band_definitions`: selected cohort, nine frozen
@@ -65,12 +67,16 @@ rows count excess rows beyond the first per group, including null-key groups.
 These categories may overlap. No row is removed from score analyses: unmatched
 records, duplicate records and null-key rows all contribute.
 
-SQL null and numeric NaN are missing scores. Positive/negative infinity are
-invalid, counted separately. Finite scores outside [0, 1000] are valid for
-baseline/stability calculations but excluded from the histogram and reported
-separately. Invalid scores in any valid-dated cohort make the eleven-band
-stability analysis unavailable, preventing misleading percentages. Invalid
-scores on undated rows do not prevent analysis of valid cohorts.
+SQL null and numeric NaN are missing scores. Negative infinity counts as
+`below_range`; positive infinity counts as `above_range`. Both also retain the
+existing `invalid` nonfinite diagnostic, so these counts overlap. Out-of-range
+scores are never clipped or assigned to Missing or a decile.
+
+Immediately after the score-quality summary, a **bold red HTML warning** shows
+both range counts, including zero, before any charts. Without IPython or rich
+warning rendering, a clearly labeled `SCORE RANGE WARNING` is printed instead.
+When both counts are zero, a normal `SCORE RANGE OK` status appears.
+`range_status` and `range_warning` return this message and its severity.
 
 SQL-null dates and invalid dates are counted separately. Unsupported strings,
 impossible dates and empty strings are invalid. These rows remain in overall
@@ -83,14 +89,17 @@ may reflect provider coverage as well as changes in the submitted population.
 
 The stability chart is a 100% stacked column per month, ordered `Missing`,
 `D1`, ..., `D10`, using fixed colors. Its denominator includes every received
-row in that month, including missing scores. Missing scores have their own band.
-The baseline's finite, nonmissing scores determine p10 through p90 using Spark
-`percentile_approx` with accuracy 10000 (relative rank error 1/10000).
+row in that month, including missing and out-of-range scores.
+When any received score is out of range, additional `Below 0` and `Above 1000`
+quality categories appear in orange and red with legend entries; they are not
+deciles. Each monthly column still sums to 100%. Missing scores have their own band.
+The baseline's finite, nonmissing scores within [0, 1000] determine p10 through
+p90 using Spark `percentile_approx` with accuracy 10000 (relative rank error 1/10000).
 Thresholds are calculated once and reused for every cohort:
 
-- D1: `(-infinity, p10]`.
+- D1: `[0, p10]`.
 - D2 through D9: `(previous cutoff, current cutoff]`.
-- D10: `(p90, infinity)` for finite scores.
+- D10: `(p90, 1000]`.
 
 Cutoff equality belongs to the first eligible band. Repeated cutoffs create
 empty bands; identical scores are never split. All ten labels remain in the
@@ -103,7 +112,8 @@ The density histogram uses `[0,100)`, `[100,200)`, ..., `[900,1000]`.
 Exactly 100 belongs to the second bin; exactly 1000 belongs to the last bin.
 Density is `count / (in-range count * 100)`, so total bar area is one. Bin
 percentages use only finite in-range scores. Missing, invalid and out-of-range
-scores are never clipped into bins. An empty state explains when no in-range
+scores are never clipped into bins. The report explicitly displays the excluded
+below-range and above-range counts. An empty state explains when no in-range
 scores exist; counts remain zero and percentages/densities are `None`.
 
 ## Example and scale
@@ -119,4 +129,4 @@ Only scalar summaries, monthly aggregates, band aggregates and ten histogram
 bins reach the driver; no raw rows, RDDs, SparkContext or `toPandas()` are used.
 Driver memory scales with the number of months, not customer rows. Multiple
 Spark actions and shuffles are required; users may cache inputs when reused.
-The function does not persist inputs or write local files.
+The function does not persist inputs or write local files.

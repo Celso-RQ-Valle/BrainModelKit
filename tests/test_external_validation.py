@@ -91,18 +91,19 @@ def test_matching_missingness_bands_and_density(spark, monkeypatch):
     assert len(report["cutoffs"]) == 9
     for month in ("202601", "202602"):
         bands = [r for r in report["monthly_bands"] if r["cohort"] == month]
-        assert len(bands) == 11
+        assert len(bands) == 13
         assert sum(r["percentage"] for r in bands) == pytest.approx(100)
     feb = {
         r["band"]: r["count"]
         for r in report["monthly_bands"]
         if r["cohort"] == "202602"
     }
-    assert feb["D10"] == 2  # Frozen January thresholds, not February quantiles.
-    assert feb["D1"] == 1
+    assert feb["D10"] == 1  # Frozen January thresholds, not February quantiles.
+    assert feb["D1"] == 0
+    assert feb["Below 0"] == feb["Above 1000"] == 1
     assert feb["Missing"] == 1
     if report["figures"]:
-        assert len(report["figures"]["monthly_bands"].axes[0].containers) == 11
+        assert len(report["figures"]["monthly_bands"].axes[0].containers) == 13
         assert (
             report["figures"]["histogram"]
             .axes[0]
@@ -124,9 +125,12 @@ def test_constant_baseline_and_explicit_selection(spark):
     ]
     report = validate(spark, rows, baseline="202601")
     assert report["cutoffs"] == [50.0] * 9
+    assert not report["range_warning"]
+    assert report["range_status"].startswith("SCORE RANGE OK:")
+    assert len(report["monthly_bands"]) == 22
     assert [r["count"] for r in report["monthly_bands"][:11]] == [0, 2] + [0] * 9
-    assert report["band_definitions"][1]["lower"] == float("-inf")
-    assert report["band_definitions"][-1]["upper"] == float("inf")
+    assert report["band_definitions"][1]["lower"] == 0
+    assert report["band_definitions"][-1]["upper"] == 1000
     assert validate(spark, rows, baseline="202602")["baseline"] == "202602"
 
 
@@ -137,13 +141,13 @@ def test_constant_baseline_and_explicit_selection(spark):
         (
             [("a", "2026-01-01", None), ("a", "2026-02-01", 5.0)],
             None,
-            "no valid scores",
+            "no valid in-range scores",
         ),
         ([("a", "2026-01-01", 5.0)], "202512", "does not exist"),
         (
-            [("a", "2026-01-01", 5.0), ("b", "2026-02-01", float("inf"))],
+            [("a", "2026-01-01", -1.0), ("b", "2026-01-01", float("inf"))],
             None,
-            "Invalid scores",
+            "no valid in-range scores",
         ),
         ([("a", "2026-02-30", 5.0)], None, "No valid monthly"),
     ],
@@ -220,7 +224,10 @@ def test_notebook_section_order_and_headless_figures(monkeypatch):
     monkeypatch.setitem(sys.modules, "IPython.display", output)
     report = dict(
         matching={"submitted": {"rows": 0}, "received": {"rows": 0}},
-        scores={"missing": 0},
+        scores={"missing": 0, "below_range": 2, "above_range": 0},
+        range_warning=True,
+        range_status="SCORE RANGE WARNING: 2 received scores are below 0; "
+        "0 received scores are above 1000. The valid score range is [0, 1000].",
         dates={"missing_dates": 0, "invalid_dates": 0},
         monthly_volume=[],
         baseline=None,
@@ -247,7 +254,99 @@ def test_notebook_section_order_and_headless_figures(monkeypatch):
         "### Overall score density",
         "### Data-quality warnings",
     ]
+    warning = next(v for v in displayed if isinstance(v, str) and "color: red" in v)
+    assert "font-weight: bold" in warning
+    assert report["range_status"] in warning
+    assert displayed.index("### Score missingness") < displayed.index(warning)
+    assert displayed.index(warning) < displayed.index("### Monthly received volume")
     for figure in report["figures"].values():
         buffer = io.BytesIO()
         figure.savefig(buffer, format="png")
         assert buffer.getvalue().startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize("endpoint", [0.0, 1000.0])
+def test_range_quality_and_repeated_endpoint_cutoffs(spark, endpoint):
+    values = [endpoint] * 3 + [
+        -1.0,
+        1001.0,
+        float("-inf"),
+        float("inf"),
+        None,
+        float("nan"),
+    ]
+    rows = [(str(i), "2026-01-01", v) for i, v in enumerate(values)]
+    rows += [("next0", "2026-02-01", 0.0), ("next1", "2026-02-01", 1000.0)]
+    report = validate(spark, rows)
+    assert report["cutoffs"] == [endpoint] * 9
+    assert report["stability_status"] == "available"
+    assert report["scores"]["invalid"] == 2
+    assert report["scores"]["missing"] == 2
+    assert report["range_status"] == (
+        "SCORE RANGE WARNING: 2 received scores are below 0; "
+        "2 received scores are above 1000. The valid score range is [0, 1000]."
+    )
+    for category in ("below_range", "above_range"):
+        assert report["scores"][category] == 2
+        assert report["scores"][category + "_percentage"] == pytest.approx(200 / 11)
+    for month, total in [("202601", 9), ("202602", 2)]:
+        bands = {r["band"]: r for r in report["monthly_bands"] if r["cohort"] == month}
+        assert len(bands) == 13
+        assert sum(r["count"] for r in bands.values()) == total
+        assert sum(r["percentage"] for r in bands.values()) == pytest.approx(100)
+        if month == "202601":
+            assert bands["D1"]["count"] == 3
+            assert bands["Below 0"]["count"] == bands["Above 1000"]["count"] == 2
+        else:
+            assert bands["D1"]["count"] == (1 if endpoint == 0 else 2)
+    assert sum(r["count"] for r in report["histogram"]) == 5
+
+
+@pytest.mark.parametrize("mode", ["no_ipython", "no_shell", "broken_html"])
+@pytest.mark.parametrize("warning", [True, False])
+def test_range_status_plain_text(monkeypatch, capsys, mode, warning):
+    from types import ModuleType
+
+    from brainmodelkit.pyspark.validation import _render_report
+
+    monkeypatch.setitem(sys.modules, "matplotlib", None)
+    ipython = ModuleType("IPython")
+    ipython.get_ipython = lambda: None if mode == "no_shell" else object()
+    output = ModuleType("IPython.display")
+    output.Markdown = lambda v: v
+    output.display = lambda v: None
+
+    def broken_html(value):
+        if "color: red" in value:
+            raise RuntimeError("Rich rendering unavailable")
+        return value
+
+    output.HTML = broken_html
+    monkeypatch.setitem(
+        sys.modules, "IPython", None if mode == "no_ipython" else ipython
+    )
+    monkeypatch.setitem(sys.modules, "IPython.display", output)
+    status = (
+        "SCORE RANGE WARNING: 1 below 0; 0 above 1000"
+        if warning
+        else "SCORE RANGE OK: 0 below 0; 0 above 1000"
+    )
+    report = dict(
+        range_status=status,
+        range_warning=warning,
+        warnings=[],
+        figures={},
+        matching={"submitted": {}, "received": {}},
+        scores={"below_range": 1, "above_range": 0},
+        dates={},
+        monthly_volume=[],
+        band_definitions=[],
+        monthly_bands=[],
+        histogram=[],
+        baseline=None,
+        cutoffs=[],
+        stability_status="unavailable",
+    )
+    _render_report(report)
+    if mode != "broken_html" or warning:
+        assert status in capsys.readouterr().out

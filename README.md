@@ -1086,6 +1086,10 @@ report = validate_external_dataframe(
     score_col="bureau_score",
     baseline="202601",
 )
+print(report["range_status"])
+print(report["scores"]["below_range"], report["scores"]["above_range"])
+print(report["scores"]["below_range_percentage"])
+print(report["scores"]["above_range_percentage"])
 ```
 
 The default baseline is the earliest valid received month, even if that month
@@ -1093,12 +1097,18 @@ has no valid scores. Coverage rates use distinct valid submitted/received keys
 as separate denominators, excluding null-key rows and reporting duplicates
 separately. All received rows still contribute to overall score analyses.
 
-The stability chart freezes baseline percentiles, using upper-inclusive bands;
-ties stay together and empty deciles remain visible. SQL null/NaN scores form a
-Missing band. Invalid dates are excluded only from monthly analyses; infinities
-make dated band analysis unavailable. Nonnumeric scores are rejected. The density
-histogram uses fixed 100-point bins over [0,1000], including 1000, normalized over
-finite in-range scores; out-of-range scores are counted separately.
+The stability chart freezes percentiles calculated only from finite, nonmissing
+baseline scores in [0, 1000]. Deciles are [0, p10], (p10, p20], ..., (p90, 1000];
+ties stay together and empty deciles remain visible. SQL null/NaN form Missing.
+Out-of-range scores, including infinities, trigger a bold red notebook warning
+(or labeled plain text) showing separate below-0 and above-1000 counts.
+`report["scores"]["below_range_percentage"]` and `above_range_percentage` use all
+received rows. Additional orange/red `Below 0` and `Above 1000` quality categories
+keep monthly stacked percentages at 100%. Invalid dates are excluded only from
+monthly analyses; nonnumeric scores are rejected. A baseline without in-range
+scores makes deciles unavailable while preserving other report sections.
+The histogram retains fixed 100-point bins over [0, 1000], including 1000,
+normalized only over valid in-range scores, with excluded range counts reported.
 
 See the [parameter and return reference](docs/external_validation.md), including
 chart interpretation and Spark scalability, and run the
