@@ -1,0 +1,194 @@
+# Models and hyperparameter optimization
+
+[Main workflow](../../README.md) | [Optimization contract](../optimization.md)
+
+All built-in models below are binary classifiers: targets are 0/1 and predictions
+provide a class-1 probability. Logistic regression is a classifier here; the
+optimization API does not currently support continuous-target regression metrics.
+
+Each list contains explicit candidate values: `[200, 1000]` chooses 200 or
+1000; `[100]` fixes a parameter. Trials sample combinations, so the trial budget
+does not guarantee every combination is tested. See [range syntax](../optimization.md#search-spaces)
+when you want to search between bounds.
+
+Choose one model and its search space below, then pass them to `optimize`:
+
+```python
+from brainmodelkit.optimization.pandas import optimize
+# For Spark: from brainmodelkit.optimization.pyspark import optimize
+
+# Define model and search_space using one backend-specific example below.
+tuning = optimize(
+    train_df=train_df,
+    oot_df=validation_df,
+    target_col="target",
+    feature_cols=selected_features,
+    model=model,
+    search_space=search_space,
+    objective_metric="oot_auc",
+    direction="maximize",
+    target_metric="train_oot_ks_abs_shift",
+    target_limit=0.05,
+    target_operator="<=",
+    n_trials=20,
+    cv=3,
+)
+if not tuning.constraint_satisfied:
+    raise ValueError("No feasible trial; inspect tuning.trials before final training.")
+print(tuning.best_params)
+```
+
+Install `brainmodelkit[pandas,optimization]` or
+`brainmodelkit[pyspark,optimization]`. Pass development validation as `oot_df`
+during optimization; keep final OOT untouched until the configuration is frozen.
+Refit with `train_model(..., model=model, model_params=tuning.best_params)` using
+the same model or pipeline and backend. See the main README for the full refit.
+
+## Logistic regression
+
+A linear classifier. Scale numeric inputs inside a pandas pipeline so that each
+CV fold learns its own scaling. Smaller `C` means stronger regularization;
+larger Spark `regParam` means stronger regularization. They are not interchangeable.
+
+```python
+# pandas
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
+search_space = {"logisticregression__C": [0.001, 0.01, 0.1, 1.0, 10.0]}
+```
+
+```python
+# Spark: built-in standardization is enabled by default.
+model = "logistic_regression"
+search_space = {"regParam": [0.001, 0.01, 0.1, 1.0], "maxIter": [100]}
+```
+
+## Decision tree
+
+A single tree. Depth limits complexity; minimum leaf size limits small leaves.
+Use an estimator object in pandas so the same `model` also works with
+`train_model` (the string `"decision_tree"` works in pandas optimization/CV only).
+
+```python
+# pandas
+from sklearn.tree import DecisionTreeClassifier
+
+model = DecisionTreeClassifier(random_state=42)
+search_space = {"max_depth": [3, 5, 8], "min_samples_leaf": [10, 20, 50]}
+```
+
+```python
+# Spark
+model = "decision_tree"
+search_space = {"maxDepth": [3, 5, 8], "minInstancesPerNode": [10, 20, 50]}
+```
+
+## Random forest
+
+An ensemble of randomized trees. Tree count affects fit cost; depth and minimum
+leaf size control each tree's complexity.
+
+```python
+# pandas
+model = "random_forest"
+search_space = {
+    "n_estimators": [100, 200],
+    "max_depth": [5, 10],
+    "min_samples_leaf": [10, 20, 50],
+}
+```
+
+```python
+# Spark
+model = "random_forest"
+search_space = {
+    "numTrees": [100, 200],
+    "maxDepth": [5, 10],
+    "minInstancesPerNode": [10, 20, 50],
+}
+```
+
+## Gradient boosting
+
+Sequential boosted trees. Tune the learning rate together with the number of
+iterations; smaller learning rates often need more iterations.
+
+```python
+# pandas
+model = "gradient_boosting"
+search_space = {
+    "n_estimators": [100, 200],
+    "learning_rate": [0.03, 0.1],
+    "max_depth": [2, 3, 5],
+}
+```
+
+```python
+# Spark
+model = "gradient_boosting"
+search_space = {
+    "maxIter": [100, 200],
+    "stepSize": [0.03, 0.1],
+    "maxDepth": [2, 3, 5],
+}
+```
+
+## LightGBM
+
+Leaf-wise boosted trees. Leaf count and minimum data per leaf control complexity.
+The example leaf sizes below need sufficiently large training folds; reduce them
+for small samples. These are illustrative search spaces, not universal defaults.
+
+```python
+# pandas: native LightGBM sklearn wrapper
+model = "lightgbm"
+search_space = {
+    "n_estimators": [100, 200],
+    "learning_rate": [0.03, 0.1],
+    "num_leaves": [15, 31, 63],
+    "min_child_samples": [200, 1000],
+}
+```
+
+`min_child_samples` is the sklearn wrapper's parameter for minimum data per leaf.
+Use that name in pandas to avoid supplying it alongside its native alias.
+
+```python
+# SparkLightGBM: default Spark backend, native parameter names
+model = "lightgbm"
+search_space = {
+    "num_iterations": [100, 200],
+    "learning_rate": [0.03, 0.1],
+    "num_leaves": [15, 31, 63],
+    "min_data_in_leaf": [200, 1000],
+}
+```
+
+```python
+# SynapseML: pass lgbm_backend="synapseml" to optimize AND train_model.
+model = "lightgbm"
+search_space = {
+    "numIterations": [100, 200],
+    "learningRate": [0.03, 0.1],
+    "numLeaves": [15, 31, 63],
+    "minDataInLeaf": [200, 1000],
+}
+```
+
+`lgbm_backend` is a Spark execution option, not a hyperparameter. Spark also
+accepts `model="lgbm"`. See [LightGBM setup and execution](../optimization.md#spark-lightgbm)
+for dependencies, executor requirements, and local/distributed behavior.
+
+## Custom classifiers and pipelines
+
+Pandas accepts cloneable sklearn classifiers with `predict_proba`. Use their
+parameter names directly, or `step_name__parameter` for pipeline steps, as in the
+logistic-regression example. Keep learned preprocessing inside the pipeline.
+
+Spark accepts compatible Spark ML estimators exposing feature, label, prediction,
+probability, and raw-prediction parameters. Supply native Spark parameter names;
+the library assembles raw feature columns into its pipeline. See the
+[training contract](../training.md#training-parameter-reference) for details.

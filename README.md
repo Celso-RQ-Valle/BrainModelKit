@@ -425,14 +425,16 @@ Tune logistic regression on April training and May validation, keeping June OOT
 untouched. Install `brainmodelkit[pyspark,optimization]` for this step.
 This example **maximizes validation AUC while limiting the training-to-validation KS
 gap to five percentage points**. The API calls validation `oot_df`, so its
-metrics have the `oot_` prefix.
+metrics have the `oot_` prefix. Hyperparameter lists contain explicit candidate
+values. See [models and search spaces](docs/models/README.md) for every supported
+model and its backend-specific parameters.
 
 ```python
 from brainmodelkit.optimization.pyspark import optimize
 
 search_space = {
-    "regParam": {"type": "float", "low": 0.001, "high": 1.0, "log": True},
-    "maxIter": {"type": "categorical", "choices": [100]},
+    "regParam": [0.001, 0.01, 0.1, 1.0],
+    "maxIter": [100],
 }
 tuning = optimize(
     train_df=train_df,
@@ -835,7 +837,9 @@ Tune logistic regression on April training and May validation, keeping June OOT
 untouched. Install `brainmodelkit[pandas,optimization]` for this step.
 This example **maximizes validation AUC while limiting the training-to-validation KS
 gap to five percentage points**. The API calls validation `oot_df`, so its
-metrics have the `oot_` prefix.
+metrics have the `oot_` prefix. Hyperparameter lists contain explicit candidate
+values. See [models and search spaces](docs/models/README.md) for every supported
+model and its backend-specific parameters.
 
 ```python
 from brainmodelkit.optimization.pandas import optimize
@@ -847,7 +851,7 @@ from sklearn.preprocessing import StandardScaler
 classifier = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
 
 search_space = {
-    "logisticregression__C": {"type": "float", "low": 0.001, "high": 10.0, "log": True},
+    "logisticregression__C": [0.001, 0.01, 0.1, 1.0, 10.0],
 }
 tuning = optimize(
     train_df=train_df,

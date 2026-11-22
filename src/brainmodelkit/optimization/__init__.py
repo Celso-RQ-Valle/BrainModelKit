@@ -30,7 +30,11 @@ def require_optuna():
 
 
 def suggest_parameters(trial, search_space: dict[str, Any]) -> dict[str, Any]:
-    """Suggest parameters from the documented dictionary search-space format."""
+    """Suggest parameters from candidate lists, ranges, or callable specifications.
+
+    A list contains explicit choices: [200, 1000] samples either endpoint,
+    not the integers between them. A singleton list fixes a parameter.
+    """
     if not isinstance(search_space, dict) or not search_space:
         raise ValueError("search_space must be a non-empty dictionary")
     values = {}
@@ -40,9 +44,22 @@ def suggest_parameters(trial, search_space: dict[str, Any]) -> dict[str, Any]:
         if callable(specification):
             values[name] = specification(trial)
             continue
+        if isinstance(specification, list):
+            if not specification:
+                raise ValueError(f"Candidate list for {name!r} must not be empty")
+            if any(
+                value is not None and not isinstance(value, (str, bool, int, float))
+                for value in specification
+            ):
+                raise ValueError(
+                    f"Candidate list for {name!r} must contain scalar values"
+                )
+            values[name] = trial.suggest_categorical(name, specification)
+            continue
         if not isinstance(specification, dict):
             raise ValueError(
-                f"Search-space specification for {name!r} must be a dictionary"
+                f"Search-space specification for {name!r} must be a list, "
+                "dictionary, or callable"
             )
         kind = specification.get("type", specification.get("kind"))
         if kind == "float":

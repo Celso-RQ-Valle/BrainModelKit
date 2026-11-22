@@ -12,7 +12,7 @@ lifecycle; their parameters and algorithms are not interchangeable.
 | Build features | [Temporal catalog](temporal.md) | [Boundaries and scale](temporal.md#temporal-semantics) |
 | Select features | [Cost and purpose comparison](selection-costs.md) | [All sixteen method guides](feature_selection.md#api-quick-reference) |
 | Train | [Backend examples](../examples/journey/README.md) | [Models, parameters, outputs](training.md) |
-| Validate and optimize | [Leakage-aware alternatives](journey-validation.md) | [CV](model_selection.md), [Optuna](optimization.md) |
+| Validate and optimize | [Leakage-aware alternatives](journey-validation.md) | [CV](model_selection.md), [Optuna](optimization.md), [model search spaces](models/README.md) |
 | Evaluate | [Metric examples](evaluation.md) | [Aliases, scalar KS, undefined cases](evaluation.md#public-alias-and-scalar-utility) |
 | Analyze segments | [Cube interpretation](evaluation.md#interpreting-segment-results) | [Cube schemas](evaluation.md#output-conventions) |
 | Save, load, score | [Runnable lifecycle](../examples/journey/README.md) | [Formats](training.md#model-formats), [loaders](training.md#loading-trained-models), [MLflow](training.md#mlflow) |

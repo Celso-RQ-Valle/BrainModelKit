@@ -13,7 +13,7 @@ default). `metrics` selects the base metrics to calculate, defaulting to all thr
 from brainmodelkit.optimization.pandas import optimize
 # For Spark: from brainmodelkit.optimization.pyspark import optimize
 
-space = {"num_leaves": {"type": "int", "low": 8, "high": 64}}
+space = {"num_leaves": [8, 16, 32, 64]}
 result = optimize(
     train_df,
     oot_df,
@@ -92,6 +92,30 @@ a constraint.
 a separate untouched temporal holdout for final evaluation. Without an OOT
 objective or constraint, OOT remains diagnostic and the default selection uses
 only CV. In-sample training metrics are not estimates of generalization.
+
+## Search spaces
+
+See [models and hyperparameters](models/README.md) for each supported model,
+including pandas, SparkLightGBM, and SynapseML parameter names.
+
+Prefer explicit candidate lists in `search_space`:
+
+```python
+search_space = {"min_data_in_leaf": [200, 1000], "num_leaves": [15, 31, 63]}
+```
+
+`[200, 1000]` means choose **200 or 1000**, not every integer between them.
+A singleton such as `[100]` fixes that parameter. Lists must be nonempty and
+contain scalar choices (strings, numbers, booleans, or `None`, as accepted by
+the estimator). Optuna samples combinations within `n_trials`; it does not
+promise exhaustive grid coverage. `best_params` contains chosen scalar values
+and can be passed directly as `train_model`'s `model_params`.
+
+Existing range specifications and callables remain supported. To search all
+integers from 200 through 1000 instead, use
+`{"min_data_in_leaf": {"type": "int", "low": 200, "high": 1000}}`.
+Float ranges use `type="float"`, with optional `log=True`; explicit categorical
+dictionaries use `{"type": "categorical", "choices": [...]}`.
 
 ## Spark LightGBM
 
