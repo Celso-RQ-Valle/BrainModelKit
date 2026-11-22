@@ -1,5 +1,6 @@
 """Optuna-based model optimization for supported dataframe backends."""
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +16,7 @@ class OptimizationResult:
     best_model: Any
     selected_trial_number: int | None = None
     constraint_satisfied: bool | None = None
+    trials_path: str | None = None
 
 
 def require_optuna():
@@ -29,32 +31,52 @@ def require_optuna():
     return optuna
 
 
-def suggest_parameters(trial, search_space: dict[str, Any]) -> dict[str, Any]:
-    """Suggest parameters from candidate lists, ranges, or callable specifications.
-
-    A list contains explicit choices: [200, 1000] samples either endpoint,
-    not the integers between them. A singleton list fixes a parameter.
-    """
+def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
+    """Translate numeric [minimum, maximum] intervals to typed distributions."""
     if not isinstance(search_space, dict) or not search_space:
         raise ValueError("search_space must be a non-empty dictionary")
+    normalized = {}
+    for name, specification in search_space.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError("search_space parameter names must be non-empty strings")
+        if isinstance(specification, list):
+            if len(specification) != 2 or any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                for value in specification
+            ):
+                raise ValueError(
+                    f"Interval for {name!r} must be [minimum, maximum] with two "
+                    "finite numeric bounds; use a categorical dictionary for choices"
+                )
+            low, high = specification
+            if low > high:
+                raise ValueError(f"Interval for {name!r} requires minimum <= maximum")
+            specification = {
+                "type": "int"
+                if all(isinstance(v, int) for v in (low, high))
+                else "float",
+                "low": low,
+                "high": high,
+            }
+        normalized[name] = specification
+    return normalized
+
+
+def suggest_parameters(trial, search_space: dict[str, Any]) -> dict[str, Any]:
+    """Suggest parameters from numeric intervals, dictionaries, or callables.
+
+    [200, 1000] samples integers within the inclusive interval. If either bound
+    is a float, sample a float. Equal bounds fix a parameter.
+    """
+    search_space = normalize_search_space(search_space)
     values = {}
     for name, specification in search_space.items():
         if not isinstance(name, str) or not name:
             raise ValueError("search_space parameter names must be non-empty strings")
         if callable(specification):
             values[name] = specification(trial)
-            continue
-        if isinstance(specification, list):
-            if not specification:
-                raise ValueError(f"Candidate list for {name!r} must not be empty")
-            if any(
-                value is not None and not isinstance(value, (str, bool, int, float))
-                for value in specification
-            ):
-                raise ValueError(
-                    f"Candidate list for {name!r} must contain scalar values"
-                )
-            values[name] = trial.suggest_categorical(name, specification)
             continue
         if not isinstance(specification, dict):
             raise ValueError(

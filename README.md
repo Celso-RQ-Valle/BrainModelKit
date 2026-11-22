@@ -425,16 +425,16 @@ Tune logistic regression on April training and May validation, keeping June OOT
 untouched. Install `brainmodelkit[pyspark,optimization]` for this step.
 This example **maximizes validation AUC while limiting the training-to-validation KS
 gap to five percentage points**. The API calls validation `oot_df`, so its
-metrics have the `oot_` prefix. Hyperparameter lists contain explicit candidate
-values. See [models and search spaces](docs/models/README.md) for every supported
+metrics have the `oot_` prefix. Hyperparameter lists specify `[minimum, maximum]` search
+intervals. See [models and search spaces](docs/models/README.md) for every supported
 model and its backend-specific parameters.
 
 ```python
 from brainmodelkit.optimization.pyspark import optimize
 
 search_space = {
-    "regParam": [0.001, 0.01, 0.1, 1.0],
-    "maxIter": [100],
+    "regParam": [0.001, 1.0],
+    "maxIter": [100, 100],
 }
 tuning = optimize(
     train_df=train_df,
@@ -450,8 +450,9 @@ tuning = optimize(
     target_operator="<=",
     n_trials=20,
     cv=3,
+    save_trials_path="optimization_trials.csv",  # Optional parameters/metrics export.
 )
-print(tuning.trials)
+print(tuning.trials)  # Parameters, train/CV/validation metrics, and feasibility.
 if not tuning.constraint_satisfied:
     raise ValueError("No feasible trial; review the search space or metric limit.")
 best_params = tuning.best_params
@@ -837,8 +838,8 @@ Tune logistic regression on April training and May validation, keeping June OOT
 untouched. Install `brainmodelkit[pandas,optimization]` for this step.
 This example **maximizes validation AUC while limiting the training-to-validation KS
 gap to five percentage points**. The API calls validation `oot_df`, so its
-metrics have the `oot_` prefix. Hyperparameter lists contain explicit candidate
-values. See [models and search spaces](docs/models/README.md) for every supported
+metrics have the `oot_` prefix. Hyperparameter lists specify `[minimum, maximum]` search
+intervals. See [models and search spaces](docs/models/README.md) for every supported
 model and its backend-specific parameters.
 
 ```python
@@ -851,7 +852,7 @@ from sklearn.preprocessing import StandardScaler
 classifier = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
 
 search_space = {
-    "logisticregression__C": [0.001, 0.01, 0.1, 1.0, 10.0],
+    "logisticregression__C": [0.001, 10.0],
 }
 tuning = optimize(
     train_df=train_df,
@@ -867,8 +868,9 @@ tuning = optimize(
     target_operator="<=",
     n_trials=20,
     cv=3,
+    save_trials_path="optimization_trials.csv",  # Optional parameters/metrics export.
 )
-print(tuning.trials)
+print(tuning.trials)  # Parameters, train/CV/validation metrics, and feasibility.
 if not tuning.constraint_satisfied:
     raise ValueError("No feasible trial; review the search space or metric limit.")
 best_params = tuning.best_params

@@ -1,7 +1,12 @@
 """Shared metric naming, constrained sampling, and final trial selection."""
 
+import csv
+import json
 import math
 import warnings
+from pathlib import Path
+
+from . import normalize_search_space
 
 
 def metric_values(train, cv, oot):
@@ -81,6 +86,7 @@ def validate_options(
         raise ValueError("search_space must be a non-empty dictionary")
     if "lgbm_backend" in search_space:
         raise ValueError("lgbm_backend is a backend selector, not a search parameter")
+    normalize_search_space(search_space)
     return requested, objective_metric, target_metric
 
 
@@ -152,6 +158,42 @@ def trial_records(study):
             value=t.value,
             status=t.state.name,
             **t.user_attrs,
+            **{
+                f"param_{name}": value
+                for name, value in t.user_attrs.get("parameters", t.params).items()
+            },
+            selected=t.number == study.user_attrs.get("selected_trial_number"),
         )
         for t in study.trials
     ]
+
+
+def validate_trials_path(path):
+    """Accept a local CSV destination independently of model persistence."""
+    if path is None:
+        return None
+    path = Path(path)
+    if path.suffix.lower() != ".csv":
+        raise ValueError("save_trials_path must name a local .csv file")
+    if path.is_dir():
+        raise ValueError("save_trials_path must name a file, not a directory")
+    return path
+
+
+def save_trial_records(rows, path):
+    """Write the small trial summary on the driver, without collecting data rows."""
+    if path is None:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(
+            {
+                key: json.dumps(value) if isinstance(value, (dict, list)) else value
+                for key, value in row.items()
+            }
+            for row in rows
+        )
+    return str(path)

@@ -6,10 +6,12 @@ All built-in models below are binary classifiers: targets are 0/1 and prediction
 provide a class-1 probability. Logistic regression is a classifier here; the
 optimization API does not currently support continuous-target regression metrics.
 
-Each list contains explicit candidate values: `[200, 1000]` chooses 200 or
-1000; `[100]` fixes a parameter. Trials sample combinations, so the trial budget
-does not guarantee every combination is tested. See [range syntax](../optimization.md#search-spaces)
-when you want to search between bounds.
+Each list is `[minimum, maximum]`: `[200, 1000]` samples integers throughout
+that interval, including its bounds. If either bound is a float, sampling is
+continuous; `[100, 100]` fixes a parameter. Trials explore combinations within
+the budget rather than exhaustively testing every possible value. See
+[search-space rules](../optimization.md#search-spaces) for categorical choices
+and logarithmic sampling.
 
 Choose one model and its search space below, then pass them to `optimize`:
 
@@ -32,17 +34,21 @@ tuning = optimize(
     target_operator="<=",
     n_trials=20,
     cv=3,
+    save_trials_path="optimization_trials.csv",
 )
 if not tuning.constraint_satisfied:
     raise ValueError("No feasible trial; inspect tuning.trials before final training.")
 print(tuning.best_params)
+print(tuning.trials_path)  # CSV with each trial's parameters and metrics.
 ```
 
 Install `brainmodelkit[pandas,optimization]` or
 `brainmodelkit[pyspark,optimization]`. Pass development validation as `oot_df`
 during optimization; keep final OOT untouched until the configuration is frozen.
 Refit with `train_model(..., model=model, model_params=tuning.best_params)` using
-the same model or pipeline and backend. See the main README for the full refit.
+the same model or pipeline and backend. See the main README for the full refit
+and [trial comparison](../optimization.md#save-and-compare-trials) to choose a
+configuration yourself from the saved DataFrame.
 
 ## Logistic regression
 
@@ -57,13 +63,13 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
-search_space = {"logisticregression__C": [0.001, 0.01, 0.1, 1.0, 10.0]}
+search_space = {"logisticregression__C": [0.001, 10.0]}
 ```
 
 ```python
 # Spark: built-in standardization is enabled by default.
 model = "logistic_regression"
-search_space = {"regParam": [0.001, 0.01, 0.1, 1.0], "maxIter": [100]}
+search_space = {"regParam": [0.001, 1.0], "maxIter": [100, 100]}
 ```
 
 ## Decision tree
@@ -77,13 +83,13 @@ Use an estimator object in pandas so the same `model` also works with
 from sklearn.tree import DecisionTreeClassifier
 
 model = DecisionTreeClassifier(random_state=42)
-search_space = {"max_depth": [3, 5, 8], "min_samples_leaf": [10, 20, 50]}
+search_space = {"max_depth": [3, 8], "min_samples_leaf": [10, 50]}
 ```
 
 ```python
 # Spark
 model = "decision_tree"
-search_space = {"maxDepth": [3, 5, 8], "minInstancesPerNode": [10, 20, 50]}
+search_space = {"maxDepth": [3, 8], "minInstancesPerNode": [10, 50]}
 ```
 
 ## Random forest
@@ -97,7 +103,7 @@ model = "random_forest"
 search_space = {
     "n_estimators": [100, 200],
     "max_depth": [5, 10],
-    "min_samples_leaf": [10, 20, 50],
+    "min_samples_leaf": [10, 50],
 }
 ```
 
@@ -107,7 +113,7 @@ model = "random_forest"
 search_space = {
     "numTrees": [100, 200],
     "maxDepth": [5, 10],
-    "minInstancesPerNode": [10, 20, 50],
+    "minInstancesPerNode": [10, 50],
 }
 ```
 
@@ -122,7 +128,7 @@ model = "gradient_boosting"
 search_space = {
     "n_estimators": [100, 200],
     "learning_rate": [0.03, 0.1],
-    "max_depth": [2, 3, 5],
+    "max_depth": [2, 5],
 }
 ```
 
@@ -132,7 +138,7 @@ model = "gradient_boosting"
 search_space = {
     "maxIter": [100, 200],
     "stepSize": [0.03, 0.1],
-    "maxDepth": [2, 3, 5],
+    "maxDepth": [2, 5],
 }
 ```
 
@@ -148,7 +154,7 @@ model = "lightgbm"
 search_space = {
     "n_estimators": [100, 200],
     "learning_rate": [0.03, 0.1],
-    "num_leaves": [15, 31, 63],
+    "num_leaves": [15, 63],
     "min_child_samples": [200, 1000],
 }
 ```
@@ -162,7 +168,7 @@ model = "lightgbm"
 search_space = {
     "num_iterations": [100, 200],
     "learning_rate": [0.03, 0.1],
-    "num_leaves": [15, 31, 63],
+    "num_leaves": [15, 63],
     "min_data_in_leaf": [200, 1000],
 }
 ```
@@ -173,7 +179,7 @@ model = "lightgbm"
 search_space = {
     "numIterations": [100, 200],
     "learningRate": [0.03, 0.1],
-    "numLeaves": [15, 31, 63],
+    "numLeaves": [15, 63],
     "minDataInLeaf": [200, 1000],
 }
 ```

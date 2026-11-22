@@ -13,7 +13,7 @@ default). `metrics` selects the base metrics to calculate, defaulting to all thr
 from brainmodelkit.optimization.pandas import optimize
 # For Spark: from brainmodelkit.optimization.pyspark import optimize
 
-space = {"num_leaves": [8, 16, 32, 64]}
+space = {"num_leaves": [8, 64]}
 result = optimize(
     train_df,
     oot_df,
@@ -27,6 +27,7 @@ result = optimize(
     target_limit=0.05,
     target_operator="<=",
     n_trials=50,
+    save_trials_path="reports/optimization_trials.csv",
 )
 
 # Alternatively, minimize instability while requiring OOT KS of at least 40%:
@@ -98,24 +99,64 @@ only CV. In-sample training metrics are not estimates of generalization.
 See [models and hyperparameters](models/README.md) for each supported model,
 including pandas, SparkLightGBM, and SynapseML parameter names.
 
-Prefer explicit candidate lists in `search_space`:
+Use `[minimum, maximum]` intervals in `search_space`:
 
 ```python
-search_space = {"min_data_in_leaf": [200, 1000], "num_leaves": [15, 31, 63]}
+search_space = {"min_data_in_leaf": [200, 1000], "num_leaves": [15, 63]}
 ```
 
-`[200, 1000]` means choose **200 or 1000**, not every integer between them.
-A singleton such as `[100]` fixes that parameter. Lists must be nonempty and
-contain scalar choices (strings, numbers, booleans, or `None`, as accepted by
-the estimator). Optuna samples combinations within `n_trials`; it does not
-promise exhaustive grid coverage. `best_params` contains chosen scalar values
-and can be passed directly as `train_model`'s `model_params`.
+Two integer bounds sample integers throughout the inclusive interval, so
+`[200, 1000]` can produce 537. If either bound is a float, the optimizer samples
+a float, for example `"learning_rate": [0.01, 0.1]`. Bounds must be finite,
+numeric, and ordered. Equal bounds such as `[100, 100]` fix a parameter.
+Lists with one or more than two elements, booleans, strings, or `None` are
+rejected. This replaces the earlier candidate-list interpretation.
 
-Existing range specifications and callables remain supported. To search all
-integers from 200 through 1000 instead, use
-`{"min_data_in_leaf": {"type": "int", "low": 200, "high": 1000}}`.
-Float ranges use `type="float"`, with optional `log=True`; explicit categorical
-dictionaries use `{"type": "categorical", "choices": [...]}`.
+Sampling is linear by default. Existing dictionary ranges and callables remain
+supported: use `{"type": "float", "low": 0.001, "high": 10.0, "log": True}`
+for logarithmic sampling. For discrete choices, use an explicit dictionary such
+as `{"type": "categorical", "choices": ["gini", "entropy"]}`.
+Optuna samples within the trial budget; it does not guarantee every value or
+combination is tested. `best_params` contains chosen scalar values for refitting.
+
+## Save and compare trials
+
+Both backends accept `save_trials_path="reports/optimization_trials.csv"`.
+The default `None` writes no trial file. This is independent of `save_as` and
+`save_path`, which control model persistence. The CSV is written on the local
+driver filesystem, creates missing parent directories, and overwrites an existing
+file at that path. It is saved after trial selection and before the final refit.
+`result.trials_path` returns the saved path.
+
+Each row contains the trial number, status, objective `value`, one `param_<name>`
+column per hyperparameter, train/CV/validation metrics and their shifts,
+constraint residual/violation, `feasible`, and `selected`. The `params` column
+stores the complete parameter dictionary as JSON, preserving types for refitting.
+The `selected` flag identifies the library's choice; it does not prevent you from
+choosing another completed configuration. Only requested base metrics and their
+derived shifts are included (KS, AUC, and Gini by default).
+
+```python
+# Add this argument to the optimize call shown above:
+# save_trials_path="reports/optimization_trials.csv"
+import json
+import pandas as pd
+
+trials_df = pd.read_csv(result.trials_path)
+# Here validation AUC is the comparison metric; avoid selecting on final OOT.
+comparison = trials_df.loc[
+    trials_df["status"].eq("COMPLETE") & trials_df["feasible"]
+].sort_values("oot_auc", ascending=False)
+if comparison.empty:
+    raise ValueError("No feasible configuration; inspect the trial metrics and limits.")
+chosen_params = json.loads(comparison.iloc[0]["params"])
+# Use chosen_params as train_model(..., model_params=chosen_params),
+# keeping the same estimator/pipeline, backend, and feature order.
+```
+
+The in-memory `result.trials` remains a pandas DataFrame in the pandas backend
+and a list of records in Spark; the CSV loads as a DataFrame for either backend.
+The export contains trial summaries only, never training or validation rows.
 
 ## Spark LightGBM
 

@@ -15,9 +15,11 @@ from ._common import (
     make_study,
     metric_values,
     record_trial,
+    save_trial_records,
     select_trial,
     trial_records,
     validate_options,
+    validate_trials_path,
 )
 
 
@@ -67,8 +69,16 @@ def optimize(
     target_limit: float | None = None,
     target_operator: str | None = None,
     lgbm_backend: str = "default",
+    save_trials_path: str | None = None,
 ) -> OptimizationResult:
-    """Tune with CV/train/OOT metrics; OOT used for selection is validation data."""
+    """Tune with CV/train/OOT metrics; OOT used for selection is validation data.
+
+    Search-space lists are [minimum, maximum] numeric intervals. Optionally
+    save parameters and metrics for every trial to a local CSV using
+    save_trials_path, independently of model persistence. Existing files are
+    overwritten; the path is returned as result.trials_path.
+    """
+    trials_path = validate_trials_path(save_trials_path)
     validate_backend(lgbm_backend)
     optuna = require_optuna()
     save_model_to = destination(save_as, save_path)
@@ -144,6 +154,7 @@ def optimize(
     selected = select_trial(study, direction, target_metric is not None)
     selected_params = dict(selected.user_attrs["parameters"])
     rows = trial_records(study)
+    saved_trials_path = save_trial_records(rows, trials_path)
     final = train_model(
         study_name or "optimization",
         target_col,
@@ -164,6 +175,7 @@ def optimize(
         float(selected.value),
         rows,
         final.model,
+        trials_path=saved_trials_path,
         selected_trial_number=selected.number,
         constraint_satisfied=selected.user_attrs["feasible"] if target_metric else None,
     )

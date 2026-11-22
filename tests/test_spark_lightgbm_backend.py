@@ -191,7 +191,7 @@ def test_mlflow_accepts_python_pipeline_stage():
 @pytest.mark.parametrize("backend", ["default", "synapseml"])
 @pytest.mark.parametrize("no_feasible", [False, True])
 def test_optimizer_propagates_backend_and_refits_selected_trial(
-    monkeypatch, backend, no_feasible
+    monkeypatch, backend, no_feasible, tmp_path
 ):
     from unittest.mock import MagicMock
 
@@ -225,6 +225,7 @@ def test_optimizer_propagates_backend_and_refits_selected_trial(
             metrics=("ks",),
             n_trials=2,
             random_state=7,
+            save_trials_path=tmp_path / "trials.csv",
         )
 
     if no_feasible:
@@ -232,6 +233,16 @@ def test_optimizer_propagates_backend_and_refits_selected_trial(
             result = optimize()
     else:
         result = optimize()
+    import json
+
+    import pandas as pd
+
+    saved = pd.read_csv(result.trials_path)
+    assert len(saved) == 2
+    assert saved.param_num_leaves.tolist() == [2, 3]
+    assert saved.oot_ks.tolist() == [0.8, 0.4]
+    assert saved.selected.tolist() == [False, True]
+    assert json.loads(saved.iloc[1].params) == result.best_params
     assert result.selected_trial_number == 1
     assert result.best_value == 0.4
     assert result.best_params == {"num_leaves": 3}
