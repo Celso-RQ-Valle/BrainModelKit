@@ -13,8 +13,8 @@ backend that matches your DataFrames; the base install has no runtime dependenci
 | Spark | Spark DataFrames and native distributed operations; individual algorithms have driver/worker limits. | [Spark guide](#spark-guide) |
 | pandas | In-memory pandas DataFrames and scikit-learn-compatible models. | [pandas guide](#pandas-guide) |
 
-The journey is **install ? diagnose ? prepare ? build ? select ? train ?
-validate/tune ? evaluate ? analyze segments ? save/load/score**. Each chapter
+The journey is **install ? diagnose ? prepare ? build ? select ? validate/tune ?
+train ? evaluate ? analyze segments ? save/load/score**. Each chapter
 follows this order. Its snippets continue one workflow unless marked as an
 alternative. [Complete runnable examples](examples/journey/README.md) include
 imports, missing-value handling, and assertions using a separate small fixture.
@@ -28,8 +28,8 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
   - [Install and diagnose](#spark-install-and-diagnose)
   - [Prepare data](#spark-prepare-data)
   - [Build and select features](#spark-features)
-  - [Train a baseline](#spark-train-a-baseline)
   - [Validate and optimize](#spark-validate-and-optimize)
+  - [Train](#spark-train)
   - [Evaluate metrics](#spark-evaluate-metrics)
   - [Analyze segments](#spark-analyze-segments)
   - [Save, load, and score](#spark-save-load-and-score)
@@ -37,8 +37,8 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
   - [Install and diagnose](#pandas-install-and-diagnose)
   - [Prepare data](#pandas-prepare-data)
   - [Build and select features](#pandas-features)
-  - [Train a baseline](#pandas-train-a-baseline)
   - [Validate and optimize](#pandas-validate-and-optimize)
+  - [Train](#pandas-train)
   - [Evaluate metrics](#pandas-evaluate-metrics)
   - [Analyze segments](#pandas-analyze-segments)
   - [Save, load, and score](#pandas-save-load-and-score)
@@ -419,25 +419,73 @@ Spark collects bounded statistics and model summaries, including a feature-pair 
 See [cost evidence and backend differences](docs/selection-costs.md) and
 [selection contracts](docs/feature_selection.md) for target requirements and diagnostics.
 
-### Spark train a baseline
+### Spark validate and optimize
 
-Pass raw selected numeric columns. The target must be 0/1 with both classes in
-training. `model_params` contains estimator settings; predictions add `score`,
-the class-1 probability. Here the API argument `oot_df` receives **validation_df**:
-its `oot_*` metric names do not make this development set final OOT.
+Tune logistic regression on April training and May validation, keeping June OOT
+untouched. Install `brainmodelkit[pyspark,optimization]` for this step.
+This example **maximizes validation AUC while limiting the training-to-validation KS
+gap to five percentage points**. The API calls validation `oot_df`, so its
+metrics have the `oot_` prefix.
+
+```python
+from brainmodelkit.optimization.pyspark import optimize
+
+search_space = {
+    "regParam": {"type": "float", "low": 0.001, "high": 1.0, "log": True},
+    "maxIter": {"type": "categorical", "choices": [100]},
+}
+tuning = optimize(
+    train_df=train_df,
+    oot_df=validation_df,
+    target_col="target",
+    feature_cols=selected_features,
+    model="logistic_regression",
+    search_space=search_space,
+    objective_metric="oot_auc",
+    direction="maximize",
+    target_metric="train_oot_ks_abs_shift",
+    target_limit=0.05,
+    target_operator="<=",
+    n_trials=20,
+    cv=3,
+)
+print(tuning.trials)
+if not tuning.constraint_satisfied:
+    raise ValueError("No feasible trial; review the search space or metric limit.")
+best_params = tuning.best_params
+```
+
+The limit is a feasibility condition; AUC continues to improve among feasible
+trials within the trial budget. To instead require KS of at least 0.40 while
+improving AUC, use `target_metric="oot_ks"`, `target_limit=0.40`, and
+`target_operator=">="`. Neither setting guarantees a feasible result or stops
+at the first feasible trial. See [optimization](docs/optimization.md) for trial
+fields, constraints, and the least-violating fallback.
+
+The optimizer also computes stratified CV diagnostics on April; these are not
+forward temporal validation. The fixed feature list here comes from a training-only
+variance filter. Learned preprocessing and supervised selection must be fitted
+inside folds for unbiased CV; the optimizer has no fold callbacks.
+See [validation alternatives](docs/journey-validation.md#spark-api-alternatives).
+
+### Spark train
+
+Freeze the selected features and parameters, then refit on April + May.
+June OOT is evaluated once, after tuning. Targets must be binary 0/1; `score`
+is the fitted model's class-1 probability.
 
 ```python
 from brainmodelkit.training.pyspark import train_model
 
-baseline_params = {"regParam": 0.01, "maxIter": 10}
+development_df = train_df.unionByName(validation_df)
 result = train_model(
-    "baseline",
+    "final",
     "target",
     selected_features,
-    train_df,
-    validation_df,
+    development_df,
+    oot_df,
     model="logistic_regression",
-    model_params=baseline_params,
+    model_params=best_params,
     save_model_to="none",
 )
 print(result.metrics)
@@ -445,7 +493,7 @@ print(result.metrics)
 
 `TrainingResult` contains the fitted model, metrics, feature importance,
 `oot_predictions`, optional `scoring_predictions`, and persistence metadata.
-Inspect the baseline before adding complexity; use the [full training contract](docs/training.md#training-parameter-reference)
+Use the [full training contract](docs/training.md#training-parameter-reference)
 for all parameters and [output fields](docs/training.md#training-outputs).
 
 | Model | Public identifier | Dependency/backend | Key notes | Example settings in `model_params` |
@@ -466,59 +514,12 @@ Default local SparkLightGBM can collect training rows into driver NumPy arrays;
 See [LightGBM training examples](docs/training.md#choosing-the-lightgbm-backend)
 and [runtime requirements](docs/optimization.md#spark-lightgbm).
 
-### Spark validate and optimize
-
-**Continuing the main workflow.** Compare the baseline with one alternative on
-May validation; do not look at June OOT while choosing. This small manual search
-preserves the chronological split and the training-only selected subset.
-
-```python
-alternative_params = {"regParam": 0.1, "maxIter": 10}
-alternative = train_model(
-    "alternative",
-    "target",
-    selected_features,
-    train_df,
-    validation_df,
-    model="logistic_regression",
-    model_params=alternative_params,
-    save_model_to="none",
-)
-best_params = (
-    alternative_params
-    if alternative.metrics["oot_auc"] > result.metrics["oot_auc"]
-    else baseline_params
-)
-development_df = train_df.unionByName(validation_df)
-```
-
-Freeze the feature list and chosen settings. The next step refits on development
-training + validation and evaluates June once. CV instead estimates performance
-across development folds; Optuna optimization evaluates multiple configurations.
-See [verified CV and optimization alternatives](docs/journey-validation.md#spark-api-alternatives)
-for `cross_validate` / `optimize`, search spaces, and final refitting.
-These alternatives use fixed candidate features, not selection fitted outside CV.
-Spark time-ordered CV still trains on all other folds, including future ones; it is not expanding-window validation. Use explicit forward splits for temporal evaluation.
-The optimizer accepts no fold/preprocessing callbacks; its default CV is stratified.
-Never pass the final OOT set as optimization's `oot_df`; pass development validation.
-
 ### Spark evaluate metrics
 
-**Continuing:** this is the first model decision-independent use of June OOT.
+Use the frozen model's June OOT predictions for the diagnostics below.
 
 ```python
-result = train_model(
-    "final",
-    "target",
-    selected_features,
-    development_df,
-    oot_df,
-    model="logistic_regression",
-    model_params=best_params,
-    save_model_to="none",
-)
 predictions = result.oot_predictions
-print(result.metrics)
 ```
 
 Targets are binary 0/1. AUC/Gini expect higher scores for class 1; ranking scores
@@ -562,7 +563,9 @@ tile_cube.show()
 Metric rows contain `segment`, `KS`, `AUC`, `Gini`, `score`; `score` here is the
 **source score column name**. `Geral` denotes the overall rollup. With more
 dimensions, omitted dimensions also contain `Geral`; actual missing keys remain
-missing. Each score requires `2 ** dimensions` grouping calculations.
+missing. All `2 ** dimensions` grouping subsets are retained. Metric cubes expand rows
+across scores and subsets before grouped aggregation; memory and work grow with
+that product, so choose dimensions deliberately.
 Risk cubes additionally report volumes/events per occupied tile; use these to
 judge support. Small groups are noisy, single-class metrics are undefined, and
 there is no automatic minimum-volume suppression. Real keys named `Geral` collide
@@ -826,31 +829,78 @@ Pandas works in memory. MI uses sklearn estimation; chi-square expects integer c
 See [cost evidence and backend differences](docs/selection-costs.md) and
 [selection contracts](docs/feature_selection.md) for target requirements and diagnostics.
 
-### pandas train a baseline
+### pandas validate and optimize
 
-Pass raw selected numeric columns. The target must be 0/1 with both classes in
-training. `model_params` contains estimator settings; predictions add `score`,
-the class-1 probability. Here the API argument `oot_df` receives **validation_df**:
-its `oot_*` metric names do not make this development set final OOT.
+Tune logistic regression on April training and May validation, keeping June OOT
+untouched. Install `brainmodelkit[pandas,optimization]` for this step.
+This example **maximizes validation AUC while limiting the training-to-validation KS
+gap to five percentage points**. The API calls validation `oot_df`, so its
+metrics have the `oot_` prefix.
 
 ```python
-from brainmodelkit.training.pandas import train_model
+from brainmodelkit.optimization.pandas import optimize
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-# Fit scaling on training rows only; credit inputs and bureau scores differ in scale.
-classifier = make_pipeline(StandardScaler(), LogisticRegression())
+# Scaling is learned separately inside each fit, including CV folds.
+classifier = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
 
-baseline_params = {"logisticregression__C": 0.1, "logisticregression__max_iter": 1000}
+search_space = {
+    "logisticregression__C": {"type": "float", "low": 0.001, "high": 10.0, "log": True},
+}
+tuning = optimize(
+    train_df=train_df,
+    oot_df=validation_df,
+    target_col="target",
+    feature_cols=selected_features,
+    model=classifier,
+    search_space=search_space,
+    objective_metric="oot_auc",
+    direction="maximize",
+    target_metric="train_oot_ks_abs_shift",
+    target_limit=0.05,
+    target_operator="<=",
+    n_trials=20,
+    cv=3,
+)
+print(tuning.trials)
+if not tuning.constraint_satisfied:
+    raise ValueError("No feasible trial; review the search space or metric limit.")
+best_params = tuning.best_params
+```
+
+The limit is a feasibility condition; AUC continues to improve among feasible
+trials within the trial budget. To instead require KS of at least 0.40 while
+improving AUC, use `target_metric="oot_ks"`, `target_limit=0.40`, and
+`target_operator=">="`. Neither setting guarantees a feasible result or stops
+at the first feasible trial. See [optimization](docs/optimization.md) for trial
+fields, constraints, and the least-violating fallback.
+
+The optimizer also computes stratified CV diagnostics on April; these are not
+forward temporal validation. The fixed feature list here comes from a training-only
+variance filter. Learned preprocessing and supervised selection must be fitted
+inside folds for unbiased CV; the optimizer has no fold callbacks.
+See [validation alternatives](docs/journey-validation.md#pandas-api-alternatives).
+
+### pandas train
+
+Freeze the selected features and parameters, then refit on April + May.
+June OOT is evaluated once, after tuning. Targets must be binary 0/1; `score`
+is the fitted model's class-1 probability.
+
+```python
+from brainmodelkit.training.pandas import train_model
+
+development_df = pd.concat([train_df, validation_df], ignore_index=True)
 result = train_model(
-    "baseline",
+    "final",
     "target",
     selected_features,
-    train_df,
-    validation_df,
+    development_df,
+    oot_df,
     model=classifier,
-    model_params=baseline_params,
+    model_params=best_params,
     save_model_to="none",
 )
 print(result.metrics)
@@ -858,7 +908,7 @@ print(result.metrics)
 
 `TrainingResult` contains the fitted model, metrics, feature importance,
 `oot_predictions`, optional `scoring_predictions`, and persistence metadata.
-Inspect the baseline before adding complexity; use the [full training contract](docs/training.md#training-parameter-reference)
+Use the [full training contract](docs/training.md#training-parameter-reference)
 for all parameters and [output fields](docs/training.md#training-outputs).
 
 | Model | Public identifier | Dependency/backend | Key notes | Example settings in `model_params` |
@@ -875,62 +925,12 @@ selection/CV factories do. [Standalone training examples](docs/training.md#panda
 show fitting and prediction. Scale-sensitive models need appropriately fitted
 preprocessing; passing an sklearn Pipeline keeps learned preprocessing in its fit.
 
-### pandas validate and optimize
-
-**Continuing the main workflow.** Compare the baseline with one alternative on
-May validation; do not look at June OOT while choosing. This small manual search
-preserves the chronological split and the training-only selected subset.
-
-```python
-alternative_params = {
-    "logisticregression__C": 1.0,
-    "logisticregression__max_iter": 1000,
-}
-alternative = train_model(
-    "alternative",
-    "target",
-    selected_features,
-    train_df,
-    validation_df,
-    model=classifier,
-    model_params=alternative_params,
-    save_model_to="none",
-)
-best_params = (
-    alternative_params
-    if alternative.metrics["oot_auc"] > result.metrics["oot_auc"]
-    else baseline_params
-)
-development_df = pd.concat([train_df, validation_df], ignore_index=True)
-```
-
-Freeze the feature list and chosen settings. The next step refits on development
-training + validation and evaluates June once. CV instead estimates performance
-across development folds; Optuna optimization evaluates multiple configurations.
-See [verified CV and optimization alternatives](docs/journey-validation.md#pandas-api-alternatives)
-for `cross_validate` / `optimize`, search spaces, and final refitting.
-These alternatives use fixed candidate features, not selection fitted outside CV.
-For learned preprocessing or supervised selection in CV, use a fold-fitted pipeline or explicit per-fold fitting; preselecting on all development rows biases CV.
-The optimizer accepts no fold/preprocessing callbacks; its default CV is stratified.
-Never pass the final OOT set as optimization's `oot_df`; pass development validation.
-
 ### pandas evaluate metrics
 
-**Continuing:** this is the first model decision-independent use of June OOT.
+Use the frozen model's June OOT predictions for the diagnostics below.
 
 ```python
-result = train_model(
-    "final",
-    "target",
-    selected_features,
-    development_df,
-    oot_df,
-    model=classifier,
-    model_params=best_params,
-    save_model_to="none",
-)
 predictions = result.oot_predictions
-print(result.metrics)
 ```
 
 Targets are binary 0/1. AUC/Gini expect higher scores for class 1; ranking scores
@@ -975,7 +975,9 @@ print(tile_cube)
 Metric rows contain `segment`, `KS`, `AUC`, `Gini`, `score`; `score` here is the
 **source score column name**. `Geral` denotes the overall rollup. With more
 dimensions, omitted dimensions also contain `Geral`; actual missing keys remain
-missing. Each score requires `2 ** dimensions` grouping calculations.
+missing. All `2 ** dimensions` grouping subsets are retained. Metric cubes expand rows
+across scores and subsets before grouped aggregation; memory and work grow with
+that product, so choose dimensions deliberately.
 Risk cubes additionally report volumes/events per occupied tile; use these to
 judge support. Small groups are noisy, single-class metrics are undefined, and
 there is no automatic minimum-volume suppression. Real keys named `Geral` collide

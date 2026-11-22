@@ -201,9 +201,9 @@ Spark uses the internal metric formulas with partitioned windows for grouped
 AUC and risk tables. The cube collects neither group keys nor input rows and
 uses no Pandas conversion or Python UDFs. Validation runs once per cube call
 (one target check, plus one finite-score check for the n-tile cube); results
-are evaluated when you run a Spark action. Each score still requires
-`2 ** len(group_columns)` grouping calculations, so limit the number of
-dimensions. Spark row order is unspecified; sort for display.
+are evaluated when you run a Spark action. Metric cubes process all scores and
+`2 ** len(group_columns)` subsets in shared partitioned plans. The expanded
+data still grows with this product, so limit the number of dimensions. Spark row order is unspecified; sort for display.
 Spark metrics require `n_tiles >= 2`.
 
 ## Pandas evaluation module
@@ -466,6 +466,9 @@ per score; empty risk cubes have no occupied tiles.
 With dimensions `segment` and `period`, rows cover both, each alone, and neither.
 Omitted dimensions use `Geral`; actual missing keys remain missing. A real value
 `Geral` is indistinguishable from a rollup label. Adding d dimensions causes
-2**d grouping calculations per score. Spark cubes use native partitioned
-calculations without collecting source rows or distinct group keys; pandas works
-in memory. Metrics use uppercase `KS`, `AUC`, `Gini` and round to five decimals.
+2**d grouping subsets per score. Metric cubes expand rows across scores and
+subsets, then use grouped threshold counts/cumulative sums (pandas) or partitioned
+tile windows (Spark), without a separate metric call per group or subset.
+Expansion costs O(rows * scores * 2**d) memory/work; limit dimensions accordingly.
+Spark does not collect source rows or distinct group keys; pandas works in memory.
+Risk-table cubes still process scores and subsets separately. Metrics use uppercase `KS`, `AUC`, `Gini` and round to five decimals.

@@ -122,41 +122,82 @@ def calculate_metrics(
     if isinstance(n_tiles, bool) or not isinstance(n_tiles, int) or n_tiles < 2:
         raise ValueError("n_tiles must be an integer of at least 2")
     _validate_binary_target(df, target_column)
-    result = None
-    for score in score_names:
-        for subset in subsets:
-            ks_result = ks_ntile(score, df, subset or None, target_column, n_tiles)
-            auc_result = _grouped_auc(df, score, target_column, subset, n_tiles)
-            if subset:
-                condition = F.lit(True)
-                for group in subset:
-                    condition = condition & auc_result[group].eqNullSafe(
-                        ks_result[group]
-                    )
-                merged = auc_result.join(ks_result, condition, "left").select(
-                    *[auc_result[group] for group in subset],
-                    ks_result["KS"],
-                    auc_result["auc"],
-                    auc_result["gini"],
-                )
-            else:
-                merged = auc_result.crossJoin(ks_result)
-            current = merged.select(
+    # Expand score/subset metadata once; all data work uses partitioned windows.
+    # Struct keys distinguish omitted dimensions from observed nulls and Geral.
+    keys = [f"_dimension_{i}" for i in range(len(groups))]
+    selected = df.select(
+        *[df[name].alias(key) for name, key in zip(groups, keys, strict=True)],
+        df[target_column].alias("_label"),
+        F.explode(
+            F.array(
                 *[
-                    (
-                        merged[group].cast("string")
-                        if group in subset
-                        else F.lit("Geral")
-                    ).alias(group)
-                    for group in groups
-                ],
-                F.round(F.coalesce(merged["KS"], F.lit(float("nan"))), 5).alias("KS"),
-                F.round(merged["auc"], 5).alias("AUC"),
-                F.round(merged["gini"], 5).alias("Gini"),
-                F.lit(score).alias("score"),
+                    F.struct(
+                        F.lit(name).alias("name"),
+                        df[name].cast("double").alias("value"),
+                    )
+                    for name in score_names
+                ]
             )
-            result = current if result is None else result.unionByName(current)
-    return result
+        ).alias("_model"),
+    )
+    expanded = selected.withColumn(
+        "_subset",
+        F.explode(
+            F.array(
+                *[
+                    F.struct(
+                        F.lit(i).alias("id"),
+                        *[
+                            F.lit(name in subset).alias(key)
+                            for name, key in zip(groups, keys, strict=True)
+                        ],
+                    )
+                    for i, subset in enumerate(subsets)
+                ]
+            )
+        ),
+    ).select(
+        F.col("_model.name").alias("_model_name"),
+        F.col("_model.value").alias("_value"),
+        "_label",
+        *[
+            F.struct(
+                F.col(f"_subset.{key}").alias("included"),
+                F.when(F.col(f"_subset.{key}"), F.col(key)).alias("value"),
+            ).alias(key)
+            for key in keys
+        ],
+    )
+    # A null pair seeds each overall result, including on empty input.
+    seed = df.sparkSession.range(1).select(
+        F.explode(F.array(*[F.lit(name) for name in score_names])).alias("_model_name"),
+        F.lit(None).cast("double").alias("_value"),
+        F.lit(None).cast(df.schema[target_column].dataType).alias("_label"),
+        *[
+            F.struct(
+                F.lit(False).alias("included"),
+                F.lit(None).cast(df.schema[name].dataType).alias("value"),
+            ).alias(key)
+            for name, key in zip(groups, keys, strict=True)
+        ],
+    )
+    expanded = expanded.unionByName(seed)
+    partitions = ["_model_name", *keys]
+    auc = _grouped_auc(expanded, "_value", "_label", partitions, n_tiles)
+    ks = ks_ntile("_value", expanded, partitions, "_label", n_tiles)
+    merged = auc.join(ks, partitions, "left")
+    return merged.select(
+        *[
+            F.when(F.col(f"{key}.included"), F.col(f"{key}.value").cast("string"))
+            .otherwise(F.lit("Geral"))
+            .alias(name)
+            for name, key in zip(groups, keys, strict=True)
+        ],
+        F.round(F.coalesce(F.col("KS"), F.lit(float("nan"))), 5).alias("KS"),
+        F.round("auc", 5).alias("AUC"),
+        F.round("gini", 5).alias("Gini"),
+        F.col("_model_name").alias("score"),
+    )
 
 
 def calculate_ntile(

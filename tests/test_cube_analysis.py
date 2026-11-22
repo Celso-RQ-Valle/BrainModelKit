@@ -130,6 +130,28 @@ def test_spark_cube_without_pandas(monkeypatch):
         empty = spark_cube(df.limit(0), "segment", "prediction", "label").collect()
         assert len(empty) == 1
         assert math.isnan(empty[0].KS)
+        combinations_df = spark.createDataFrame(
+            [
+                (0.9, 0.1, 1, segment, period)
+                for segment in ["A", None]
+                for period in [1, 2]
+            ]
+            + [
+                (0.1, 0.9, 0, segment, period)
+                for segment in ["A", None]
+                for period in [1, 2]
+            ],
+            "prediction double, reverse double, label int, segment string, period int",
+        )
+        combinations = spark_cube(
+            combinations_df, ["segment", "period"], ["prediction", "reverse"], "label"
+        ).collect()
+        assert len(combinations) == 18
+        assert all(row.KS == 1 for row in combinations)
+        assert all(
+            (1 if row.score == "prediction" else 0) == row.AUC for row in combinations
+        )
+        assert sum(row.segment is None for row in combinations) == 6
         counts.clear()
         with monkeypatch.context() as guard:
             guard.setattr(frame_class, "collect", forbidden)
@@ -260,3 +282,70 @@ def test_ntile_validation(options, error):
     df = pd.DataFrame({"score": [1.0], "target": [1], "n_tile": [1]})
     with pytest.raises(error):
         calculate_ntile(df, **options)
+
+
+@pytest.mark.parametrize("dimensions", [0, 1, 2, 3])
+def test_vectorized_cube_matches_scalar_metrics(dimensions):
+    """Exercise every subset, score, tie, null key and missing-pair policy."""
+    from itertools import combinations
+
+    import numpy as np
+
+    from brainmodelkit.metrics.pandas import _calculate_auc_gini, calculate_ks
+
+    rng = np.random.default_rng(42)
+    df = pd.DataFrame(
+        {
+            "score": rng.choice([0.1, 0.5, 0.9, np.nan], 100),
+            "other": rng.choice([0.2, 0.6, np.nan], 100),
+            "target": rng.choice([0.0, 1.0, np.nan], 100),
+            "a": rng.choice(["A", "Geral", None], 100),
+            "b": rng.choice([1, 2, 3], 100),
+            "c": pd.Categorical(
+                rng.choice(["X", "Y"], 100), categories=["X", "Y", "unused"]
+            ),
+        }
+    )
+    # Duplicate indices must not cause row alignment or expansion errors.
+    df.index = [0] * len(df)
+    groups = ["a", "b", "c"][:dimensions]
+    records = []
+    for score in ["score", "other"]:
+        for size in range(dimensions + 1):
+            for subset in combinations(groups, size):
+                grouped = (
+                    df.groupby(list(subset), dropna=False, sort=False, observed=True)
+                    if subset
+                    else [((), df)]
+                )
+                for key, part in grouped:
+                    key = key if isinstance(key, tuple) else (key,)
+                    values = dict(zip(subset, key, strict=True))
+                    auc, gini = _calculate_auc_gini(part.target, part[score])
+                    records.append(
+                        {
+                            **{name: values.get(name, "Geral") for name in groups},
+                            "KS": calculate_ks(part.target, part[score]),
+                            "AUC": auc,
+                            "Gini": gini,
+                            "score": score,
+                        }
+                    )
+    expected = pd.DataFrame(records)
+    expected[groups] = expected[groups].astype("string")
+    expected[["KS", "AUC", "Gini"]] = expected[["KS", "AUC", "Gini"]].round(5)
+    actual = calculate_metrics(df, groups, ["score", "other"])
+    pd.testing.assert_frame_equal(actual, expected)
+
+
+def test_cube_all_missing_and_nullable_scores():
+    df = pd.DataFrame(
+        {
+            "score": pd.Series([None, None], dtype="Float64"),
+            "target": pd.Series([0, 1], dtype="Int64"),
+            "segment": [None, "A"],
+        }
+    )
+    result = calculate_metrics(df, "segment")
+    assert len(result) == 3
+    assert result[["KS", "AUC", "Gini"]].isna().all().all()
