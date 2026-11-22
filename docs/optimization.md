@@ -108,9 +108,11 @@ search_space = {"min_data_in_leaf": [200, 1000], "num_leaves": [15, 63]}
 Two integer bounds sample integers throughout the inclusive interval, so
 `[200, 1000]` can produce 537. If either bound is a float, the optimizer samples
 a float, for example `"learning_rate": [0.01, 0.1]`. Bounds must be finite,
-numeric, and ordered. Equal bounds such as `[100, 100]` fix a parameter.
-Lists with one or more than two elements, booleans, strings, or `None` are
-rejected. This replaces the earlier candidate-list interpretation.
+numeric, and ordered. Use `[100]` to fix a parameter. Single-value lists also
+accept strings, booleans, or `None`, for example `["gini"]`, `[True]`, or
+`[None]`. Empty lists, lists with more than two elements, non-finite numbers,
+and non-numeric interval bounds are rejected. Equal numeric bounds remain
+accepted for compatibility; prefer `[value]` for fixed settings. This replaces the earlier candidate-list interpretation.
 
 Sampling is linear by default. Existing dictionary ranges and callables remain
 supported: use `{"type": "float", "low": 0.001, "high": 10.0, "log": True}`

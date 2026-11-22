@@ -32,7 +32,7 @@ def require_optuna():
 
 
 def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
-    """Translate numeric [minimum, maximum] intervals to typed distributions."""
+    """Translate [value] constants and numeric [minimum, maximum] intervals."""
     if not isinstance(search_space, dict) or not search_space:
         raise ValueError("search_space must be a non-empty dictionary")
     normalized = {}
@@ -40,6 +40,13 @@ def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(name, str) or not name:
             raise ValueError("search_space parameter names must be non-empty strings")
         if isinstance(specification, list):
+            if len(specification) == 1:
+                value = specification[0]
+                if value is None or isinstance(value, (str, bool)) or (
+                    isinstance(value, (int, float)) and math.isfinite(value)
+                ):
+                    normalized[name] = {"type": "categorical", "choices": [value]}
+                    continue
             if len(specification) != 2 or any(
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -48,7 +55,8 @@ def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
             ):
                 raise ValueError(
                     f"Interval for {name!r} must be [minimum, maximum] with two "
-                    "finite numeric bounds; use a categorical dictionary for choices"
+                    "finite numeric bounds, or [value] with one finite scalar; "
+                    "use a categorical dictionary for choices"
                 )
             low, high = specification
             if low > high:
@@ -68,7 +76,8 @@ def suggest_parameters(trial, search_space: dict[str, Any]) -> dict[str, Any]:
     """Suggest parameters from numeric intervals, dictionaries, or callables.
 
     [200, 1000] samples integers within the inclusive interval. If either bound
-    is a float, sample a float. Equal bounds fix a parameter.
+    is a float, sample a float. [value] fixes a parameter (including strings,
+    booleans, and None). Equal bounds remain supported for compatibility.
     """
     search_space = normalize_search_space(search_space)
     values = {}

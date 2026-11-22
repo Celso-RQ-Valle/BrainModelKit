@@ -6,9 +6,9 @@ All built-in models below are binary classifiers: targets are 0/1 and prediction
 provide a class-1 probability. Logistic regression is a classifier here; the
 optimization API does not currently support continuous-target regression metrics.
 
-Each list is `[minimum, maximum]`: `[200, 1000]` samples integers throughout
+Use `[minimum, maximum]` for intervals: `[200, 1000]` samples integers throughout
 that interval, including its bounds. If either bound is a float, sampling is
-continuous; `[100, 100]` fixes a parameter. Trials explore combinations within
+continuous; `[100]` fixes a parameter. Trials explore combinations within
 the budget rather than exhaustively testing every possible value. See
 [search-space rules](../optimization.md#search-spaces) for categorical choices
 and logarithmic sampling.
@@ -50,7 +50,16 @@ the same model or pipeline and backend. See the main README for the full refit
 and [trial comparison](../optimization.md#save-and-compare-trials) to choose a
 configuration yourself from the saved DataFrame.
 
+Omit a hyperparameter entry to keep its default; do not leave an empty list.
+Each model links to a full constructor catalog with default comments and upstream
+documentation explaining the settings. Examples below show starting ranges,
+not recommended settings for every dataset. See [training](../training.md) for
+refitting, [model selection](../model_selection.md) for CV, and
+[evaluation](../evaluation.md) for metric definitions.
+
 ## Logistic regression
+
+[All parameters, defaults, and detailed explanations](logistic-regression.md).
 
 A linear classifier. Scale numeric inputs inside a pandas pipeline so that each
 CV fold learns its own scaling. Smaller `C` means stronger regularization;
@@ -63,16 +72,23 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
-search_space = {"logisticregression__C": [0.001, 10.0]}
+search_space = {
+    "logisticregression__C": [0.001, 10.0],  # Default if omitted: 1.0
+}
 ```
 
 ```python
 # Spark: built-in standardization is enabled by default.
 model = "logistic_regression"
-search_space = {"regParam": [0.001, 1.0], "maxIter": [100, 100]}
+search_space = {
+    "regParam": [0.001, 1.0],  # Default if omitted: 0.0
+    "maxIter": [100],  # Default if omitted: 100
+}
 ```
 
 ## Decision tree
+
+[All parameters, defaults, and detailed explanations](decision-tree.md).
 
 A single tree. Depth limits complexity; minimum leaf size limits small leaves.
 Use an estimator object in pandas so the same `model` also works with
@@ -83,16 +99,24 @@ Use an estimator object in pandas so the same `model` also works with
 from sklearn.tree import DecisionTreeClassifier
 
 model = DecisionTreeClassifier(random_state=42)
-search_space = {"max_depth": [3, 8], "min_samples_leaf": [10, 50]}
+search_space = {
+    "max_depth": [3, 8],  # Default if omitted: None (unlimited)
+    "min_samples_leaf": [10, 50],  # Default if omitted: 1
+}
 ```
 
 ```python
 # Spark
 model = "decision_tree"
-search_space = {"maxDepth": [3, 8], "minInstancesPerNode": [10, 50]}
+search_space = {
+    "maxDepth": [3, 8],  # Default if omitted: 5
+    "minInstancesPerNode": [10, 50],  # Default if omitted: 1
+}
 ```
 
 ## Random forest
+
+[All parameters, defaults, and detailed explanations](random-forest.md).
 
 An ensemble of randomized trees. Tree count affects fit cost; depth and minimum
 leaf size control each tree's complexity.
@@ -101,9 +125,9 @@ leaf size control each tree's complexity.
 # pandas
 model = "random_forest"
 search_space = {
-    "n_estimators": [100, 200],
-    "max_depth": [5, 10],
-    "min_samples_leaf": [10, 50],
+    "n_estimators": [100, 200],  # Default if omitted: 100
+    "max_depth": [5, 10],  # Default if omitted: None (unlimited)
+    "min_samples_leaf": [10, 50],  # Default if omitted: 1
 }
 ```
 
@@ -111,13 +135,15 @@ search_space = {
 # Spark
 model = "random_forest"
 search_space = {
-    "numTrees": [100, 200],
-    "maxDepth": [5, 10],
-    "minInstancesPerNode": [10, 50],
+    "numTrees": [100, 200],  # Default if omitted: 20
+    "maxDepth": [5, 10],  # Default if omitted: 5
+    "minInstancesPerNode": [10, 50],  # Default if omitted: 1
 }
 ```
 
 ## Gradient boosting
+
+[All parameters, defaults, and detailed explanations](gradient-boosting.md).
 
 Sequential boosted trees. Tune the learning rate together with the number of
 iterations; smaller learning rates often need more iterations.
@@ -126,9 +152,9 @@ iterations; smaller learning rates often need more iterations.
 # pandas
 model = "gradient_boosting"
 search_space = {
-    "n_estimators": [100, 200],
-    "learning_rate": [0.03, 0.1],
-    "max_depth": [2, 5],
+    "n_estimators": [100, 200],  # Default if omitted: 100
+    "learning_rate": [0.03, 0.1],  # Default if omitted: 0.1
+    "max_depth": [2, 5],  # Default if omitted: 3
 }
 ```
 
@@ -136,13 +162,15 @@ search_space = {
 # Spark
 model = "gradient_boosting"
 search_space = {
-    "maxIter": [100, 200],
-    "stepSize": [0.03, 0.1],
-    "maxDepth": [2, 5],
+    "maxIter": [100, 200],  # Default if omitted: 20
+    "stepSize": [0.03, 0.1],  # Default if omitted: 0.1
+    "maxDepth": [2, 5],  # Default if omitted: 5
 }
 ```
 
 ## LightGBM
+
+[All parameters, defaults, and detailed explanations](lightgbm.md).
 
 Leaf-wise boosted trees. Leaf count and minimum data per leaf control complexity.
 The example leaf sizes below need sufficiently large training folds; reduce them
@@ -152,10 +180,10 @@ for small samples. These are illustrative search spaces, not universal defaults.
 # pandas: native LightGBM sklearn wrapper
 model = "lightgbm"
 search_space = {
-    "n_estimators": [100, 200],
-    "learning_rate": [0.03, 0.1],
-    "num_leaves": [15, 63],
-    "min_child_samples": [200, 1000],
+    "n_estimators": [100, 200],  # Default if omitted: 100
+    "learning_rate": [0.03, 0.1],  # Default if omitted: 0.1
+    "num_leaves": [15, 63],  # Default if omitted: 31
+    "min_child_samples": [200, 1000],  # Default if omitted: 20
 }
 ```
 
@@ -166,10 +194,10 @@ Use that name in pandas to avoid supplying it alongside its native alias.
 # SparkLightGBM: default Spark backend, native parameter names
 model = "lightgbm"
 search_space = {
-    "num_iterations": [100, 200],
-    "learning_rate": [0.03, 0.1],
-    "num_leaves": [15, 63],
-    "min_data_in_leaf": [200, 1000],
+    "num_iterations": [100, 200],  # Default if omitted: 100
+    "learning_rate": [0.03, 0.1],  # Default if omitted: 0.1
+    "num_leaves": [15, 63],  # Default if omitted: 31
+    "min_data_in_leaf": [200, 1000],  # Default if omitted: 20
 }
 ```
 
@@ -177,10 +205,10 @@ search_space = {
 # SynapseML: pass lgbm_backend="synapseml" to optimize AND train_model.
 model = "lightgbm"
 search_space = {
-    "numIterations": [100, 200],
-    "learningRate": [0.03, 0.1],
-    "numLeaves": [15, 63],
-    "minDataInLeaf": [200, 1000],
+    "numIterations": [100, 200],  # Default if omitted: 100
+    "learningRate": [0.03, 0.1],  # Default if omitted: 0.1
+    "numLeaves": [15, 63],  # Default if omitted: 31
+    "minDataInLeaf": [200, 1000],  # Default if omitted: 20
 }
 ```
 

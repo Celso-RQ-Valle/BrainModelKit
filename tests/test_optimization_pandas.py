@@ -23,7 +23,7 @@ def frames():
     "space",
     [
         {"C": {"type": "float", "low": 0.1, "high": 1.0}},
-        {"C": [0.1, 1.0], "max_iter": [1000, 1000]},
+        {"C": [0.1, 1.0], "max_iter": [1000]},
     ],
 )
 def test_optimization_uses_cv_and_returns_diagnostics(frames, space):
@@ -50,6 +50,7 @@ def test_optimization_uses_cv_and_returns_diagnostics(frames, space):
         assert all(0.1 <= trial.params["C"] <= 1.0 for trial in result.study.trials)
         assert any(0.1 < trial.params["C"] < 1.0 for trial in result.study.trials)
         assert result.best_params["max_iter"] == 1000
+        assert result.best_model.max_iter == 1000
         assert result.best_params["C"] == result.best_model.C
 
 
@@ -64,7 +65,7 @@ def test_intervals_sample_interior_values_and_preserve_types():
         {
             "leaf": [200, 1000],
             "depth": {"type": "categorical", "choices": [None, 3]},
-            "fixed": [100, 100],
+            "fixed": [100],
             "mixed": [1, 2.0],
             "rate": [0.1, 0.3],
         },
@@ -89,7 +90,8 @@ def test_intervals_sample_interior_values_and_preserve_types():
     "choices",
     [
         [],
-        [200],
+        [float("inf")],
+        [float("nan")],
         [15, 31, 63],
         [1000, 200],
         [True, 2],
@@ -106,6 +108,27 @@ def test_invalid_intervals(choices):
 
     with pytest.raises(ValueError, match="Interval"):
         suggest_parameters(optuna.trial.FixedTrial({}), {"leaf": choices})
+
+
+@pytest.mark.parametrize("value", [100, 0.1, "gini", True, False, None])
+def test_fixed_singletons_are_recorded_and_preserve_types(value):
+    from brainmodelkit.optimization import suggest_parameters
+
+    study = optuna.create_study()
+    trial = study.ask()
+    params = suggest_parameters(trial, {"setting": [value]})
+    study.tell(trial, 1.0)
+    assert params == {"setting": value}
+    assert type(params["setting"]) is type(value)
+    assert study.trials[0].params == params
+
+
+def test_equal_bounds_remain_backward_compatible():
+    from brainmodelkit.optimization import suggest_parameters
+
+    assert suggest_parameters(
+        optuna.trial.FixedTrial({"size": 100}), {"size": [100, 100]}
+    ) == {"size": 100}
 
 
 def test_optimization_rejects_oot_schema(frames):
@@ -144,7 +167,7 @@ def test_save_trials_csv_with_parameters_and_metrics(frames, tmp_path, constrain
         "target",
         ["x1", "x2"],
         "logistic_regression",
-        {"C": [0.1, 1.0], "max_iter": [1000, 1000]},
+        {"C": [0.1, 1.0], "max_iter": [1000]},
         n_trials=3,
         cv=2,
         save_as="none",

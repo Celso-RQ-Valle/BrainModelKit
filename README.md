@@ -426,15 +426,16 @@ untouched. Install `brainmodelkit[pyspark,optimization]` for this step.
 This example **maximizes validation AUC while limiting the training-to-validation KS
 gap to five percentage points**. The API calls validation `oot_df`, so its
 metrics have the `oot_` prefix. Hyperparameter lists specify `[minimum, maximum]` search
-intervals. See [models and search spaces](docs/models/README.md) for every supported
+intervals or `[value]` for fixed settings. Omit an entry to keep its default.
+See [models and search spaces](docs/models/README.md) for every supported
 model and its backend-specific parameters.
 
 ```python
 from brainmodelkit.optimization.pyspark import optimize
 
 search_space = {
-    "regParam": [0.001, 1.0],
-    "maxIter": [100, 100],
+    "regParam": [0.001, 1.0],  # Default if omitted: 0.0
+    "maxIter": [100],  # Default if omitted: 100
 }
 tuning = optimize(
     train_df=train_df,
@@ -839,7 +840,8 @@ untouched. Install `brainmodelkit[pandas,optimization]` for this step.
 This example **maximizes validation AUC while limiting the training-to-validation KS
 gap to five percentage points**. The API calls validation `oot_df`, so its
 metrics have the `oot_` prefix. Hyperparameter lists specify `[minimum, maximum]` search
-intervals. See [models and search spaces](docs/models/README.md) for every supported
+intervals or `[value]` for fixed settings. Omit an entry to keep its default.
+See [models and search spaces](docs/models/README.md) for every supported
 model and its backend-specific parameters.
 
 ```python
@@ -852,7 +854,7 @@ from sklearn.preprocessing import StandardScaler
 classifier = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
 
 search_space = {
-    "logisticregression__C": [0.001, 10.0],
+    "logisticregression__C": [0.001, 10.0],  # Default if omitted: 1.0
 }
 tuning = optimize(
     train_df=train_df,
