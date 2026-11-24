@@ -14,6 +14,7 @@ lifecycle; their parameters and algorithms are not interchangeable.
 | Train | [Backend examples](../examples/journey/README.md) | [Models, parameters, outputs](training.md) |
 | Validate and optimize | [Leakage-aware alternatives](journey-validation.md) | [CV](model_selection.md), [Optuna](optimization.md), [model search spaces](models.md) |
 | Evaluate | [Metric examples](evaluation.md) | [Aliases, scalar KS, undefined cases](evaluation.md#public-alias-and-scalar-utility) |
+| Calibrate, align scores, explain | [Runnable probability workflows](probability-workflow.md#install-and-run) | [Contracts, APIs and support matrix](probability-workflow.md) |
 | Analyze segments | [Cube interpretation](evaluation.md#interpreting-segment-results) | [Cube schemas](evaluation.md#output-conventions) |
 | Save, load, score | [Runnable lifecycle](../examples/journey/README.md) | [Formats](training.md#model-formats), [loaders](training.md#loading-trained-models), [MLflow](training.md#mlflow) |
 | Troubleshoot | [Environment checks](setup.md#environment-doctor) | [Windows](setup.md#spark-on-windows), [Spark limits](setup.md#spark-scalability-limits), [migration](training.md#migration-and-compatibility) |

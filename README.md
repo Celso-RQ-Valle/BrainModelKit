@@ -4,6 +4,15 @@ BrainModelKit builds numeric time-series features, selects model inputs, trains
 binary classifiers, and evaluates overall and segment performance. Choose the
 backend that matches your DataFrames; the base install has no runtime dependencies.
 
+After training, use `LogisticCalibrator` for event-probability calibration,
+`ScoreAligner` for fixed bounded business scores, and `ModelExplainer` for
+individual feature contributions. Both pandas and PySpark APIs are available.
+See [calibration, scores, and explanations](docs/probability-workflow.md) for
+formulas, supported models, execution limits, and runnable
+[pandas](examples/probability_workflow_pandas.py) and
+[Spark](examples/probability_workflow_pyspark.py) examples. The existing `score`
+column remains a model probability; business scores use a separate column.
+
 > [!WARNING]
 > The public API is not stable yet. BrainModelKit is under active development
 > and remains experimental, including its Spark integrations.
