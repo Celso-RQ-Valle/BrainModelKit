@@ -46,6 +46,8 @@ and logarithmic sampling.
 
 Choose one model and its search space below, then pass them to `optimize`:
 
+### Pandas
+
 ```python
 from brainmodelkit.optimization.pandas import optimize
 # For Spark: from brainmodelkit.optimization.pyspark import optimize
@@ -115,6 +117,8 @@ A linear classifier. Scale numeric inputs inside a pandas pipeline so that each
 CV fold learns its own scaling. Smaller `C` means stronger regularization;
 larger Spark `regParam` means stronger regularization. They are not interchangeable.
 
+### Pandas
+
 ```python
 # pandas
 from sklearn.linear_model import LogisticRegression
@@ -140,6 +144,8 @@ search_space = {
     # "logisticregression__l1_ratio": [None], # Default if omitted: None; The Elastic-Net mixing parameter, with ``0 <= l1_ratio <= 1``
 }
 ```
+
+### Spark
 
 ```python
 # Spark: built-in standardization is enabled by default.
@@ -170,6 +176,8 @@ A single tree. Depth limits complexity; minimum leaf size limits small leaves.
 Use an estimator object in pandas so the same `model` also works with
 `train_model` (the string `"decision_tree"` works in pandas optimization/CV only).
 
+### Pandas
+
 ```python
 # pandas
 from sklearn.tree import DecisionTreeClassifier
@@ -191,6 +199,8 @@ search_space = {
     # "monotonic_cst": [None], # Default if omitted: None; Indicates the monotonicity constraint to enforce on each feature
 }
 ```
+
+### Spark
 
 ```python
 # Spark
@@ -215,6 +225,8 @@ search_space = {
 
 An ensemble of randomized trees. Tree count affects fit cost; depth and minimum
 leaf size control each tree's complexity.
+
+### Pandas
 
 ```python
 # pandas
@@ -241,6 +253,8 @@ search_space = {
     # "monotonic_cst": [None], # Default if omitted: None; Indicates the monotonicity constraint to enforce on each feature
 }
 ```
+
+### Spark
 
 ```python
 # Spark
@@ -270,6 +284,8 @@ search_space = {
 Sequential boosted trees. Tune the learning rate together with the number of
 iterations; smaller learning rates often need more iterations.
 
+### Pandas
+
 ```python
 # pandas
 model = "gradient_boosting"
@@ -296,6 +312,8 @@ search_space = {
     # "ccp_alpha": [0.0], # Default if omitted: 0.0; Complexity parameter used for Minimal Cost-Complexity Pruning
 }
 ```
+
+### Spark
 
 ```python
 # Spark
@@ -329,6 +347,8 @@ Leaf-wise boosted trees. Leaf count and minimum data per leaf control complexity
 The example leaf sizes below need sufficiently large training folds; reduce them
 for small samples. These are illustrative search spaces, not universal defaults.
 
+### Pandas
+
 ```python
 # pandas: native LightGBM sklearn wrapper
 model = "lightgbm"
@@ -358,6 +378,8 @@ search_space = {
 `min_child_samples` is the sklearn wrapper's parameter for minimum data per leaf.
 Use that name in pandas to avoid supplying it alongside its native alias.
 
+### Spark
+
 ```python
 # SparkLightGBM: default Spark backend, native parameter names
 model = "lightgbm"
@@ -380,6 +402,8 @@ search_space = {
     # "seed": [42], # Default if omitted: optimization seed (42)
 }
 ```
+
+### Spark
 
 ```python
 # SynapseML: pass lgbm_backend="synapseml" to optimize AND train_model.
