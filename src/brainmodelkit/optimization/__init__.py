@@ -32,7 +32,7 @@ def require_optuna():
 
 
 def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
-    """Translate [value] constants and numeric [minimum, maximum] intervals."""
+    """Translate constants, boolean choices, and numeric intervals."""
     if not isinstance(search_space, dict) or not search_space:
         raise ValueError("search_space must be a non-empty dictionary")
     normalized = {}
@@ -47,6 +47,11 @@ def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
                 ):
                     normalized[name] = {"type": "categorical", "choices": [value]}
                     continue
+            if len(specification) == 2 and all(
+                isinstance(value, bool) for value in specification
+            ):
+                normalized[name] = {"type": "categorical", "choices": specification}
+                continue
             if len(specification) != 2 or any(
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -55,7 +60,8 @@ def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
             ):
                 raise ValueError(
                     f"Interval for {name!r} must be [minimum, maximum] with two "
-                    "finite numeric bounds, or [value] with one finite scalar; "
+                    "finite numeric bounds, [False, True] boolean choices, "
+                    "or [value] with one finite scalar; "
                     "use a categorical dictionary for choices"
                 )
             low, high = specification
@@ -77,7 +83,8 @@ def suggest_parameters(trial, search_space: dict[str, Any]) -> dict[str, Any]:
 
     [200, 1000] samples integers within the inclusive interval. If either bound
     is a float, sample a float. [value] fixes a parameter (including strings,
-    booleans, and None). Equal bounds remain supported for compatibility.
+    booleans, and None). [False, True] samples boolean choices, in either order.
+    Equal bounds remain supported for compatibility.
     """
     search_space = normalize_search_space(search_space)
     values = {}

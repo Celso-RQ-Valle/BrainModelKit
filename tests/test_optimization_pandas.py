@@ -95,6 +95,9 @@ def test_intervals_sample_interior_values_and_preserve_types():
         [15, 31, 63],
         [1000, 200],
         [True, 2],
+        [False, 1],
+        [0, True],
+        [False, True, False],
         [None, 3],
         ["a", "b"],
         [0, float("inf")],
@@ -129,6 +132,30 @@ def test_equal_bounds_remain_backward_compatible():
     assert suggest_parameters(
         optuna.trial.FixedTrial({"size": 100}), {"size": [100, 100]}
     ) == {"size": 100}
+
+
+@pytest.mark.parametrize("choices", [[False, True], [True, False]])
+@pytest.mark.parametrize("value", [False, True])
+def test_boolean_choices_preserve_type_and_distribution(choices, value):
+    from brainmodelkit.optimization import suggest_parameters
+
+    trial = optuna.trial.FixedTrial({"fit_intercept": value})
+    params = suggest_parameters(trial, {"fit_intercept": choices})
+    assert params["fit_intercept"] is value
+    distribution = trial.distributions["fit_intercept"]
+    assert isinstance(distribution, optuna.distributions.CategoricalDistribution)
+    assert distribution.choices == tuple(choices)
+
+
+def test_boolean_choices_reach_fitted_model(frames):
+    train, validation = frames
+    result = optimize(
+        train, validation, "target", ["x1", "x2"], "logistic_regression",
+        {"fit_intercept": [False, True]}, n_trials=2, cv=2, save_as="none",
+    )
+    assert type(result.best_params["fit_intercept"]) is bool
+    assert result.best_model.fit_intercept is result.best_params["fit_intercept"]
+    assert all(type(t.params["fit_intercept"]) is bool for t in result.study.trials)
 
 
 def test_optimization_rejects_oot_schema(frames):

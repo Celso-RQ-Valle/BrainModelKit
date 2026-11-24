@@ -111,7 +111,9 @@ a float, for example `"learning_rate": [0.01, 0.1]`. Bounds must be finite,
 numeric, and ordered. Use `[100]` to fix a parameter. Single-value lists also
 accept strings, booleans, or `None`, for example `["gini"]`, `[True]`, or
 `[None]`. Empty lists, lists with more than two elements, non-finite numbers,
-and non-numeric interval bounds are rejected. Equal numeric bounds remain
+and non-numeric interval bounds are rejected, except for two boolean choices.
+Use `[False, True]` (or `[True, False]`) to sample a boolean categorically on
+both backends. Mixed boolean/numeric pairs such as `[False, 1]` are rejected. Equal numeric bounds remain
 accepted for compatibility; prefer `[value]` for fixed settings. This replaces the earlier candidate-list interpretation.
 
 Sampling is linear by default. Existing dictionary ranges and callables remain
