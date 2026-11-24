@@ -96,7 +96,7 @@ only CV. In-sample training metrics are not estimates of generalization.
 
 ## Search spaces
 
-See [models and hyperparameters](models/README.md) for each supported model,
+See [models and hyperparameters](models.md) for each supported model,
 including pandas, SparkLightGBM, and SynapseML parameter names.
 
 Use `[minimum, maximum]` intervals in `search_space`:

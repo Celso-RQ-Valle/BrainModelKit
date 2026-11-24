@@ -427,7 +427,7 @@ This example **maximizes validation AUC while limiting the training-to-validatio
 gap to five percentage points**. The API calls validation `oot_df`, so its
 metrics have the `oot_` prefix. Hyperparameter lists specify `[minimum, maximum]` search
 intervals or `[value]` for fixed settings. Omit an entry to keep its default.
-See [models and search spaces](docs/models/README.md) for every supported
+See [models and search spaces](docs/models.md#spark-parameters) for every supported
 model and its backend-specific parameters.
 
 ```python
@@ -841,7 +841,7 @@ This example **maximizes validation AUC while limiting the training-to-validatio
 gap to five percentage points**. The API calls validation `oot_df`, so its
 metrics have the `oot_` prefix. Hyperparameter lists specify `[minimum, maximum]` search
 intervals or `[value]` for fixed settings. Omit an entry to keep its default.
-See [models and search spaces](docs/models/README.md) for every supported
+See [models and search spaces](docs/models.md#pandas-parameters) for every supported
 model and its backend-specific parameters.
 
 ```python

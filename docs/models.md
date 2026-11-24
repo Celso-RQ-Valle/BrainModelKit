@@ -1,16 +1,47 @@
 # Models and hyperparameter optimization
 
-[Main workflow](../../README.md) | [Optimization contract](../optimization.md)
+[Main workflow](../README.md) | [Optimization contract](optimization.md)
 
 All built-in models below are binary classifiers: targets are 0/1 and predictions
 provide a class-1 probability. Logistic regression is a classifier here; the
 optimization API does not currently support continuous-target regression metrics.
 
+## Model and parameter index
+
+Choose your backend, then open the official parameter reference directly. Model
+names jump to search-space examples on this page. Versions below identify the
+linked documentation, not a guarantee of compatibility with every installed
+version. For `latest` or `stable` references, select your installed version in
+the upstream documentation before checking defaults.
+
+### Spark parameters
+
+| Model / implementation | Documentation version | Parameter reference |
+| --- | --- | --- |
+| [Logistic regression](#logistic-regression) | Spark latest | [Official parameters](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.classification.LogisticRegression.html) |
+| [Decision tree](#decision-tree) | Spark latest | [Official parameters](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.classification.DecisionTreeClassifier.html) |
+| [Random forest](#random-forest) | Spark latest | [Official parameters](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.classification.RandomForestClassifier.html) |
+| [Gradient boosting](#gradient-boosting) | Spark latest | [Official parameters](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.classification.GBTClassifier.html) |
+| [LightGBM (SparkLightGBM)](#lightgbm) | SparkLightGBM 0.9.2 / LightGBM stable | [Bridge API](https://pypi.org/project/sparklightgbm/0.9.2/), [native parameters](https://lightgbm.readthedocs.io/en/stable/Parameters.html) |
+| [LightGBM (SynapseML)](#lightgbm) | SynapseML 1.0.14 | [Official parameters](https://mmlspark.blob.core.windows.net/docs/1.0.14/pyspark/synapse.ml.lightgbm.html#synapse.ml.lightgbm.LightGBMClassifier.LightGBMClassifier) |
+
+### pandas parameters
+
+| Model / implementation | Documentation version | Parameter reference |
+| --- | --- | --- |
+| [Logistic regression](#logistic-regression) | scikit-learn 1.6.1 | [Official parameters](https://scikit-learn.org/1.6/modules/generated/sklearn.linear_model.LogisticRegression.html) |
+| [Decision tree](#decision-tree) | scikit-learn 1.6.1 | [Official parameters](https://scikit-learn.org/1.6/modules/generated/sklearn.tree.DecisionTreeClassifier.html) |
+| [Random forest](#random-forest) | scikit-learn 1.6.1 | [Official parameters](https://scikit-learn.org/1.6/modules/generated/sklearn.ensemble.RandomForestClassifier.html) |
+| [Gradient boosting](#gradient-boosting) | scikit-learn 1.6.1 | [Official parameters](https://scikit-learn.org/1.6/modules/generated/sklearn.ensemble.GradientBoostingClassifier.html) |
+| [LightGBM](#lightgbm) | LightGBM stable | [Official parameters](https://lightgbm.readthedocs.io/en/stable/pythonapi/lightgbm.LGBMClassifier.html) |
+
+## Optimization example
+
 Use `[minimum, maximum]` for intervals: `[200, 1000]` samples integers throughout
 that interval, including its bounds. If either bound is a float, sampling is
 continuous; `[100]` fixes a parameter. Trials explore combinations within
 the budget rather than exhaustively testing every possible value. See
-[search-space rules](../optimization.md#search-spaces) for categorical choices
+[search-space rules](optimization.md#search-spaces) for categorical choices
 and logarithmic sampling.
 
 Choose one model and its search space below, then pass them to `optimize`:
@@ -47,19 +78,18 @@ Install `brainmodelkit[pandas,optimization]` or
 during optimization; keep final OOT untouched until the configuration is frozen.
 Refit with `train_model(..., model=model, model_params=tuning.best_params)` using
 the same model or pipeline and backend. See the main README for the full refit
-and [trial comparison](../optimization.md#save-and-compare-trials) to choose a
+and [trial comparison](optimization.md#save-and-compare-trials) to choose a
 configuration yourself from the saved DataFrame.
 
 Omit a hyperparameter entry to keep its default; do not leave an empty list.
-Each model links to a full constructor catalog with default comments and upstream
-documentation explaining the settings. Examples below show starting ranges,
-not recommended settings for every dataset. See [training](../training.md) for
-refitting, [model selection](../model_selection.md) for CV, and
-[evaluation](../evaluation.md) for metric definitions.
+The index above links directly to official parameter names, defaults, and
+explanations. Built-in model strings use the optimization seed (42 by default)
+for `random_state` / `seed`; custom estimators retain their configured values. Examples below show starting ranges,
+not recommended settings for every dataset. See [training](training.md) for
+refitting, [model selection](model_selection.md) for CV, and
+[evaluation](evaluation.md) for metric definitions.
 
 ## Logistic regression
-
-[All parameters, defaults, and detailed explanations](logistic-regression.md).
 
 A linear classifier. Scale numeric inputs inside a pandas pipeline so that each
 CV fold learns its own scaling. Smaller `C` means stronger regularization;
@@ -88,8 +118,6 @@ search_space = {
 
 ## Decision tree
 
-[All parameters, defaults, and detailed explanations](decision-tree.md).
-
 A single tree. Depth limits complexity; minimum leaf size limits small leaves.
 Use an estimator object in pandas so the same `model` also works with
 `train_model` (the string `"decision_tree"` works in pandas optimization/CV only).
@@ -116,8 +144,6 @@ search_space = {
 
 ## Random forest
 
-[All parameters, defaults, and detailed explanations](random-forest.md).
-
 An ensemble of randomized trees. Tree count affects fit cost; depth and minimum
 leaf size control each tree's complexity.
 
@@ -143,8 +169,6 @@ search_space = {
 
 ## Gradient boosting
 
-[All parameters, defaults, and detailed explanations](gradient-boosting.md).
-
 Sequential boosted trees. Tune the learning rate together with the number of
 iterations; smaller learning rates often need more iterations.
 
@@ -169,8 +193,6 @@ search_space = {
 ```
 
 ## LightGBM
-
-[All parameters, defaults, and detailed explanations](lightgbm.md).
 
 Leaf-wise boosted trees. Leaf count and minimum data per leaf control complexity.
 The example leaf sizes below need sufficiently large training folds; reduce them
@@ -213,7 +235,7 @@ search_space = {
 ```
 
 `lgbm_backend` is a Spark execution option, not a hyperparameter. Spark also
-accepts `model="lgbm"`. See [LightGBM setup and execution](../optimization.md#spark-lightgbm)
+accepts `model="lgbm"`. See [LightGBM setup and execution](optimization.md#spark-lightgbm)
 for dependencies, executor requirements, and local/distributed behavior.
 
 ## Custom classifiers and pipelines
@@ -225,4 +247,4 @@ logistic-regression example. Keep learned preprocessing inside the pipeline.
 Spark accepts compatible Spark ML estimators exposing feature, label, prediction,
 probability, and raw-prediction parameters. Supply native Spark parameter names;
 the library assembles raw feature columns into its pipeline. See the
-[training contract](../training.md#training-parameter-reference) for details.
+[training contract](training.md#training-parameter-reference) for details.
