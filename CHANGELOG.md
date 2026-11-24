@@ -97,7 +97,7 @@ The project is experimental and pre-1.0; public APIs remain unstable.
   within every grouping subset and score.
 
 - `cube_analysis.pandas` and `cube_analysis.pyspark` with `calculate_metrics` for
-  all grouping subsets and multiple scores, five-decimal metrics, and `Geral` rollups.
+  all grouping subsets and multiple scores, five-decimal metrics, and `General` rollups.
 
 - Pandas and Spark `risk_table` with score ranges, volume, event counts, and rates.
 

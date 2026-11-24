@@ -565,14 +565,14 @@ tile_cube.show()
 ```
 
 Metric rows contain `segment`, `KS`, `AUC`, `Gini`, `score`; `score` here is the
-**source score column name**. `Geral` denotes the overall rollup. With more
-dimensions, omitted dimensions also contain `Geral`; actual missing keys remain
+**source score column name**. `General` denotes the overall rollup. With more
+dimensions, omitted dimensions also contain `General`; actual missing keys remain
 missing. All `2 ** dimensions` grouping subsets are retained. Metric cubes expand rows
 across scores and subsets before grouped aggregation; memory and work grow with
 that product, so choose dimensions deliberately.
 Risk cubes additionally report volumes/events per occupied tile; use these to
 judge support. Small groups are noisy, single-class metrics are undefined, and
-there is no automatic minimum-volume suppression. Real keys named `Geral` collide
+there is no automatic minimum-volume suppression. Real keys named `General` collide
 visually with rollups. [Cube interpretation](docs/evaluation.md#interpreting-segment-results)
 includes an illustrative result and full output conventions.
 
@@ -981,14 +981,14 @@ print(tile_cube)
 ```
 
 Metric rows contain `segment`, `KS`, `AUC`, `Gini`, `score`; `score` here is the
-**source score column name**. `Geral` denotes the overall rollup. With more
-dimensions, omitted dimensions also contain `Geral`; actual missing keys remain
+**source score column name**. `General` denotes the overall rollup. With more
+dimensions, omitted dimensions also contain `General`; actual missing keys remain
 missing. All `2 ** dimensions` grouping subsets are retained. Metric cubes expand rows
 across scores and subsets before grouped aggregation; memory and work grow with
 that product, so choose dimensions deliberately.
 Risk cubes additionally report volumes/events per occupied tile; use these to
 judge support. Small groups are noisy, single-class metrics are undefined, and
-there is no automatic minimum-volume suppression. Real keys named `Geral` collide
+there is no automatic minimum-volume suppression. Real keys named `General` collide
 visually with rollups. [Cube interpretation](docs/evaluation.md#interpreting-segment-results)
 includes an illustrative result and full output conventions.
 

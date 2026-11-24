@@ -31,7 +31,7 @@ training split. The selected feature order must accompany the deployed model.
 
 Expected structural results: 40 predictions for June, finite class-1 probabilities
 between 0 and 1, scalar metric dictionaries, four overall risk tiles, and cube
-rows for `large`, `small`, and overall `Geral`. Numeric scores are environment-
+rows for `large`, `small`, and overall `General`. Numeric scores are environment-
 and backend-dependent; Spark tiling and its estimator differ from pandas.
 
 ## Persist and reload

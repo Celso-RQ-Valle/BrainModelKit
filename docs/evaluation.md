@@ -397,7 +397,7 @@ Ranges and event rates retain the internal risk table's precision. Tied scores
 can span tiles, so ranges may overlap and backend results may differ for ties.
 
 Both cubes cast group keys to strings, retain missing keys, and label omitted
-dimensions `Geral`. A real key named `Geral` is indistinguishable from a rollup
+dimensions `General`. A real key named `General` is indistinguishable from a rollup
 in that column.
 
 ## Public alias and scalar utility
@@ -452,7 +452,7 @@ per occupied score tile. It does not calculate KS/AUC/Gini.
 
 | segment | KS | AUC | Gini | score |
 | --- | --- | --- | --- | --- |
-| Geral | 0.40 | 0.75 | 0.50 | score |
+| General | 0.40 | 0.75 | 0.50 | score |
 | small | 0.25 | 0.65 | 0.30 | score |
 | large | 0.50 | 0.80 | 0.60 | score |
 
@@ -464,8 +464,8 @@ can legitimately be 0 or 1. Empty metric input retains an overall undefined row
 per score; empty risk cubes have no occupied tiles.
 
 With dimensions `segment` and `period`, rows cover both, each alone, and neither.
-Omitted dimensions use `Geral`; actual missing keys remain missing. A real value
-`Geral` is indistinguishable from a rollup label. Adding d dimensions causes
+Omitted dimensions use `General`; actual missing keys remain missing. A real value
+`General` is indistinguishable from a rollup label. Adding d dimensions causes
 2**d grouping subsets per score. Metric cubes expand rows across scores and
 subsets, then use grouped threshold counts/cumulative sums (pandas) or partitioned
 tile windows (Spark), without a separate metric call per group or subset.

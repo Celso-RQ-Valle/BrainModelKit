@@ -23,7 +23,7 @@ def calculate_metrics(
     ``score_columns`` defaults to ("score",); ``target_column`` to "target".
 
     Accepts and returns Pandas DataFrames. Omitted dimensions contain
-    ``Geral``; observed keys become nullable strings. Metrics are rounded to
+    ``General``; observed keys become nullable strings. Metrics are rounded to
     five decimals. Output order is group_columns + [KS, AUC, Gini, score]. Missing
     pairs and undefined metrics follow the internal metric functions.
     Threshold counts and cumulative sums are vectorized across all groups and
@@ -49,13 +49,13 @@ def calculate_metrics(
     if df.empty:
         return pd.DataFrame(
             {
-                **{name: ["Geral"] * len(score_names) for name in groups},
+                **{name: ["General"] * len(score_names) for name in groups},
                 **{name: np.nan for name in ["KS", "AUC", "Gini"]},
                 "score": score_names,
             }
         )
 
-    # Integer codes keep real nulls and real 'Geral' keys separate from rollups.
+    # Integer codes keep real nulls and real 'General' keys separate from rollups.
     codes = (
         np.column_stack([pd.factorize(df[name], sort=False)[0] for name in groups])
         if groups
@@ -103,7 +103,7 @@ def calculate_metrics(
                 dict(enumerate(pd.factorize(df[name], sort=False)[1].astype("string")))
             )
             .astype("string")
-            .mask(observed[index].eq(-2), "Geral")
+            .mask(observed[index].eq(-2), "General")
             for index, name in enumerate(groups)
         },
         index=observed.index,
@@ -131,7 +131,7 @@ def calculate_ntile(
 
     Tiles are recalculated within each group. Tile 1 has the highest scores
     unless ascending=True. Return grouping keys, the internal risk_table
-    columns, and score. Omitted dimensions use Geral; null keys stay missing.
+    columns, and score. Omitted dimensions use General; null keys stay missing.
     Only occupied tiles appear; empty input returns an empty cube. Ranges
     and event rates retain the precision of risk_table.
     """
@@ -165,7 +165,7 @@ def calculate_ntile(
                 )
                 for group in groups:
                     table[group] = pd.Series(
-                        [values[group] if group in subset else "Geral"] * len(table),
+                        [values[group] if group in subset else "General"] * len(table),
                         index=table.index,
                         dtype="string",
                     )

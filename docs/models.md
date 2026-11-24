@@ -127,8 +127,14 @@ from sklearn.preprocessing import StandardScaler
 
 model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
 search_space = {
-    "logisticregression__C": [0.001,10.0,],  # Default if omitted: 1.0; Inverse of regularization strength; must be a positive float
-    "logisticregression__fit_intercept": [False,True],  # Default if omitted: True; Specifies if a constant (a.k.a
+    "logisticregression__C": [
+        0.001,
+        10.0,
+    ],  # Default if omitted: 1.0; Inverse of regularization strength; must be a positive float
+    "logisticregression__fit_intercept": [
+        False,
+        True,
+    ],  # Default if omitted: True; Specifies if a constant (a.k.a
     # "logisticregression__penalty": ['l2'], # Default if omitted: 'l2'; Specify the norm of the penalty:
     # "logisticregression__dual": [False, True], # Default if omitted: False; Dual (constrained) or primal (regularized, see also :ref:`this equation <regularized-logistic-loss>`) formulation
     # "logisticregression__tol": [0.0001], # Default if omitted: 0.0001; Tolerance for stopping criteria
@@ -152,8 +158,14 @@ search_space = {
 model = "logistic_regression"
 search_space = {
     "maxIter": [100],  # Default if omitted: 100; max number of iterations (>= 0)
-    "regParam": [0.001, 1.0],  # Default if omitted: 0.0; regularization parameter (>= 0)
-    "fitIntercept": [False, True],  # Default if omitted: True; whether to fit an intercept term
+    "regParam": [
+        0.001,
+        1.0,
+    ],  # Default if omitted: 0.0; regularization parameter (>= 0)
+    "fitIntercept": [
+        False,
+        True,
+    ],  # Default if omitted: True; whether to fit an intercept term
     # "elasticNetParam": [0.0], # Default if omitted: 0.0; the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty
     # "tol": [1e-06], # Default if omitted: 1e-06; the convergence tolerance for iterative algorithms (>= 0)
     # "threshold": [0.5], # Default if omitted: 0.5; Threshold in binary classification prediction, in range [0, 1]. If threshold and thresholds are both set, they must match.e.g....
@@ -184,8 +196,14 @@ from sklearn.tree import DecisionTreeClassifier
 
 model = DecisionTreeClassifier(random_state=42)
 search_space = {
-    "max_depth": [3, 8],  # Default if omitted: None (unlimited); The maximum depth of the tree
-    "min_samples_leaf": [10, 50],  # Default if omitted: 1; The minimum number of samples required to be at a leaf node
+    "max_depth": [
+        3,
+        8,
+    ],  # Default if omitted: None (unlimited); The maximum depth of the tree
+    "min_samples_leaf": [
+        10,
+        50,
+    ],  # Default if omitted: 1; The minimum number of samples required to be at a leaf node
     # "criterion": ['gini'], # Default if omitted: 'gini'; The function to measure the quality of a split
     # "splitter": ['best'], # Default if omitted: 'best'; The strategy used to choose the split at each node
     # "min_samples_split": [2], # Default if omitted: 2; The minimum number of samples required to split an internal node:
@@ -206,8 +224,13 @@ search_space = {
 # Spark
 model = "decision_tree"
 search_space = {
-    "maxDepth": [3, 8],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
-    "minInstancesPerNode": [10,],  # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
+    "maxDepth": [
+        3,
+        8,
+    ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
+    "minInstancesPerNode": [
+        10,
+    ],  # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
     # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
     # "maxMemoryInMB": [256], # Default if omitted: 256; Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its...
@@ -232,9 +255,18 @@ leaf size control each tree's complexity.
 # pandas
 model = "random_forest"
 search_space = {
-    "n_estimators": [100, 200],  # Default if omitted: 100; The number of trees in the forest
-    "max_depth": [5, 10],  # Default if omitted: None (unlimited); The maximum depth of the tree
-    "min_samples_leaf": [10, 50],  # Default if omitted: 1; The minimum number of samples required to be at a leaf node
+    "n_estimators": [
+        100,
+        200,
+    ],  # Default if omitted: 100; The number of trees in the forest
+    "max_depth": [
+        5,
+        10,
+    ],  # Default if omitted: None (unlimited); The maximum depth of the tree
+    "min_samples_leaf": [
+        10,
+        50,
+    ],  # Default if omitted: 1; The minimum number of samples required to be at a leaf node
     # "criterion": ['gini'], # Default if omitted: 'gini'; The function to measure the quality of a split
     # "min_samples_split": [2], # Default if omitted: 2; The minimum number of samples required to split an internal node:
     # "min_weight_fraction_leaf": [0.0], # Default if omitted: 0.0; The minimum weighted fraction of the sum total of weights (of all the input samples) required to be at a leaf node
@@ -260,8 +292,14 @@ search_space = {
 # Spark
 model = "random_forest"
 search_space = {
-    "maxDepth": [5, 10],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
-    "minInstancesPerNode": [10, 50],  # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
+    "maxDepth": [
+        5,
+        10,
+    ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
+    "minInstancesPerNode": [
+        10,
+        50,
+    ],  # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
     "numTrees": [100, 200],  # Default if omitted: 20; Number of trees to train (>= 1)
     # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
@@ -290,9 +328,18 @@ iterations; smaller learning rates often need more iterations.
 # pandas
 model = "gradient_boosting"
 search_space = {
-    "learning_rate": [0.03, 0.1],  # Default if omitted: 0.1; Learning rate shrinks the contribution of each tree by `learning_rate`
-    "n_estimators": [100, 200],  # Default if omitted: 100; The number of boosting stages to perform
-    "max_depth": [2, 5],  # Default if omitted: 3; Maximum depth of the individual regression estimators
+    "learning_rate": [
+        0.03,
+        0.1,
+    ],  # Default if omitted: 0.1; Learning rate shrinks the contribution of each tree by `learning_rate`
+    "n_estimators": [
+        100,
+        200,
+    ],  # Default if omitted: 100; The number of boosting stages to perform
+    "max_depth": [
+        2,
+        5,
+    ],  # Default if omitted: 3; Maximum depth of the individual regression estimators
     # "loss": ['log_loss'], # Default if omitted: 'log_loss'; The loss function to be optimized
     # "subsample": [1.0], # Default if omitted: 1.0; The fraction of samples to be used for fitting the individual base learners
     # "criterion": ['friedman_mse'], # Default if omitted: 'friedman_mse'; The function to measure the quality of a split
@@ -319,9 +366,15 @@ search_space = {
 # Spark
 model = "gradient_boosting"
 search_space = {
-    "maxDepth": [2, 5],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
+    "maxDepth": [
+        2,
+        5,
+    ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
     "maxIter": [100, 200],  # Default if omitted: 20; max number of iterations (>= 0)
-    "stepSize": [0.03, 0.1],  # Default if omitted: 0.1; Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator
+    "stepSize": [
+        0.03,
+        0.1,
+    ],  # Default if omitted: 0.1; Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator
     # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     # "minInstancesPerNode": [1], # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
     # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node

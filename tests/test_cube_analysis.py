@@ -45,7 +45,7 @@ def test_empty_and_single_class():
     assert calculate_metrics(df)[["KS", "AUC", "Gini"]].isna().all().all()
     result = calculate_metrics(df.iloc[:0], "segment")
     assert len(result) == 1
-    assert result.segment.iloc[0] == "Geral"
+    assert result.segment.iloc[0] == "General"
     assert result[["KS", "AUC", "Gini"]].isna().all().all()
 
 
@@ -122,8 +122,8 @@ def test_spark_cube_without_pandas(monkeypatch):
         assert len(counts) == 1
         assert result.columns == ["segment", "KS", "AUC", "Gini", "score"]
         rows = {row.segment: row for row in result.collect()}
-        assert set(rows) == {"Geral", None, "missing"}
-        for key in ["Geral", None]:
+        assert set(rows) == {"General", None, "missing"}
+        for key in ["General", None]:
             assert (rows[key].KS, rows[key].AUC, rows[key].Gini) == (1, 1, 1)
         assert math.isnan(rows["missing"].KS)
         assert math.isnan(rows["missing"].AUC)
@@ -165,7 +165,7 @@ def test_spark_cube_without_pandas(monkeypatch):
             )
         assert len(counts) == 2
         tile_rows = {row.segment: row for row in tiles.collect()}
-        assert set(tile_rows) == {"Geral", None}
+        assert set(tile_rows) == {"General", None}
         for row in tile_rows.values():
             assert row.n_tile == 1
             assert row.total_volume == 2
@@ -208,9 +208,9 @@ def test_spark_cube_without_pandas(monkeypatch):
             expected_ks = ks_ntile(
                 dataframe=difficult, group_columns=subset, n_tiles=2
             ).collect()
-            ks_by_key = {r.segment if subset else "Geral": r.KS for r in expected_ks}
+            ks_by_key = {r.segment if subset else "General": r.KS for r in expected_ks}
             for row in expected_auc:
-                key = row.segment if subset else "Geral"
+                key = row.segment if subset else "General"
                 found = next(r for r in actual if r.segment == key)
                 for value, expected in [
                     (found.AUC, row.auc),
@@ -259,8 +259,8 @@ def test_ntile_cube(ascending):
     assert result.total_non_events.sum() == 4 * 4 * 2
     assert result.segment.isna().sum() == 12
     overall = result[
-        result.segment.eq("Geral")
-        & result.period.eq("Geral")
+        result.segment.eq("General")
+        & result.period.eq("General")
         & result.score.eq("prediction")
     ]
     assert overall.event_rate.tolist() == ([0, 1] if ascending else [1, 0])
@@ -299,7 +299,7 @@ def test_vectorized_cube_matches_scalar_metrics(dimensions):
             "score": rng.choice([0.1, 0.5, 0.9, np.nan], 100),
             "other": rng.choice([0.2, 0.6, np.nan], 100),
             "target": rng.choice([0.0, 1.0, np.nan], 100),
-            "a": rng.choice(["A", "Geral", None], 100),
+            "a": rng.choice(["A", "General", None], 100),
             "b": rng.choice([1, 2, 3], 100),
             "c": pd.Categorical(
                 rng.choice(["X", "Y"], 100), categories=["X", "Y", "unused"]
@@ -324,7 +324,7 @@ def test_vectorized_cube_matches_scalar_metrics(dimensions):
                     auc, gini = _calculate_auc_gini(part.target, part[score])
                     records.append(
                         {
-                            **{name: values.get(name, "Geral") for name in groups},
+                            **{name: values.get(name, "General") for name in groups},
                             "KS": calculate_ks(part.target, part[score]),
                             "AUC": auc,
                             "Gini": gini,

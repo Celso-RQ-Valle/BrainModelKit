@@ -105,7 +105,7 @@ def calculate_metrics(
     ``score_columns`` defaults to ("score",); ``target_column`` to "target".
 
     Every grouping subset is computed for each score using internal Spark
-    metrics. Omitted dimensions are ``Geral``; observed keys are cast to
+    metrics. Omitted dimensions are ``General``; observed keys are cast to
     strings, retaining nulls. Metrics are rounded to five decimals.
     No Pandas conversion, Python UDF, or group-key collection is used.
     AUC is calculated across groups with partitioned windows; target validation
@@ -123,7 +123,7 @@ def calculate_metrics(
         raise ValueError("n_tiles must be an integer of at least 2")
     _validate_binary_target(df, target_column)
     # Expand score/subset metadata once; all data work uses partitioned windows.
-    # Struct keys distinguish omitted dimensions from observed nulls and Geral.
+    # Struct keys distinguish omitted dimensions from observed nulls and General.
     keys = [f"_dimension_{i}" for i in range(len(groups))]
     selected = df.select(
         *[df[name].alias(key) for name, key in zip(groups, keys, strict=True)],
@@ -189,7 +189,7 @@ def calculate_metrics(
     return merged.select(
         *[
             F.when(F.col(f"{key}.included"), F.col(f"{key}.value").cast("string"))
-            .otherwise(F.lit("Geral"))
+            .otherwise(F.lit("General"))
             .alias(name)
             for name, key in zip(groups, keys, strict=True)
         ],
@@ -217,7 +217,7 @@ def calculate_ntile(
     Uses the internal risk-table formulas with partitioned Spark operations,
     without Pandas, UDFs, or collecting group keys. Tile 1
     contains highest scores unless ascending=True. Output is grouping keys,
-    risk_table columns, and score. Omitted dimensions use Geral, null keys
+    risk_table columns, and score. Omitted dimensions use General, null keys
     remain null. Empty input returns an empty cube. Only occupied tiles appear.
     Ranges and event rates retain risk_table precision. Row order is unspecified.
     """
@@ -270,7 +270,7 @@ def calculate_ntile(
                     (
                         table[key_map[group]].cast("string")
                         if group in subset
-                        else F.lit("Geral")
+                        else F.lit("General")
                     ).alias(group)
                     for group in groups
                 ],
