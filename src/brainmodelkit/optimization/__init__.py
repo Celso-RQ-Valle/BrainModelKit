@@ -42,8 +42,10 @@ def normalize_search_space(search_space: dict[str, Any]) -> dict[str, Any]:
         if isinstance(specification, list):
             if len(specification) == 1:
                 value = specification[0]
-                if value is None or isinstance(value, (str, bool)) or (
-                    isinstance(value, (int, float)) and math.isfinite(value)
+                if (
+                    value is None
+                    or isinstance(value, (str, bool))
+                    or (isinstance(value, (int, float)) and math.isfinite(value))
                 ):
                     normalized[name] = {"type": "categorical", "choices": [value]}
                     continue

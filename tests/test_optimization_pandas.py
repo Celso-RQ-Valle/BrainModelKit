@@ -150,8 +150,15 @@ def test_boolean_choices_preserve_type_and_distribution(choices, value):
 def test_boolean_choices_reach_fitted_model(frames):
     train, validation = frames
     result = optimize(
-        train, validation, "target", ["x1", "x2"], "logistic_regression",
-        {"fit_intercept": [False, True]}, n_trials=2, cv=2, save_as="none",
+        train,
+        validation,
+        "target",
+        ["x1", "x2"],
+        "logistic_regression",
+        {"fit_intercept": [False, True]},
+        n_trials=2,
+        cv=2,
+        save_as="none",
     )
     assert type(result.best_params["fit_intercept"]) is bool
     assert result.best_model.fit_intercept is result.best_params["fit_intercept"]
