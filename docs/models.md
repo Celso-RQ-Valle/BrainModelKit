@@ -123,16 +123,16 @@ from sklearn.preprocessing import StandardScaler
 
 model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
 search_space = {
+    "logisticregression__C": [0.001, 10.0],
+    # Default if omitted: 1.0; Inverse of regularization strength; must be a positive float
+    "logisticregression__fit_intercept": [False, True],
+    # Default if omitted: True; Specifies if a constant (a.k.a
     # "logisticregression__penalty": ['l2'],
     # Default if omitted: 'l2'; Specify the norm of the penalty:
     # "logisticregression__dual": [False, True],
     # Default if omitted: False; Dual (constrained) or primal (regularized, see also :ref:`this equation <regularized-logistic-loss>`) formulation
     # "logisticregression__tol": [0.0001],
     # Default if omitted: 0.0001; Tolerance for stopping criteria
-    "logisticregression__C": [0.001, 10.0],
-    # Default if omitted: 1.0; Inverse of regularization strength; must be a positive float
-    "logisticregression__fit_intercept": [False, True],
-    # Default if omitted: True; Specifies if a constant (a.k.a
     # "logisticregression__intercept_scaling": [1],
     # Default if omitted: 1; Useful only when the solver 'liblinear' is used and self.fit_intercept is set to True
     # "logisticregression__class_weight": [None],
@@ -164,12 +164,12 @@ search_space = {
     # Default if omitted: 100; max number of iterations (>= 0)
     "regParam": [0.001, 1.0],
     # Default if omitted: 0.0; regularization parameter (>= 0)
+    "fitIntercept": [False, True],
+    # Default if omitted: True; whether to fit an intercept term
     # "elasticNetParam": [0.0],
     # Default if omitted: 0.0; the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty
     # "tol": [1e-06],
     # Default if omitted: 1e-06; the convergence tolerance for iterative algorithms (>= 0)
-    "fitIntercept": [False, True],
-    # Default if omitted: True; whether to fit an intercept term
     # "threshold": [0.5],
     # Default if omitted: 0.5; Threshold in binary classification prediction, in range [0, 1]. If threshold and thresholds are both set, they must match.e.g....
     # "thresholds": [None],
@@ -207,16 +207,16 @@ from sklearn.tree import DecisionTreeClassifier
 
 model = DecisionTreeClassifier(random_state=42)
 search_space = {
+    "max_depth": [3, 8],
+    # Default if omitted: None (unlimited); The maximum depth of the tree
+    "min_samples_leaf": [10, 50],
+    # Default if omitted: 1; The minimum number of samples required to be at a leaf node
     # "criterion": ['gini'],
     # Default if omitted: 'gini'; The function to measure the quality of a split
     # "splitter": ['best'],
     # Default if omitted: 'best'; The strategy used to choose the split at each node
-    "max_depth": [3, 8],
-    # Default if omitted: None (unlimited); The maximum depth of the tree
     # "min_samples_split": [2],
     # Default if omitted: 2; The minimum number of samples required to split an internal node:
-    "min_samples_leaf": [10, 50],
-    # Default if omitted: 1; The minimum number of samples required to be at a leaf node
     # "min_weight_fraction_leaf": [0.0],
     # Default if omitted: 0.0; The minimum weighted fraction of the sum total of weights (of all the input samples) required to be at a leaf node
     # "max_features": [None],
@@ -242,10 +242,10 @@ model = "decision_tree"
 search_space = {
     "maxDepth": [3, 8],
     # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
-    # "maxBins": [32],
-    # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     "minInstancesPerNode": [10, 50],
     # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
+    # "maxBins": [32],
+    # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     # "minInfoGain": [0.0],
     # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
     # "maxMemoryInMB": [256],
@@ -278,14 +278,14 @@ model = "random_forest"
 search_space = {
     "n_estimators": [100, 200],
     # Default if omitted: 100; The number of trees in the forest
-    # "criterion": ['gini'],
-    # Default if omitted: 'gini'; The function to measure the quality of a split
     "max_depth": [5, 10],
     # Default if omitted: None (unlimited); The maximum depth of the tree
-    # "min_samples_split": [2],
-    # Default if omitted: 2; The minimum number of samples required to split an internal node:
     "min_samples_leaf": [10, 50],
     # Default if omitted: 1; The minimum number of samples required to be at a leaf node
+    # "criterion": ['gini'],
+    # Default if omitted: 'gini'; The function to measure the quality of a split
+    # "min_samples_split": [2],
+    # Default if omitted: 2; The minimum number of samples required to split an internal node:
     # "min_weight_fraction_leaf": [0.0],
     # Default if omitted: 0.0; The minimum weighted fraction of the sum total of weights (of all the input samples) required to be at a leaf node
     # "max_features": ['sqrt'],
@@ -323,10 +323,12 @@ model = "random_forest"
 search_space = {
     "maxDepth": [5, 10],
     # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
-    # "maxBins": [32],
-    # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     "minInstancesPerNode": [10, 50],
     # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
+    "numTrees": [100, 200],
+    # Default if omitted: 20; Number of trees to train (>= 1)
+    # "maxBins": [32],
+    # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     # "minInfoGain": [0.0],
     # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
     # "maxMemoryInMB": [256],
@@ -337,8 +339,6 @@ search_space = {
     # Default if omitted: 10; set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10...
     # "impurity": ['gini'],
     # Default if omitted: 'gini'; Criterion used for information gain calculation (case-insensitive). Supported options: entropy, gini
-    "numTrees": [100, 200],
-    # Default if omitted: 20; Number of trees to train (>= 1)
     # "featureSubsetStrategy": ['auto'],
     # Default if omitted: 'auto'; The number of features to consider for splits at each tree node. Supported options: 'auto' (choose automatically for task: If...
     # "seed": [None],
@@ -365,12 +365,14 @@ iterations; smaller learning rates often need more iterations.
 # pandas
 model = "gradient_boosting"
 search_space = {
-    # "loss": ['log_loss'],
-    # Default if omitted: 'log_loss'; The loss function to be optimized
     "learning_rate": [0.03, 0.1],
     # Default if omitted: 0.1; Learning rate shrinks the contribution of each tree by `learning_rate`
     "n_estimators": [100, 200],
     # Default if omitted: 100; The number of boosting stages to perform
+    "max_depth": [2, 5],
+    # Default if omitted: 3; Maximum depth of the individual regression estimators
+    # "loss": ['log_loss'],
+    # Default if omitted: 'log_loss'; The loss function to be optimized
     # "subsample": [1.0],
     # Default if omitted: 1.0; The fraction of samples to be used for fitting the individual base learners
     # "criterion": ['friedman_mse'],
@@ -381,8 +383,6 @@ search_space = {
     # Default if omitted: 1; The minimum number of samples required to be at a leaf node
     # "min_weight_fraction_leaf": [0.0],
     # Default if omitted: 0.0; The minimum weighted fraction of the sum total of weights (of all the input samples) required to be at a leaf node
-    "max_depth": [2, 5],
-    # Default if omitted: 3; Maximum depth of the individual regression estimators
     # "min_impurity_decrease": [0.0],
     # Default if omitted: 0.0; A node will be split if this split induces a decrease of the impurity greater than or equal to this value
     # "init": [None],
@@ -414,6 +414,10 @@ model = "gradient_boosting"
 search_space = {
     "maxDepth": [2, 5],
     # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
+    "maxIter": [100, 200],
+    # Default if omitted: 20; max number of iterations (>= 0)
+    "stepSize": [0.03, 0.1],
+    # Default if omitted: 0.1; Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator
     # "maxBins": [32],
     # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     # "minInstancesPerNode": [1],
@@ -428,10 +432,6 @@ search_space = {
     # Default if omitted: 10; set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10...
     # "lossType": ['logistic'],
     # Default if omitted: 'logistic'; Loss function which GBT tries to minimize (case-insensitive). Supported options: logistic
-    "maxIter": [100, 200],
-    # Default if omitted: 20; max number of iterations (>= 0)
-    "stepSize": [0.03, 0.1],
-    # Default if omitted: 0.1; Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator
     # "seed": [None],
     # Default if omitted: None; built-in model string: optimization seed (default 42); random seed
     # "subsamplingRate": [1.0],
@@ -463,16 +463,18 @@ for small samples. These are illustrative search spaces, not universal defaults.
 # pandas: native LightGBM sklearn wrapper
 model = "lightgbm"
 search_space = {
-    # "boosting_type": ['gbdt'],
-    # Default if omitted: 'gbdt'
     "num_leaves": [15, 63],
     # Default if omitted: 31
-    # "max_depth": [-1],
-    # Default if omitted: -1
     "learning_rate": [0.03, 0.1],
     # Default if omitted: 0.1
     "n_estimators": [100, 200],
     # Default if omitted: 100
+    "min_child_samples": [200, 1000],
+    # Default if omitted: 20
+    # "boosting_type": ['gbdt'],
+    # Default if omitted: 'gbdt'
+    # "max_depth": [-1],
+    # Default if omitted: -1
     # "subsample_for_bin": [200000],
     # Default if omitted: 200000
     # "objective": [None],
@@ -483,8 +485,6 @@ search_space = {
     # Default if omitted: 0.0
     # "min_child_weight": [0.001],
     # Default if omitted: 0.001
-    "min_child_samples": [200, 1000],
-    # Default if omitted: 20
     # "subsample": [1.0],
     # Default if omitted: 1.0
     # "subsample_freq": [0],
@@ -517,10 +517,10 @@ search_space = {
     # Default if omitted: 0.1
     "num_leaves": [15, 63],
     # Default if omitted: 31
-    # "max_depth": [-1],
-    # Default if omitted: -1 (unlimited)
     "min_data_in_leaf": [200, 1000],
     # Default if omitted: 20
+    # "max_depth": [-1],
+    # Default if omitted: -1 (unlimited)
     # "min_sum_hessian_in_leaf": [0.001],
     # Default if omitted: 0.001
     # "min_gain_to_split": [0.0],
@@ -550,6 +550,14 @@ search_space = {
 # SynapseML: pass lgbm_backend="synapseml" to optimize AND train_model.
 model = "lightgbm"
 search_space = {
+    "learningRate": [0.03, 0.1],
+    # Default if omitted: 0.1; Learning rate or shrinkage rate
+    "minDataInLeaf": [200, 1000],
+    # Default if omitted: 20; Minimal number of data in one leaf. Can be used to deal with over-fitting
+    "numIterations": [100, 200],
+    # Default if omitted: 100; Number of iterations, LightGBM constructs num_class * num_iterations trees
+    "numLeaves": [15, 63],
+    # Default if omitted: 31; Number of leaves
     # "baggingFraction": [1.0],
     # Default if omitted: 1.0; Bagging fraction
     # "baggingFreq": [0],
@@ -618,8 +626,6 @@ search_space = {
     # Default if omitted: 0.0; L2 regularization
     # "leafPredictionCol": [''],
     # Default if omitted: ''; Predicted leaf indices's column name
-    "learningRate": [0.03, 0.1],
-    # Default if omitted: 0.1; Learning rate or shrinkage rate
     # "matrixType": ['auto'],
     # Default if omitted: 'auto'; Advanced parameter to specify whether the native lightgbm matrix constructed should be sparse or dense. Values can be auto,...
     # "maxBin": [255],
@@ -644,8 +650,6 @@ search_space = {
     # Default if omitted: ''; Metrics to be evaluated on the evaluation data. Options are: empty string or not specified means that metric corresponding to...
     # "microBatchSize": [100],
     # Default if omitted: 100; Specify how many elements are sent in a streaming micro-batch
-    "minDataInLeaf": [200, 1000],
-    # Default if omitted: 20; Minimal number of data in one leaf. Can be used to deal with over-fitting
     # "minDataPerBin": [3],
     # Default if omitted: 3; Minimal number of data inside one bin
     # "minDataPerGroup": [100],
@@ -666,10 +670,6 @@ search_space = {
     # Default if omitted: 1.0; Negative Bagging fraction
     # "numBatches": [0],
     # Default if omitted: 0; If greater than 0, splits data into separate batches during training
-    "numIterations": [100, 200],
-    # Default if omitted: 100; Number of iterations, LightGBM constructs num_class * num_iterations trees
-    "numLeaves": [15, 63],
-    # Default if omitted: 31; Number of leaves
     # "numTasks": [0],
     # Default if omitted: 0; Advanced parameter to specify the number of tasks. SynapseML tries to guess this based on cluster configuration, but this...
     # "numThreads": [0],
