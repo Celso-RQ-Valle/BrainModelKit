@@ -51,6 +51,7 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
   - [Evaluate metrics](#pandas-evaluate-metrics)
   - [Analyze segments](#pandas-analyze-segments)
   - [Save, load, and score](#pandas-save-load-and-score)
+- [Calibrate probabilities, assign scores, and explain predictions](#calibrate-probabilities-assign-scores-and-explain-predictions)
 - [External dataframe validation](#external-dataframe-validation)
 - [Reference and troubleshooting](#reference-and-troubleshooting)
 - [Project information](#project-information)
@@ -1039,6 +1040,44 @@ MLflow uses its own model flavors; `none` writes no artifacts. Native LightGBM,
 ONNX, and Spark loaders do not return the same object type or prediction interface.
 See [persistence formats and loaders](docs/training.md#model-formats),
 [MLflow](docs/training.md#mlflow), and [legacy migration](docs/training.md#migration-and-compatibility).
+
+## Calibrate probabilities, assign scores, and explain predictions
+
+Use these optional modules after the final fit in either guide.
+
+| Module | When to use it | Output |
+| --- | --- | --- |
+| `calibration` | Fit `LogisticCalibrator` on labeled predictions held out from model training, or supply fixed coefficients. Reserve final OOT rows for evaluation. | Calibrated event probabilities. Use `compare_calibration` to compare them with the original probabilities. |
+| `scoring` | Use `ScoreAligner` to translate event probability to a business scale. On the default scale, a lower event probability earns more points. | A separate `business_score` column on a 0–1000 scale by default. |
+| `explainability` | Use `ModelExplainer` with a training reference sample to explain an individual prediction. | Per-feature contributions in the units of the chosen target, such as probability or unrounded score points. |
+
+For example, apply a 300–850 scale directly to the final model's probabilities.
+Run the snippet for your backend after the evaluation step.
+
+**Spark**
+
+```python
+from brainmodelkit.scoring.pyspark import ScoreAligner
+
+scored = ScoreAligner(300, 850).transform(predictions, input_col="score")
+scored.select("account_id", "score", "business_score").show(5)
+```
+
+**pandas**
+
+```python
+from brainmodelkit.scoring.pandas import ScoreAligner
+
+scored = ScoreAligner(300, 850).transform(predictions, input_col="score")
+print(scored[["account_id", "score", "business_score"]].head())
+```
+
+To explain the points assigned after calibration, pass the fitted calibrator and
+score aligner to `PredictionPipeline` and explain the composed prediction.
+The [pandas example](examples/probability_workflow_pandas.py) and
+[Spark example](examples/probability_workflow_pyspark.py) include the calibration
+split, reference data, and explanation calls. See the
+[module reference](docs/probability-workflow.md) for installation and supported models.
 
 ## Reference and troubleshooting
 
