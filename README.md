@@ -41,6 +41,8 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
   - [Train](#spark-train)
   - [Evaluate metrics](#spark-evaluate-metrics)
   - [Analyze segments](#spark-analyze-segments)
+  - [Calibration and score alignment](#spark-calibration-and-score-alignment)
+  - [Explain predictions](#spark-explain-predictions)
   - [Save, load, and score](#spark-save-load-and-score)
 - [pandas guide](#pandas-guide)
   - [Install and diagnose](#pandas-install-and-diagnose)
@@ -50,8 +52,9 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
   - [Train](#pandas-train)
   - [Evaluate metrics](#pandas-evaluate-metrics)
   - [Analyze segments](#pandas-analyze-segments)
+  - [Calibration and score alignment](#pandas-calibration-and-score-alignment)
+  - [Explain predictions](#pandas-explain-predictions)
   - [Save, load, and score](#pandas-save-load-and-score)
-- [Calibrate probabilities, assign scores, and explain predictions](#calibrate-probabilities-assign-scores-and-explain-predictions)
 - [External dataframe validation](#external-dataframe-validation)
 - [Reference and troubleshooting](#reference-and-troubleshooting)
 - [Project information](#project-information)
@@ -586,6 +589,55 @@ there is no automatic minimum-volume suppression. Real keys named `General` coll
 visually with rollups. [Cube interpretation](docs/evaluation.md#interpreting-segment-results)
 includes an illustrative result and full output conventions.
 
+### Spark calibration and score alignment
+
+Starting from `predictions = result.oot_predictions`, apply illustrative fixed
+calibration coefficients, then map the calibrated default probability to a
+300?850 business score. A lower default probability earns more points.
+
+```python
+from brainmodelkit.calibration.pyspark import LogisticCalibrator
+from brainmodelkit.scoring.pyspark import ScoreAligner
+
+calibrator = LogisticCalibrator(intercept=-0.2, slope=1.1)
+aligner = ScoreAligner(300, 850)
+calibrated = calibrator.transform(predictions, input_col="score")
+scored = aligner.transform(calibrated, input_col="calibrated_probability")
+scored.select("score", "calibrated_probability", "business_score").show(5)
+```
+
+To learn the coefficients, fit the calibrator on a separate labeled partition
+held out from model training and tuning. The [runnable Spark example](examples/probability_workflow_pyspark.py)
+shows the split and compares calibration before and after fitting.
+
+### Spark explain predictions
+
+Use `ModelExplainer` to see how each selected feature contributes to an individual
+account's unrounded business score. Pass the calibrator and aligner from the
+preceding step and use training rows as the reference for the explanation.
+
+```python
+from brainmodelkit.explainability.pyspark import ModelExplainer
+
+explainer = ModelExplainer(
+    result,
+    train_df.select(*selected_features),
+    selected_features,
+    key_cols=["account_id", "reference_date"],
+    calibrator=calibrator,
+    score_aligner=aligner,
+    target="business_score",
+    method="permutation",
+    max_background=20,
+    max_evals=2 * len(selected_features) + 1,
+)
+explanation = explainer.explain(oot_df.limit(3))
+explanation.to_frame().show(truncate=False)
+```
+
+See the [explainability reference](docs/probability-workflow.md) for optional
+dependencies, supported models, and execution limits.
+
 ### Spark save, load, and score
 
 The walkthrough used `save_model_to="none"`. To persist the frozen final recipe,
@@ -1002,6 +1054,55 @@ there is no automatic minimum-volume suppression. Real keys named `General` coll
 visually with rollups. [Cube interpretation](docs/evaluation.md#interpreting-segment-results)
 includes an illustrative result and full output conventions.
 
+### pandas calibration and score alignment
+
+Starting from `predictions = result.oot_predictions`, apply illustrative fixed
+calibration coefficients, then map the calibrated default probability to a
+300?850 business score. A lower default probability earns more points.
+
+```python
+from brainmodelkit.calibration.pandas import LogisticCalibrator
+from brainmodelkit.scoring.pandas import ScoreAligner
+
+calibrator = LogisticCalibrator(intercept=-0.2, slope=1.1)
+aligner = ScoreAligner(300, 850)
+calibrated = calibrator.transform(predictions, input_col="score")
+scored = aligner.transform(calibrated, input_col="calibrated_probability")
+print(scored[["score", "calibrated_probability", "business_score"]].head())
+```
+
+To learn the coefficients, fit the calibrator on a separate labeled partition
+held out from model training and tuning. The [runnable pandas example](examples/probability_workflow_pandas.py)
+shows the split and compares calibration before and after fitting.
+
+### pandas explain predictions
+
+Use `ModelExplainer` to see how each selected feature contributes to an individual
+account's unrounded business score. Pass the calibrator and aligner from the
+preceding step and use training rows as the reference for the explanation.
+
+```python
+from brainmodelkit.explainability.pandas import ModelExplainer
+
+explainer = ModelExplainer(
+    result,
+    train_df[selected_features].head(20),
+    selected_features,
+    key_cols=["account_id", "reference_date"],
+    calibrator=calibrator,
+    score_aligner=aligner,
+    target="business_score",
+    method="permutation",
+    max_background=20,
+    max_evals=2 * len(selected_features) + 1,
+)
+explanation = explainer.explain(oot_df.head(3))
+print(explanation.to_frame().to_string(index=False))
+```
+
+See the [explainability reference](docs/probability-workflow.md) for optional
+dependencies, supported models, and execution limits.
+
 ### pandas save, load, and score
 
 The walkthrough used `save_model_to="none"`. To persist the frozen final recipe,
@@ -1040,44 +1141,6 @@ MLflow uses its own model flavors; `none` writes no artifacts. Native LightGBM,
 ONNX, and Spark loaders do not return the same object type or prediction interface.
 See [persistence formats and loaders](docs/training.md#model-formats),
 [MLflow](docs/training.md#mlflow), and [legacy migration](docs/training.md#migration-and-compatibility).
-
-## Calibrate probabilities, assign scores, and explain predictions
-
-Use these optional modules after the final fit in either guide.
-
-| Module | When to use it | Output |
-| --- | --- | --- |
-| `calibration` | Fit `LogisticCalibrator` on labeled predictions held out from model training, or supply fixed coefficients. Reserve final OOT rows for evaluation. | Calibrated event probabilities. Use `compare_calibration` to compare them with the original probabilities. |
-| `scoring` | Use `ScoreAligner` to translate event probability to a business scale. On the default scale, a lower event probability earns more points. | A separate `business_score` column on a 0–1000 scale by default. |
-| `explainability` | Use `ModelExplainer` with a training reference sample to explain an individual prediction. | Per-feature contributions in the units of the chosen target, such as probability or unrounded score points. |
-
-For example, apply a 300–850 scale directly to the final model's probabilities.
-Run the snippet for your backend after the evaluation step.
-
-**Spark**
-
-```python
-from brainmodelkit.scoring.pyspark import ScoreAligner
-
-scored = ScoreAligner(300, 850).transform(predictions, input_col="score")
-scored.select("account_id", "score", "business_score").show(5)
-```
-
-**pandas**
-
-```python
-from brainmodelkit.scoring.pandas import ScoreAligner
-
-scored = ScoreAligner(300, 850).transform(predictions, input_col="score")
-print(scored[["account_id", "score", "business_score"]].head())
-```
-
-To explain the points assigned after calibration, pass the fitted calibrator and
-score aligner to `PredictionPipeline` and explain the composed prediction.
-The [pandas example](examples/probability_workflow_pandas.py) and
-[Spark example](examples/probability_workflow_pyspark.py) include the calibration
-split, reference data, and explanation calls. See the
-[module reference](docs/probability-workflow.md) for installation and supported models.
 
 ## Reference and troubleshooting
 
