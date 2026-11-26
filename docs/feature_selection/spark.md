@@ -151,12 +151,11 @@ assignment is materialized once. Every validation fold must contain both classes
 Fold membership is never a candidate feature. This API does not implement expanding
 time windows: all other folds are used for training, including later folds.
 
-Inside each training fold, repeatedly fit, remove up to `step=1` smallest absolute
-importances, and stop at `min_features_to_select=1`. Score each subset on that
-fold's validation data. Select the visited count with highest mean score; exact
-ties choose the smaller count. Finally repeat elimination on all training data
-to that count. Crucially, validation labels never influence a fold's elimination
-ordering. Counts skipped by a larger step are not evaluated.
+Build one elimination path on all training rows. At each step, cross-validate the current
+subset and remove up to `step` features with the smallest absolute importances until
+`min_features_to_select` is reached. Choose the visited size with the highest mean
+AUC, preferring fewer features on a tie. Repeat full-data elimination to that size.
+Validation labels therefore influence the elimination order.
 
 ```python
 cv_result = fs.rfecv(
@@ -182,8 +181,8 @@ full-data path; rank 1 is selected, later elimination rounds have worse ranks.
 `model` is fitted on `metadata['model_feature_cols']` only.
 
 The chosen CV maximum is selection-biased; use nested CV or untouched final
-evaluation to estimate generalization. The cost is roughly cv times the number
-of visited counts, plus a full-data elimination path. Preprocessing must be fitted
+evaluation to estimate generalization. The cost includes CV fits at every visited size, the initial full-data
+elimination path, and a second path to the selected size. Preprocessing must be fitted
 within folds to avoid leakage; the selector does not create preprocessing pipelines.
 
 ## sequential_selection

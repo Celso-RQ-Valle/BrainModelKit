@@ -154,9 +154,9 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 ## Computational cost and practical limits
 
-Typical relative cost: **high?very high**, with overlapping tiers across methods.
+Typical relative cost: **high to very high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: bootstrap fits ? groups. Spark: poisson resample fits ? groups.
+Pandas: model fits on class-stratified bootstrap samples, per group when grouped. Spark: model fits on Poisson resamples, per group when grouped.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for check robustness when justified;
 do not run every selector as a fixed pipeline.

@@ -22,8 +22,8 @@ column remains a model probability; business scores use a separate column.
 | Spark | Spark DataFrames and native distributed operations; individual algorithms have driver/worker limits. | [Spark guide](#spark-guide) |
 | pandas | In-memory pandas DataFrames and scikit-learn-compatible models. | [pandas guide](#pandas-guide) |
 
-The journey is **install ? diagnose ? prepare ? build ? select ? validate/tune ?
-train ? evaluate ? analyze segments ? save/load/score**. Each chapter
+The journey is **install -> diagnose -> prepare -> build -> select -> validate/tune ->
+train -> evaluate -> analyze segments -> save/load/score**. Each chapter
 follows this order. Its snippets continue one workflow unless marked as an
 alternative. [Complete runnable examples](examples/journey/README.md) include
 imports, missing-value handling, and assertions using a separate small fixture.
@@ -539,8 +539,8 @@ cross-column relationships require explicit expressions.
 See [relationships and naming](docs/temporal.md#optional-relationship-families)
 for formulas, ratio scales, and missing-value rules.
 
-`date_col` defaults to `observation_date`. Windows are **(reference ? k periods,
-reference]**; lags use the latest non-null value at or before reference ? k periods.
+`date_col` defaults to `observation_date`. Windows are **(reference - k periods,
+reference]**; lags use the latest non-null value at or before reference - k periods.
 Units are days, seven-day weeks, or calendar months (clipped at month end).
 Supported aggregations are mean, exact median, min, max, sample std, **sum**, and
 count. Each source gets current/lag values, `_date_diff_days` latency relative
@@ -613,26 +613,30 @@ if not selected_features:
 
 Start with unusable inputs, examine redundancy/univariate signal when appropriate,
 then consider model-based and expensive iterative methods. Do not run every method
-by default. Tiers below are **approximate and overlapping**, derived from scans,
-sorts, fits, folds, and resampling in the implementations, not benchmark timings.
+by default.
+
+Cost tiers are qualitative estimates. Runtime depends on row count, feature count,
+cardinality, model choice, iterations, repeats, CV folds, and execution resources.
+Here p is the number of input features. A full feature-pair matrix uses O(p^2)
+memory, which can limit a Spark driver independently of runtime.
 
 | Method | Purpose | Relative cost | Main cost driver | When to use | Guide |
 | --- | --- | --- | --- | --- | --- |
 | `completeness` | Availability | Low | Non-null aggregates; grouped shuffles | Missing-input screening | [Details](docs/feature_selection/completeness.md) |
 | `variance_filter` | Remove constants | Low | Native var_pop aggregates | Before fitting | [Details](docs/feature_selection/variance_filter.md) |
-| `cardinality` | Distinct values | Low?moderate | Exact distinct counts and shuffles | Before encoding | [Details](docs/feature_selection/cardinality.md) |
-| `anova` | Class-mean signal | Low?moderate | Two class summaries per feature | Numeric screening | [Details](docs/feature_selection/anova.md) |
-| `chi_square` | Count/category association | Low?moderate | Categorical contingency tables | Counts (pandas); category codes (Spark) | [Details](docs/feature_selection/chi_square.md) |
+| `cardinality` | Distinct values | Low to moderate | Exact distinct counts and shuffles | Before encoding | [Details](docs/feature_selection/cardinality.md) |
+| `anova` | Class-mean signal | Low to moderate | Two class summaries per feature | Numeric screening | [Details](docs/feature_selection/anova.md) |
+| `chi_square` | Count/category association | Low to moderate | Categorical contingency tables | Integer category codes | [Details](docs/feature_selection/chi_square.md) |
 | `information_value` | Binary distribution separation | Moderate | Quantiles and grouped bin counts | Inspect WoE bins | [Details](docs/feature_selection/information_value.md) |
 | `mutual_information` | Nonlinear univariate signal | Moderate | Quantile binning and joint-count shuffles | Nonlinear screening | [Details](docs/feature_selection/mutual_information.md) |
-| `correlation_filter` | Reduce redundancy | Moderate?high | Distributed matrix/ranks; p? driver memory | After quality checks | [Details](docs/feature_selection/correlation_filter.md) |
-| `l1_selection` | Sparse linear subset | Moderate?high | Distributed logistic iterations | Compact linear models | [Details](docs/feature_selection/l1_selection.md) |
-| `feature_importance_selection` | Model-based ranking | Moderate?high | One native model fit | Capture model-specific signal | [Details](docs/feature_selection/feature_importance_selection.md) |
-| `permutation_importance_selection` | Held-out reliance | High | Repeats ? sorting, joins, predictions | Validate model reliance | [Details](docs/feature_selection/permutation_importance_selection.md) |
+| `correlation_filter` | Reduce redundancy | Moderate to high | Distributed correlation (ranking for Spearman); O(p^2) driver memory | After quality checks | [Details](docs/feature_selection/correlation_filter.md) |
+| `l1_selection` | Sparse linear subset | Moderate to high | Distributed logistic iterations | Compact linear models | [Details](docs/feature_selection/l1_selection.md) |
+| `feature_importance_selection` | Model-based ranking | Moderate to high | One native model fit | Capture model-specific signal | [Details](docs/feature_selection/feature_importance_selection.md) |
+| `permutation_importance_selection` | Held-out reliance | High | Repeated sorting, joins, and predictions per feature | Validate model reliance | [Details](docs/feature_selection/permutation_importance_selection.md) |
 | `rfe` | Recursive elimination | High | Distributed fits per step; reports | Conditional importance | [Details](docs/feature_selection/rfe.md) |
-| `stability_selection` | Selection repeatability | High?very high | Poisson resample fits ? groups | Check robustness | [Details](docs/feature_selection/stability_selection.md) |
-| `rfecv` | Choose subset size | Very high | Folds ? elimination fits plus refit | Budgeted subset search | [Details](docs/feature_selection/rfecv.md) |
-| `sequential_selection` | Greedy subset search | Very high | Candidate subsets ? distributed fits | Small candidate pools | [Details](docs/feature_selection/sequential_selection.md) |
+| `stability_selection` | Selection repeatability | High to very high | Model fits on Poisson resamples, per group when grouped | Check robustness | [Details](docs/feature_selection/stability_selection.md) |
+| `rfecv` | Choose subset size | Very high | Full-data elimination, CV fits per subset, then elimination again to the chosen size | Budgeted subset search | [Details](docs/feature_selection/rfecv.md) |
+| `sequential_selection` | Greedy subset search | Very high | Distributed CV fits for candidate subsets, then a final fit | Small candidate pools | [Details](docs/feature_selection/sequential_selection.md) |
 | `boruta` | All-relevant selection | Very high | Shadow sorts/joins + repeated forests | All-relevant hypothesis testing | [Details](docs/feature_selection/boruta.md) |
 
 Spark collects bounded statistics and model summaries, including a feature-pair correlation matrix and bounded stability group keys. Permutation and Boruta require classic Spark Python workers, not Spark Connect; distribution is not a guarantee of lower cost.
@@ -754,7 +758,7 @@ or empty valid pairs (Spark grouped output may have no row for absent groups).
 
 | Metric or utility | What it answers | Interpretation | Usage/example |
 | --- | --- | --- | --- |
-| `ks_ntile` | How separated are class distributions? | 0?1; larger means more separation; tile approximation. | [Spark KS](docs/evaluation.md#spark-kolmogorov-smirnov-ks) |
+| `ks_ntile` | How separated are class distributions? | 0 to 1; larger means more separation; tile approximation. | [Spark KS](docs/evaluation.md#spark-kolmogorov-smirnov-ks) |
 | `auc_gini` | How well are positives ranked? | AUC 0.5 is chance ranking, 1 is perfect; Gini 0 and 1 respectively. | [AUC/Gini](docs/evaluation.md#spark-roc-auc-and-gini) |
 | `roc_auc_gini` | Same AUC/Gini calculation | Public alias of `auc_gini`, same signature/shape. | [Alias example](docs/evaluation.md#public-alias-and-scalar-utility) |
 | `curve_roc` | Tradeoff across thresholds | DataFrame of curve points; plot separately. | [ROC example](docs/evaluation.md#spark-plot-a-roc-curve) |
@@ -800,7 +804,7 @@ includes an illustrative result and full output conventions.
 
 Starting from `predictions = result.oot_predictions`, apply illustrative fixed
 calibration coefficients, then map the calibrated default probability to a
-300?850 business score. A lower default probability earns more points.
+business score from 300 to 850. A lower default probability earns more points.
 
 ```python
 from brainmodelkit.calibration.pyspark import LogisticCalibrator
@@ -1106,26 +1110,30 @@ if not selected_features:
 
 Start with unusable inputs, examine redundancy/univariate signal when appropriate,
 then consider model-based and expensive iterative methods. Do not run every method
-by default. Tiers below are **approximate and overlapping**, derived from scans,
-sorts, fits, folds, and resampling in the implementations, not benchmark timings.
+by default.
+
+Cost tiers are qualitative estimates. Runtime depends on row count, feature count,
+cardinality, model choice, iterations, repeats, CV folds, and execution resources.
+Here p is the number of input features. A full feature-pair matrix uses O(p^2)
+memory, which can limit a Spark driver independently of runtime.
 
 | Method | Purpose | Relative cost | Main cost driver | When to use | Guide |
 | --- | --- | --- | --- | --- | --- |
 | `completeness` | Availability | Low | Non-null scans; optional grouped aggregates | Missing-input screening | [Details](docs/feature_selection/completeness.md) |
 | `variance_filter` | Remove constants | Low | Column moments | Before fitting | [Details](docs/feature_selection/variance_filter.md) |
-| `cardinality` | Distinct values | Low?moderate | Exact per-column distinct sets | Before encoding | [Details](docs/feature_selection/cardinality.md) |
-| `anova` | Class-mean signal | Low?moderate | Class-wise sums and variances | Numeric screening | [Details](docs/feature_selection/anova.md) |
-| `chi_square` | Count/category association | Low?moderate | Count-by-class summaries | Counts (pandas); category codes (Spark) | [Details](docs/feature_selection/chi_square.md) |
+| `cardinality` | Distinct values | Low to moderate | Exact per-column distinct sets | Before encoding | [Details](docs/feature_selection/cardinality.md) |
+| `anova` | Class-mean signal | Low to moderate | Class-wise sums and variances | Numeric screening | [Details](docs/feature_selection/anova.md) |
+| `chi_square` | Count/category association | Low to moderate | Count-by-class summaries | Nonnegative counts or indicators | [Details](docs/feature_selection/chi_square.md) |
 | `information_value` | Binary distribution separation | Moderate | Binning and class counts | Inspect WoE bins | [Details](docs/feature_selection/information_value.md) |
 | `mutual_information` | Nonlinear univariate signal | Moderate | Nearest-neighbor estimation for continuous data | Nonlinear screening | [Details](docs/feature_selection/mutual_information.md) |
-| `correlation_filter` | Reduce redundancy | Moderate?high | Feature-pair matrix; Spearman ranks | After quality checks | [Details](docs/feature_selection/correlation_filter.md) |
-| `l1_selection` | Sparse linear subset | Moderate?high | Iterative penalized logistic fit | Compact linear models | [Details](docs/feature_selection/l1_selection.md) |
-| `feature_importance_selection` | Model-based ranking | Moderate?high | One estimator fit | Capture model-specific signal | [Details](docs/feature_selection/feature_importance_selection.md) |
-| `permutation_importance_selection` | Held-out reliance | High | Features ? repeats ? predictions | Validate model reliance | [Details](docs/feature_selection/permutation_importance_selection.md) |
+| `correlation_filter` | Reduce redundancy | Moderate to high | Local O(p^2) correlation matrix; ranking for Spearman | After quality checks | [Details](docs/feature_selection/correlation_filter.md) |
+| `l1_selection` | Sparse linear subset | Moderate to high | Iterative penalized logistic fit | Compact linear models | [Details](docs/feature_selection/l1_selection.md) |
+| `feature_importance_selection` | Model-based ranking | Moderate to high | One estimator fit | Capture model-specific signal | [Details](docs/feature_selection/feature_importance_selection.md) |
+| `permutation_importance_selection` | Held-out reliance | High | Shuffle one local column and rescore per feature and repeat | Validate model reliance | [Details](docs/feature_selection/permutation_importance_selection.md) |
 | `rfe` | Recursive elimination | High | Fits per elimination step; reports | Conditional importance | [Details](docs/feature_selection/rfe.md) |
-| `stability_selection` | Selection repeatability | High?very high | Bootstrap fits ? groups | Check robustness | [Details](docs/feature_selection/stability_selection.md) |
-| `rfecv` | Choose subset size | Very high | Folds ? elimination fits | Budgeted subset search | [Details](docs/feature_selection/rfecv.md) |
-| `sequential_selection` | Greedy subset search | Very high | Candidate subsets ? folds | Small candidate pools | [Details](docs/feature_selection/sequential_selection.md) |
+| `stability_selection` | Selection repeatability | High to very high | Model fits on class-stratified bootstrap samples, per group when grouped | Check robustness | [Details](docs/feature_selection/stability_selection.md) |
+| `rfecv` | Choose subset size | Very high | Full-data elimination, CV fits per subset, then one refit on the chosen subset | Budgeted subset search | [Details](docs/feature_selection/rfecv.md) |
+| `sequential_selection` | Greedy subset search | Very high | Local CV fits for candidate subsets, then a final fit | Small candidate pools | [Details](docs/feature_selection/sequential_selection.md) |
 | `boruta` | All-relevant selection | Very high | Forests on real + shadow columns | All-relevant hypothesis testing | [Details](docs/feature_selection/boruta.md) |
 
 Pandas works in memory. MI uses sklearn estimation; chi-square expects integer counts/indicators; L1 uses `C`. These differ from Spark binning, categorical tests, and `reg_param`.
@@ -1248,7 +1256,7 @@ or empty valid pairs (Spark grouped output may have no row for absent groups).
 
 | Metric or utility | What it answers | Interpretation | Usage/example |
 | --- | --- | --- | --- |
-| `ks` | How separated are class distributions? | 0?1; larger means more separation; exact score thresholds. | [pandas KS](docs/evaluation.md#pandas-kolmogorov-smirnov-ks) |
+| `ks` | How separated are class distributions? | 0 to 1; larger means more separation; exact score thresholds. | [pandas KS](docs/evaluation.md#pandas-kolmogorov-smirnov-ks) |
 | `auc_gini` | How well are positives ranked? | AUC 0.5 is chance ranking, 1 is perfect; Gini 0 and 1 respectively. | [AUC/Gini](docs/evaluation.md#pandas-roc-auc-and-gini) |
 | `roc_auc_gini` | Same AUC/Gini calculation | Public alias of `auc_gini`, same signature/shape. | [Alias example](docs/evaluation.md#public-alias-and-scalar-utility) |
 | `curve_roc` | Tradeoff across thresholds | DataFrame of curve points; plot separately. | [ROC example](docs/evaluation.md#pandas-plot-a-roc-curve) |
@@ -1295,7 +1303,7 @@ includes an illustrative result and full output conventions.
 
 Starting from `predictions = result.oot_predictions`, apply illustrative fixed
 calibration coefficients, then map the calibrated default probability to a
-300?850 business score. A lower default probability earns more points.
+business score from 300 to 850. A lower default probability earns more points.
 
 ```python
 from brainmodelkit.calibration.pandas import LogisticCalibrator

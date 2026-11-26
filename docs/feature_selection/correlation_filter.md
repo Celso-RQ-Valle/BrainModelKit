@@ -101,9 +101,9 @@ See the [Spark correlation API](https://spark.apache.org/docs/3.5.7/api/python/r
 
 ## Computational cost and practical limits
 
-Typical relative cost: **moderate?high**, with overlapping tiers across methods.
+Typical relative cost: **moderate to high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: feature-pair matrix; Spearman ranks. Spark: distributed matrix/ranks; p? driver memory.
+Pandas: feature-pair matrix; Spearman ranks. Spark: distributed correlation (ranking for Spearman); O(p^2) driver memory.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for after quality checks when justified;
 do not run every selector as a fixed pipeline.

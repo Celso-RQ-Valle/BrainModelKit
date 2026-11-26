@@ -126,11 +126,9 @@ print(result.optimal_feature_count, result.ranking)
 print(result.cv_results)
 ```
 
-Pass a supported named `model` or cloneable importance-producing estimator,
-`model_params`, and optionally `n_jobs`/`random_state`. `cv` accepts an integer
-or sklearn-compatible splitter/explicit splits; design temporal or grouped
-splits yourself. `cv_results` is the installed sklearn version's dictionary,
-including mean test scores; newer sklearn versions may add keys. Rank 1 marks
+Each elimination step fits an importance-producing estimator on all training rows
+and cross-validates the current subset. `cv_results` records the feature count,
+mean AUC, and AUC standard deviation for each visited subset. Rank 1 marks
 selected features. `model` is the estimator refitted on the selected columns.
 
 RFECV is useful when feature count should be chosen by a CV objective. It is
@@ -148,7 +146,7 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 Typical relative cost: **very high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: folds ? elimination fits. Spark: folds ? elimination fits plus refit.
+Pandas: full-data elimination, CV fits per subset, then one refit on the chosen subset. Spark: full-data elimination, CV fits per subset, then elimination again to the chosen size.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for budgeted subset search when justified;
 do not run every selector as a fixed pipeline.

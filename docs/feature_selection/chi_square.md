@@ -108,7 +108,7 @@ and [Spark ChiSquareTest](https://spark.apache.org/docs/latest/api/java/org/apac
 
 ## Computational cost and practical limits
 
-Typical relative cost: **low?moderate**, with overlapping tiers across methods.
+Typical relative cost: **low to moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
 Pandas: count-by-class summaries. Spark: categorical contingency tables.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can

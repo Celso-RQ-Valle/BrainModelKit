@@ -1,6 +1,6 @@
 # Feature Selection Guide
 
-[Documentation home](README.md) ? [Backend journeys](../README.md)
+[Documentation home](README.md) / [Backend journeys](../README.md)
 
 ## Overview
 
@@ -555,11 +555,9 @@ print(result.optimal_feature_count, result.ranking)
 print(result.cv_results)
 ```
 
-Pass a supported named `model` or cloneable importance-producing estimator,
-`model_params`, and optionally `n_jobs`/`random_state`. `cv` accepts an integer
-or sklearn-compatible splitter/explicit splits; design temporal or grouped
-splits yourself. `cv_results` is the installed sklearn version's dictionary,
-including mean test scores; newer sklearn versions may add keys. Rank 1 marks
+Each elimination step fits an importance-producing estimator on all training rows
+and cross-validates the current subset. `cv_results` records the feature count,
+mean AUC, and AUC standard deviation for each visited subset. Rank 1 marks
 selected features. `model` is the estimator refitted on the selected columns.
 
 RFECV is useful when feature count should be chosen by a CV objective. It is
@@ -589,12 +587,10 @@ result = sequential_selection(
 )
 ```
 
-This uses sklearn `SequentialFeatureSelector`. Set `direction="backward"` for
-removal; pass a named/custom model, `model_params`, `cv`, `n_jobs`, and a seed.
-Choose a positive count smaller than the input feature count. The result exposes
-the selected/rejected features and Boolean `feature_table`; no artificial ranking,
-CV history, or fitted model is manufactured because sklearn does not supply them.
-Fit the downstream model on the selected columns.
+At each step, cross-validate each candidate addition or removal and keep the
+subset with the highest mean AUC. After reaching the requested count, fit the
+estimator on all training rows using the selected columns. The result includes
+the selected features and the fitted model.
 
 Useful when performance matters more than a native importance proxy, especially
 with a modest feature count. It can require many more fits than RFE and greedy
@@ -753,7 +749,7 @@ and needs a working native persistence environment.
 | `l1_selection` | sklearn logistic | Spark ML logistic |
 | `permutation_importance_selection` | sklearn permutation | Distributed sort/join permutations |
 | `rfe` | Existing API | Existing native API |
-| `rfecv` | sklearn RFECV | Fold-local native elimination paths |
+| `rfecv` | Full-data elimination with CV per subset | Full-data elimination with distributed CV per subset |
 | `sequential_selection` | Forward/backward | Native CV candidate search |
 | `stability_selection` | Stratified bootstrap/groups | Poisson bootstrap/groups |
 | `boruta` | Optional BorutaPy | Native forests and shadow hit tests |

@@ -118,7 +118,7 @@ nonlinear interactions. Strong regularization can validly select no features.
 
 ## Computational cost and practical limits
 
-Typical relative cost: **moderate?high**, with overlapping tiers across methods.
+Typical relative cost: **moderate to high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
 Pandas: iterative penalized logistic fit. Spark: distributed logistic iterations.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can

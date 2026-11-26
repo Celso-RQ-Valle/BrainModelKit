@@ -107,7 +107,7 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 ## Computational cost and practical limits
 
-Typical relative cost: **low?moderate**, with overlapping tiers across methods.
+Typical relative cost: **low to moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
 Pandas: class-wise sums and variances. Spark: two class summaries per feature.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can

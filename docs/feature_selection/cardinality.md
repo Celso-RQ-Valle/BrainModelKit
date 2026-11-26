@@ -97,7 +97,7 @@ completeness separately rather than treating the ratio as coverage.
 
 ## Computational cost and practical limits
 
-Typical relative cost: **low?moderate**, with overlapping tiers across methods.
+Typical relative cost: **low to moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
 Pandas: exact per-column distinct sets. Spark: exact distinct counts and shuffles.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can

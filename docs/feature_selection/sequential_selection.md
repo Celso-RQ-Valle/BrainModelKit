@@ -125,12 +125,10 @@ result = sequential_selection(
 )
 ```
 
-This uses sklearn `SequentialFeatureSelector`. Set `direction="backward"` for
-removal; pass a named/custom model, `model_params`, `cv`, `n_jobs`, and a seed.
-Choose a positive count smaller than the input feature count. The result exposes
-the selected/rejected features and Boolean `feature_table`; no artificial ranking,
-CV history, or fitted model is manufactured because sklearn does not supply them.
-Fit the downstream model on the selected columns.
+At each step, cross-validate each candidate addition or removal and keep the
+subset with the highest mean AUC. After reaching the requested count, fit the
+estimator on all training rows using the selected columns. The result includes
+the selected features and the fitted model.
 
 Useful when performance matters more than a native importance proxy, especially
 with a modest feature count. It can require many more fits than RFE and greedy
@@ -146,7 +144,7 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 Typical relative cost: **very high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: candidate subsets ? folds. Spark: candidate subsets ? distributed fits.
+Pandas: local CV fits for candidate subsets, then a final fit. Spark: distributed CV fits for candidate subsets, then a final fit.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for small candidate pools when justified;
 do not run every selector as a fixed pipeline.

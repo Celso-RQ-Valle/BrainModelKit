@@ -127,7 +127,7 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 Typical relative cost: **high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: features ? repeats ? predictions. Spark: repeats ? sorting, joins, predictions.
+Pandas: shuffle one local column and rescore per feature and repeat. Spark: repeated sorting, joins, and predictions per feature.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for validate model reliance when justified;
 do not run every selector as a fixed pipeline.
