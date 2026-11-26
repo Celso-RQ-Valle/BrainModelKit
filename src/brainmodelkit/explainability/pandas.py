@@ -202,7 +202,10 @@ class ModelExplainer:
             def predict(values):
                 frame = pd.DataFrame(values, columns=self.features)
                 for name, lookup in self._lookup.items():
-                    frame[name] = lookup.iloc[frame[name].to_numpy(dtype=int)].array
+                    # Assign a typed Series so pandas string inference cannot
+                    # normalize distinct missing values in an object column.
+                    positions = frame[name].to_numpy(dtype=int)
+                    frame[name] = lookup.iloc[positions].reset_index(drop=True)
                 frame = frame.astype(self.background.dtypes.to_dict())
                 return pipeline.predict(frame, explained)
 
