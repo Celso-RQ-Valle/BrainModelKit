@@ -32,6 +32,11 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
 
 ## Contents
 
+- [Use a fitted or saved model](#use-a-fitted-or-saved-model)
+  - [Local model workflow](#local-model-workflow)
+  - [Native models, callables and optional MLflow](#native-models-callables-and-optional-mlflow)
+  - [Model support](#model-support)
+  - [Execution environments](#execution-environments)
 - [Custom feature quickstart](#custom-feature-quickstart)
 - [Spark guide](#spark-guide)
   - [Install and diagnose](#spark-install-and-diagnose)
@@ -58,6 +63,208 @@ also demonstrated in [the credit notebook](notebooks/simulate_credit_data.ipynb)
 - [External dataframe validation](#external-dataframe-validation)
 - [Reference and troubleshooting](#reference-and-troubleshooting)
 - [Project information](#project-information)
+
+## Use a fitted or saved model
+
+Choose the model source independently of its execution backend. Pass a fitted
+estimator or `TrainingResult` directly, or use `ArtifactSpec(path=..., format=...)`
+for a saved model. Training's `save_model_to` selects a destination and
+`model_format` selects its representation. Loading uses the matching `format`.
+Windows paths and mounted directories such as `/Volumes/...` work when visible
+to the process. Use the MLflow format for `runs:/` and `models:/` URIs.
+Spark model readers can also use filesystems configured in Spark.
+
+For optional integrations, install the relevant extras, for example
+`python -m pip install -e ".[pandas,onnx,xgboost,catboost,secure]"`.
+The pandas and PySpark namespaces choose the DataFrame backend. Spark's
+`execution="local"` and `"distributed"` choose where explanations run.
+Driver, worker, JVM and filesystem capabilities depend on the actual runtime.
+
+### Local model workflow
+
+From a checkout, install the extras and run the [complete local example](examples/saved_workflow.py).
+
+```bash
+python -m pip install -e ".[pandas,persistence,explainability]"
+python examples/saved_workflow.py
+```
+
+The direct pipeline below takes the in-memory training result. Its saved
+counterpart recovers feature order and class labels, fits calibration on held-out
+predictions, and explains the resulting score using the original training inputs.
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import numpy as np
+import pandas as pd
+
+from brainmodelkit.pandas import (
+    LogisticCalibrator,
+    ModelExplainer,
+    PredictionPipeline,
+    ScoreAligner,
+)
+from brainmodelkit.persistence import ArtifactSpec, load_workflow, save_workflow
+from brainmodelkit.training.pandas import train_model
+
+
+folder = TemporaryDirectory()
+frame = pd.DataFrame({"income": np.arange(60) % 7, "debt": np.arange(60) % 5})
+frame["target"] = ((frame.income > frame.debt) ^ (frame.index % 4 == 0)).astype(int)
+features = ["income", "debt"]
+train, calibration, oot = frame[:30], frame[30:45], frame[45:]
+trained = train_model(
+    "demo",
+    "target",
+    features,
+    train,
+    oot,
+    model="logistic_regression",
+    save_model_to="folder",
+    model_format="joblib",
+    output_dir=folder.name,
+)
+direct = PredictionPipeline(trained)
+held_out = direct.transform(calibration)
+calibrator = LogisticCalibrator().fit(held_out, "event_probability", "target")
+artifact = ArtifactSpec(path=trained.model_uri, format="joblib")
+workflow = PredictionPipeline(
+    artifact, calibrator=calibrator, score_aligner=ScoreAligner(300, 850)
+)
+scored = workflow.transform(oot)
+np.testing.assert_allclose(scored.event_probability, direct.predict(oot))
+bundle = Path(folder.name) / "workflow"
+save_workflow(bundle, workflow, format="joblib")
+restored = load_workflow(bundle, format="joblib")
+explanation = ModelExplainer(
+    restored,
+    train,
+    target="business_score",
+    method="permutation",
+    max_background=8,
+    max_evals=9,
+)
+result = explanation.explain(scored.head(2))
+np.testing.assert_allclose(result.predictions, scored.business_score_unrounded.head(2))
+print(result.to_frame())
+
+
+folder.cleanup()
+```
+
+Use `feature_space="transformed"` when bundling an estimator fitted on already transformed coordinates. Supply those same inputs and names for explanations.
+The bundle contains a relative model path, ordered schema when known, event
+orientation, postprocessing configuration and package versions. Supply the
+expected format when loading and only open trusted pickle-family artifacts.
+To reference an existing artifact, pass `reference=artifact` when saving and
+again when loading. Optional `background_reference={"uri": ..., "sha256": ...}`
+records the identity of a separately managed reference dataset. Supply that
+data to the explainer again. To embed an explicit pandas reference sample, pass
+`background=sample` with PyArrow installed. Loading verifies its SHA-256 digest and
+exposes `restored.background`. Only declared feature columns are embedded. Custom adapters require registration in each process.
+
+### Native models, callables and optional MLflow
+
+For a LightGBM native file, supply the original ordered class labels when the
+training report is unavailable. This example continues from the local example's
+`train`, `oot` and `features`.
+
+```python
+from lightgbm import Booster, LGBMClassifier
+
+with TemporaryDirectory() as native_dir:
+    path = Path(native_dir) / "credit.txt"
+    fitted = LGBMClassifier(n_estimators=5, min_child_samples=2, verbosity=-1).fit(
+        train[features], train.target
+    )
+    fitted.booster_.save_model(str(path))
+    native = PredictionPipeline(
+        ArtifactSpec(path=path, format="native", model_class=Booster),
+        features,
+        class_labels=list(fitted.classes_),
+        event_label=1,
+    )
+    np.testing.assert_allclose(
+        native.predict(oot), fitted.predict_proba(oot[features])[:, 1]
+    )
+```
+
+For a custom probability function, return one probability of the declared event
+per row. Callables require explicit feature_cols, including when passed directly
+to ModelExplainer. Supply a separate `raw_callable` for an event-oriented raw target.
+
+```python
+def probability(inputs):
+    return direct.predict(inputs)
+
+
+custom = PredictionPipeline(None, features, prediction_callable=probability)
+explained = ModelExplainer(
+    custom,
+    train,
+    target="event_probability",
+    method="permutation",
+    max_background=8,
+    max_evals=9,
+)
+print(explained.explain(oot.head(1)).to_frame())
+```
+
+MLflow is optional. Install `python -m pip install -e ".[pandas,mlflow]"` for
+this alternative using the same fitted estimator. A registered URI may replace
+the local MLflow directory.
+
+```python
+import mlflow.sklearn
+
+with TemporaryDirectory() as mlflow_dir:
+    path = Path(mlflow_dir) / "credit"
+    mlflow.sklearn.save_model(trained.model, str(path), pip_requirements=[])
+    tracked = PredictionPipeline(
+        ArtifactSpec(path=path, format="mlflow", flavor="sklearn")
+    )
+    np.testing.assert_allclose(tracked.predict(oot), direct.predict(oot))
+```
+
+### Model support
+
+| Fitted model | Loaded format | Prediction | Explanation method and target | Preprocessing and execution |
+| --- | --- | --- | --- | --- |
+| sklearn logistic regression | pickle, joblib, cloudpickle, trusted skops, MLflow sklearn | Probability and decision margin | Linear SHAP for raw, permutation for probability | pandas, fitted pipelines use permutation |
+| sklearn random forest, decision tree, gradient boosting | Same sklearn formats | Probability, also decision margin for gradient boosting | Tree SHAP for base probability or uncalibrated points, gradient boosting also raw | Direct numeric inputs for optimized SHAP |
+| Binary LightGBM classifier or Booster | Python formats, native Booster, MLflow lightgbm | Probability and margin | Interventional Tree SHAP for raw or base probability | Direct numeric inputs for optimized SHAP |
+| Binary XGBoost classifier or logistic Booster, CatBoost classifier | Python formats, native, installed native MLflow flavor | Probability and margin | Explicit permutation | pandas, native Booster needs class order |
+| Other binary classifiers, registered adapters, callables | Python formats where serializable, or in memory | Ordered two-column `predict_proba` or declared event callable | Explicit permutation for supported outputs | Select original inputs, retain fitted preprocessing |
+| ONNX Runtime binary classifier | ONNX or MLflow ONNX | Selected probability tensor or ZipMap and explicit ordered classes | Explicit permutation for probability | Supported tensor dtypes, CPU session |
+| MLflow pyfunc | MLflow, explicit pyfunc flavor | Explicit named event-probability DataFrame column or callable | Explicit permutation | Caller supplies original features and output meaning |
+| Spark binary classifier or PipelineModel | Spark, MLflow Spark | Native transform and configured probability vector | Exported logistic or binary LightGBM only | Native preprocessing for prediction. Worker export accepts scalar inputs and a supported classifier, optionally after VectorAssembler |
+
+All pandas probability adapters can apply calibration and alignment. Select
+permutation explicitly for calibrated outputs and unrounded score points after
+calibration. Rounded points are display values. For custom model classes,
+register `register_adapter(ModelClass, factory)` from
+`brainmodelkit.prediction.adapters`. The factory receives the fitted object and
+event-class index. Its `probability(frame)` and `raw(frame)` methods return one
+event-oriented value per row and should raise `CapabilityError` for unavailable
+outputs. An optional `raw_units` attribute describes the margin units. Custom
+registrations support local prediction and permutation explanation.
+
+Spark prediction reads the fitted classifier's probability column. Pass
+`probability_col="name"` for a pipeline that exposes its binary probability
+vector under a different name. Standalone Spark ML classifiers require their
+fitted vector column among the declared inputs.
+
+### Execution environments
+
+| Runtime | Status and restrictions |
+| --- | --- |
+| Local Python / pandas | Tested with small binary models and local artifacts. Install the model framework as well as the chosen persistence extras. |
+| Classic local Spark | Tested native Spark ML prediction and bounded local diagnostics on Windows. In this environment, a Python worker running SHAP terminated in a minimal Arrow job. Distributed explanations require matching worker Python, SHAP, pandas, PyArrow and model dependencies. |
+| SynapseML on classic Spark | Parity test supplied, unvalidated locally because the JVM assembly was unavailable. The adapter checks native text predictions against Spark probabilities on a bounded reference before explanation. |
+| Spark Connect / Databricks Serverless | Unvalidated. SQL calibration and alignment have separate requirements from Spark ML fitting or JVM model export. |
+| Arbitrary remote Python artifact URIs | Unsupported. Stage to a local or mounted path, or use a supported MLflow source. |
 
 ## Custom feature quickstart
 
@@ -623,6 +830,8 @@ explainer = ModelExplainer(
     result,
     train_df.select(*selected_features),
     selected_features,
+    execution="local",
+    max_rows=3,
     key_cols=["account_id", "reference_date"],
     calibrator=calibrator,
     score_aligner=aligner,
@@ -631,8 +840,8 @@ explainer = ModelExplainer(
     max_background=20,
     max_evals=2 * len(selected_features) + 1,
 )
-explanation = explainer.explain(oot_df.limit(3))
-explanation.to_frame().show(truncate=False)
+explanation = explainer.explain(scored.limit(3))
+print(explanation.to_frame())
 ```
 
 See the [explainability reference](docs/probability-workflow.md) for optional
@@ -679,6 +888,34 @@ MLflow uses its own model flavors; `none` writes no artifacts. Native LightGBM,
 ONNX, and Spark loaders do not return the same object type or prediction interface.
 See [persistence formats and loaders](docs/training.md#model-formats),
 [MLflow](docs/training.md#mlflow), and [legacy migration](docs/training.md#migration-and-compatibility).
+
+After the Spark folder fit above, load the saved pipeline and explain one
+observation locally. Install `brainmodelkit[pyspark,explainability]` on the
+driver and workers for distributed mode. Run the standalone equivalent with
+`python examples/probability_workflow_pyspark.py --execution local --save-model`
+on a Spark installation with a working folder writer. Omit `--save-model` for
+an in-memory fit.
+
+```python
+from pyspark.ml import PipelineModel
+from brainmodelkit.persistence import ArtifactSpec
+from brainmodelkit.pyspark import ModelExplainer, PredictionPipeline
+
+artifact = ArtifactSpec(
+    path=saved_result.model_uri, format="spark", model_class=PipelineModel
+)
+workflow = PredictionPipeline(artifact, selected_features)
+diagnostic = ModelExplainer(
+    workflow,
+    train_df,
+    selected_features,
+    key_cols=["account_id", "reference_date"],
+    target="raw",
+    execution="local",
+    max_rows=1,
+)
+print(diagnostic.explain(oot_df.limit(1)).to_frame())
+```
 
 ## pandas guide
 
@@ -1096,7 +1333,7 @@ explainer = ModelExplainer(
     max_background=20,
     max_evals=2 * len(selected_features) + 1,
 )
-explanation = explainer.explain(oot_df.head(3))
+explanation = explainer.explain(scored.head(3))
 print(explanation.to_frame().to_string(index=False))
 ```
 

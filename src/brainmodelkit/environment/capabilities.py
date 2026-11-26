@@ -24,6 +24,10 @@ MINIMUMS = {
     "skops": "0.10",
     "skl2onnx": "1.16",
     "onnx": "1.16",
+    "shap": "0.46",
+    "pyarrow": "11",
+    "xgboost": "2",
+    "catboost": "1.2",
     "onnxruntime": "1.17",
 }
 SYNAPSE_VERSION = "1.1.3"
@@ -113,4 +117,28 @@ def evaluate(env):
         "cloudpickle": stack("cloudpickle"),
         "skops": stack("skops"),
     }
+    caps.update(
+        {
+            "XGBoost native loading": stack("xgboost"),
+            "CatBoost native loading": stack("catboost"),
+            "LightGBM native loading": stack("lightgbm"),
+            "Pandas native prediction (sklearn)": stack("pandas", "scikit-learn"),
+            "Pandas calibration transformation": stack("numpy", "pandas"),
+            "Pandas calibration fitting": stack("numpy", "pandas", "scipy"),
+            "ONNX loading": stack("onnxruntime"),
+            "Spark native prediction": spark,
+            "Spark SQL calibration and scoring": combine(
+                [stack("pyspark"), runtime, READY if env["jvm"] else PARTIAL]
+            ),
+            "Spark ML calibration fitting": spark,
+            "Pandas optimized explanations (eligible models)": stack(
+                "numpy", "pandas", "shap", "scikit-learn"
+            ),
+            "Pandas permutation explanations": stack("numpy", "pandas", "shap"),
+            "Spark worker export (eligible models)": combine([spark, PARTIAL]),
+            "Spark distributed explanations (worker dependencies unverified)": combine(
+                [spark, stack("shap", "pyarrow", "pandas", "scikit-learn"), PARTIAL]
+            ),
+        }
+    )
     return packages, caps

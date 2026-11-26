@@ -24,6 +24,8 @@ driver. Plotting uses optional matplotlib. SHAP is imported only when an
 explanation is initialized; the base package and fixed-parameter Spark SQL
 transformations do not import SHAP or start Spark.
 
+For local persistence and bundle round trips run `python examples/saved_workflow.py`.
+
 Both scripts generate synthetic credit data, train on one partition, inspect a
 separate development partition, fit calibration on held-out calibration
 predictions, and evaluate only after freezing choices on a final partition.
@@ -40,8 +42,10 @@ Use the same class names under either backend:
 | --- | --- | --- |
 | `LogisticCalibrator`, `calibration_diagnostics`, `compare_calibration` | `brainmodelkit.calibration.pandas` | `brainmodelkit.calibration.pyspark` |
 | `ScoreAligner` | `brainmodelkit.scoring.pandas` | `brainmodelkit.scoring.pyspark` |
-| `PredictionPipeline`, `ModelExplainer`, `ExplanationResult` | `brainmodelkit.explainability.pandas` | `brainmodelkit.explainability.pyspark` |
+| `PredictionPipeline` | `brainmodelkit.prediction.pandas` | `brainmodelkit.prediction.pyspark` |
+| `ModelExplainer`, `ExplanationResult` | `brainmodelkit.explainability.pandas` | `brainmodelkit.explainability.pyspark` |
 
+The previous explainability imports of `PredictionPipeline` remain available.
 The classes are also exposed lazily through `brainmodelkit.pandas` and
 `brainmodelkit.pyspark`. An explainer or prediction composition accepts either a
 fitted model or the existing `TrainingResult`; it unwraps `.model` without fitting
@@ -223,7 +227,7 @@ the score, even when standalone components accept non-event inputs.
 ## Compose predictions and explain the complete function
 
 ```python
-from brainmodelkit.explainability.pandas import ModelExplainer, PredictionPipeline
+from brainmodelkit.pandas import ModelExplainer, PredictionPipeline
 
 workflow = PredictionPipeline(
     trained_result,
@@ -245,7 +249,7 @@ explainer = ModelExplainer(
     seed=42,
     reference_id="training-reference-v1",
 )
-result = explainer.explain(final_data[["customer_id", "month", *features]].head(10))
+result = explainer.explain(predictions.head(10))
 print(result.summary(observation=0))
 print(result.top_contributors(observation=0, top_k=3))
 result.waterfall(observation=0, top_k=5)
@@ -257,8 +261,9 @@ result.waterfall(observation=0, top_k=5)
 calibrator is required to score or explain the base model. An explainer does not
 require a score aligner unless `target="business_score"`.
 
-Pandas `PredictionPipeline.predict(feature_frame, target)` accepts exact ordered
-features. A selected `prediction_callable` must return one **event probability**
+Pandas `PredictionPipeline.predict(frame, target)` selects the declared features
+in model order. Supply `feature_cols` when the model has no input names.
+A selected `prediction_callable` must return one **event probability**
 per row, including its preprocessing; `raw_callable` supplies a separately
 declared event-oriented margin. Custom callables require explicit permutation
 SHAP. No model is inferred from its name. The adapters inspect actual types and
@@ -299,12 +304,14 @@ dtypes, sample count, and seed. Keep the same explainer/reference across clients
 and batches. Persist the reference frame alongside the configuration if it must
 be reconstructed later; a fingerprint is not the reference data itself.
 
-Inputs must have exactly the declared feature order plus configured key columns;
-missing/extra features, mismatched dtypes, nulls and nonnumeric values raise.
-This first release supports finite numeric scalar inputs. Categorical/string
-features and missing-value attribution are not implemented. For numeric sklearn
-preprocessing pipelines, permutation SHAP explains original feature inputs and
-includes preprocessing inside the function. Optimized adapters require direct
+Prediction and explanation select the declared features in order from wider
+frames. Missing features, duplicate column names, invalid observation keys, and
+incompatible explanation dtypes raise. Spark workflows with saved input dtypes
+check each declared input against its training type before native prediction.
+pandas permutation masking supports
+numeric features and scalar categories with fitted preprocessing, including
+missing inputs when the estimator accepts them. Spark export and optimized
+explanation use finite numeric model inputs. Optimized adapters require direct
 model inputs; they do not silently label transformed coordinates as original
 features. If explaining already transformed inputs, explicitly supply those
 columns, names and reference and interpret them as that schema.
@@ -365,10 +372,11 @@ results when reusing expensive explanations across several actions.
 | --- | --- | --- | --- | --- |
 | pandas sklearn `LogisticRegression` | Linear SHAP | Explicit permutation | Explicit permutation | Direct numeric features; sklearn Pipeline via permutation |
 | pandas `LGBMClassifier` / binary native `Booster` | Tree SHAP | Interventional Tree SHAP | Explicit permutation | Direct numeric features |
+| pandas sklearn decision tree / random forest / gradient boosting | Gradient boosting margin only | Interventional Tree SHAP | Explicit permutation | Direct numeric features |
 | pandas other binary `predict_proba` or explicit callable | Only via explicit raw callable/permutation | Explicit permutation | Explicit permutation | Complete callable includes preprocessing |
 | Spark binary `LogisticRegressionModel` | Exported linear SHAP | Explicit permutation | Explicit permutation | Matching scalar columns, optionally repository VectorAssembler pipeline |
 | Spark BrainModelKit `SparkLightGBMModel` | Exported native Tree SHAP | Exported interventional Tree SHAP | Explicit permutation | Matching numeric columns, optionally repository VectorAssembler pipeline |
-| Spark SynapseML `LightGBMClassificationModel` | Not implemented | Not implemented | Not implemented | JVM export adapter not provided |
+| Spark SynapseML binary LightGBM | Native Tree SHAP | Interventional Tree SHAP | Explicit permutation | Requires matching JVM runtime and bounded export parity check |
 | Arbitrary Spark ML pipelines, multiclass, native categorical trees | Not implemented | Not implemented | Not implemented | Raise capability/schema errors |
 
 Calibration/scoring can still process probability columns from any model,
@@ -400,3 +408,5 @@ JSON does not contain the original estimator or background dataset. Save the
 model with the existing [persistence APIs](training.md#saving-trained-models),
 save the reference separately, and compose the loaded model/configurations.
 Existing `TrainingResult` construction and serialized models are unchanged.
+
+For artifact resolution, backend and runtime matrices, local and referenced bundles, and adapter registration, see the [saved-model walkthrough](../README.md#use-a-fitted-or-saved-model).

@@ -47,6 +47,8 @@ class TrainingResult:
     model_uri: str | None = None
     model_format: str | None = None
     analysis_cube: Any = None
+    feature_cols: list | None = None
+    schema: dict | None = None
 
     @property
     def run_as(self):
@@ -198,6 +200,15 @@ def finalize_run(
     """Persist a complete run through one destination."""
     result.save_model_to = save_model_to
     result.model_format = model_format
+    result.feature_cols = list(features)
+    if train_df is not None:
+        result.schema = (
+            {name: str(train_df[name].dtype) for name in features}
+            if backend != "spark"
+            else {
+                name: train_df.schema[name].dataType.simpleString() for name in features
+            }
+        )
     result.output_dir = None
     if save_model_to == "none":
         return result
@@ -221,6 +232,8 @@ def finalize_run(
             result.model.stages[-1] if backend == "spark" else result.model
         ).__name__,
         "feature_cols": features,
+        "class_labels": [0, 1],
+        "schema": result.schema,
         "target_col": target,
         "parameters": serializable_parameters(params),
     }
@@ -250,6 +263,8 @@ def finalize_run(
             target_col=target,
             feature_cols=features,
             parameters=params,
+            schema=result.schema,
+            class_labels=report["class_labels"],
         )
         if backend == "spark":
             _save_spark_model(

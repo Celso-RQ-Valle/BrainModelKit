@@ -28,6 +28,8 @@ def __getattr__(name):
             if name == "LogisticCalibrator"
             else "scoring"
             if name == "ScoreAligner"
+            else "prediction"
+            if name == "PredictionPipeline"
             else "explainability"
         )
         return getattr(import_module(f"brainmodelkit.{module}.pandas"), name)

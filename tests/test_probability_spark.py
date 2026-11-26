@@ -248,3 +248,69 @@ def test_sparklightgbm_native_adapter(spark):
         result.prediction, model.predict_proba(pdf.iloc[:3])[:, 1]
     )
     assert result.reconstruction_ok.all()
+
+
+def test_native_prediction_without_worker_export(spark, logistic):
+    from pyspark.ml import PipelineModel
+    from pyspark.ml.classification import DecisionTreeClassifier
+    from pyspark.ml.functions import vector_to_array
+
+    data, logistic_model = logistic
+    assembler = logistic_model.stages[0]
+    tree = DecisionTreeClassifier(
+        labelCol="target", probabilityCol="p", rawPredictionCol="margin"
+    ).fit(assembler.transform(data))
+    model = PipelineModel([assembler, tree])
+    workflow = PredictionPipeline(model, ["income", "debt"], event_label=0)
+    rows = data.withColumnRenamed("target", "p")
+    result = workflow.transform(rows).orderBy("client", "month").toPandas()
+    expected = (
+        model.transform(data)
+        .orderBy("client", "month")
+        .select(vector_to_array("p")[0])
+        .toPandas()
+    )
+    np.testing.assert_allclose(result.event_probability, expected.iloc[:, 0])
+    assert set(rows.columns) <= set(result.columns)
+    with pytest.raises(CapabilityError, match="Unsupported Spark"):
+        ModelExplainer(model, data, ["income", "debt"], key_cols=["client", "month"])
+    with pytest.raises(ValueError, match="vector"):
+        PredictionPipeline(tree, ["income", "debt"]).transform(rows)
+
+
+def test_worker_payload_predicts_without_spark(logistic):
+    import cloudpickle
+
+    from brainmodelkit.prediction.spark_adapters import (
+        export_predictor,
+        restore_predictor,
+    )
+
+    data, model = logistic
+    features = ["income", "debt"]
+    payload = cloudpickle.loads(cloudpickle.dumps(export_predictor(model, features)))
+    assert set(payload) == {"kind", "coefficients", "intercept"}
+    native = PredictionPipeline(model, features).transform(data.limit(3)).toPandas()
+    restored = restore_predictor(payload, features)
+    np.testing.assert_allclose(
+        restored.predict_proba(native[features])[:, 1], native.event_probability
+    )
+
+
+def test_bounded_local_scored_frame(logistic):
+    data, model = logistic
+    flow = PredictionPipeline(model, ["income", "debt"], event_label=0)
+    explained = ModelExplainer(
+        flow,
+        data,
+        key_cols=["client", "month"],
+        target="raw",
+        execution="local",
+        max_rows=2,
+    )
+    rows = data.orderBy("client", "month").limit(2)
+    result = explained.explain(flow.transform(rows))
+    p = flow.transform(rows).orderBy("client", "month").toPandas().event_probability
+    np.testing.assert_allclose(result.predictions, np.log(p / (1 - p)))
+    with pytest.raises(ValueError, match="max_rows"):
+        explained.explain(data)

@@ -565,3 +565,13 @@ calls the shared trainer whose current default is SparkLightGBM. RFE does not
 expose `lgbm_backend` itself; do not copy a training keyword into its call.
 These are entry-point/documentation differences; this documentation reorganization
 does not change behavior or public signatures.
+
+## Reload a prediction workflow
+
+Pass `PredictionPipeline(result)` to compose an in-memory fit, or use
+`PredictionPipeline(ArtifactSpec(path=result.model_uri, format=result.model_format))`
+for a pandas pickle or joblib folder run. Native and Spark artifacts also
+require an explicit loader class, such as LightGBM's `Booster` or Spark's
+`PipelineModel`. New training reports persist ordered features,
+input dtypes and binary class labels. Older reports can supply feature order;
+provide `class_labels` for native Boosters when the labels are unavailable. MLflow is optional. Install the backend and format extras on the runtime that reads the model. See the [executable workflow and capability matrices](../README.md#use-a-fitted-or-saved-model).

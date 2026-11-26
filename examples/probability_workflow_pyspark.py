@@ -11,15 +11,18 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 
 from brainmodelkit.calibration.pyspark import LogisticCalibrator, compare_calibration
-from brainmodelkit.explainability.pyspark import ModelExplainer, PredictionPipeline
+from brainmodelkit.explainability.pyspark import ModelExplainer
+from brainmodelkit.persistence import ArtifactSpec
+from brainmodelkit.prediction.pyspark import PredictionPipeline
 from brainmodelkit.scoring.pyspark import ScoreAligner
 from brainmodelkit.training.pyspark import train_model
 
 
-def main(output: Path) -> None:
+def main(output: Path, execution="distributed", save_model=False) -> None:
     output.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
     os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
@@ -53,9 +56,17 @@ def main(output: Path) -> None:
             train,
             development,
             model_params={"maxIter": 100},
-            save_model_to="none",
+            save_model_to="folder" if save_model else "none",
+            output_dir=output,
         )
-        base = PredictionPipeline(trained, features)
+        source = (
+            ArtifactSpec(
+                path=trained.model_uri, format="spark", model_class=PipelineModel
+            )
+            if save_model
+            else trained
+        )
+        base = PredictionPipeline(source, features)
         cal_predictions = base.transform(calibration)
         fitted = LogisticCalibrator(feature_order=features).fit(
             cal_predictions, "event_probability", "target"
@@ -65,9 +76,7 @@ def main(output: Path) -> None:
             cal_predictions, "event_probability", output_col="manual_probability"
         ).select("manual_probability").show(3)
         aligner = ScoreAligner(decimals=0, feature_order=features)
-        workflow = PredictionPipeline(
-            trained, features, calibrator=fitted, score_aligner=aligner
-        )
+        workflow = PredictionPipeline(base, calibrator=fitted, score_aligner=aligner)
         predictions = workflow.transform(final).cache()
         reports = compare_calibration(
             predictions, "event_probability", "calibrated_event_probability"
@@ -78,23 +87,22 @@ def main(output: Path) -> None:
             predictions, "calibrated_non_event_probability", output_col="custom_score"
         ).select("business_score", "custom_score").show(3)
         explainer = ModelExplainer(
-            trained,
-            train.select(*features),
-            features,
+            workflow,
+            train,
             key_cols=["customer_id", "month"],
-            calibrator=fitted,
-            score_aligner=aligner,
+            execution=execution,
+            max_rows=3,
             target="business_score",
             method="permutation",
             max_background=10,
             max_evals=15,
             reference_id="synthetic-credit-training-v1",
         )
-        # Explanation runs in Python workers and returns a Spark DataFrame.
-        explained = explainer.explain(
-            final.select("customer_id", "month", *features).where("customer_id < 653")
-        )
-        explained.to_frame().show(truncate=False)
+        explained = explainer.explain(predictions.where("customer_id < 653"))
+        if execution == "distributed":
+            explained.to_frame().show(truncate=False)
+        else:
+            print(explained.to_frame().to_string(index=False))
         # Explicit bounded local diagnostics for one customer, using the same reference.
         local = ModelExplainer(
             trained,
@@ -131,4 +139,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output", type=Path, default=Path("spark_probability_artifacts")
     )
-    main(parser.parse_args().output)
+    parser.add_argument(
+        "--execution", choices=["distributed", "local"], default="distributed"
+    )
+    parser.add_argument(
+        "--save-model",
+        action="store_true",
+        help="Save and reload the fitted Spark PipelineModel",
+    )
+    args = parser.parse_args()
+    main(args.output, args.execution, args.save_model)

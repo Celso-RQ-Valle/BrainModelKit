@@ -7,21 +7,11 @@ from importlib.metadata import version
 import numpy as np
 import pandas as pd
 
-from brainmodelkit._probability import CapabilityError, choice, outputs
+from brainmodelkit._probability import CapabilityError, choice
 from brainmodelkit._probability_pandas import numeric, rounded
-from brainmodelkit.calibration.pandas import LogisticCalibrator
-from brainmodelkit.scoring.pandas import ScoreAligner
-from brainmodelkit.training import TrainingResult
+from brainmodelkit.prediction.pandas import TARGETS, PredictionPipeline, select_inputs
 
 from ._result import ExplanationResult
-
-TARGETS = (
-    "raw",
-    "event_probability",
-    "calibrated_event_probability",
-    "calibrated_non_event_probability",
-    "business_score",
-)
 
 
 def _features(frame, names, dtypes=None):
@@ -29,201 +19,12 @@ def _features(frame, names, dtypes=None):
         raise ValueError(
             f"Feature columns/order must be exactly {names}; select features explicitly"
         )
-    for name in names:
-        numeric(frame[name])
+
     if dtypes is not None and [str(frame[name].dtype) for name in names] != dtypes:
         raise TypeError(
             "Feature dtypes differ from reference; cast explicitly before explaining"
         )
     return frame
-
-
-def _unwrap(model):
-    return model.model if isinstance(model, TrainingResult) else model
-
-
-class PredictionPipeline:
-    """Compose a fitted binary classifier, optional calibration and fixed score.
-
-    Feature frames must match feature_cols exactly. Original features (including
-    sklearn Pipeline preprocessing) are passed through the complete callable.
-    Native LightGBM Boosters require explicit class_labels from training metadata.
-    """
-
-    def __init__(
-        self,
-        model,
-        feature_cols: list[str],
-        *,
-        event_label=1,
-        class_labels=None,
-        calibrator: LogisticCalibrator | None = None,
-        score_aligner: ScoreAligner | None = None,
-        prediction_callable=None,
-        raw_callable=None,
-    ):
-        self.model = _unwrap(model)
-        self.feature_cols = list(feature_cols)
-        if not self.feature_cols or len(set(self.feature_cols)) != len(
-            self.feature_cols
-        ):
-            raise ValueError("feature_cols must be nonempty and unique")
-        self.event_label = event_label
-        self.calibrator = deepcopy(calibrator)
-        self.score_aligner = deepcopy(score_aligner)
-        self.prediction_callable = prediction_callable
-        self.raw_callable = raw_callable
-        if calibrator is not None:
-            calibrator._ready()
-            if calibrator.event_label != event_label:
-                raise ValueError("Calibrator event_label differs from model event")
-        for config in (calibrator, score_aligner):
-            if (
-                config is not None
-                and config.feature_order
-                and config.feature_order != self.feature_cols
-            ):
-                raise ValueError(
-                    "Configuration feature_order differs from model inputs"
-                )
-        model_features = getattr(self.model, "feature_names_in_", None)
-        if model_features is not None and list(model_features) != self.feature_cols:
-            raise ValueError("feature_cols differ from fitted model feature_names_in_")
-        if prediction_callable is not None:
-            self.classes = None
-            self.event_index = None
-        else:
-            labels = getattr(self.model, "classes_", class_labels)
-            if labels is None or len(labels) != 2 or event_label not in labels:
-                raise ValueError(
-                    "Require two explicit model classes including event_label; "
-                    "native Booster needs class_labels"
-                )
-            self.classes = list(labels)
-            self.event_index = self.classes.index(event_label)
-
-    def _base_event(self, frame):
-        if self.prediction_callable is not None:
-            values = self.prediction_callable(frame)
-        elif hasattr(self.model, "predict_proba"):
-            values = self.model.predict_proba(frame)[:, self.event_index]
-        else:
-            from lightgbm import Booster
-
-            if (
-                not isinstance(self.model, Booster)
-                or self.model.num_model_per_iteration() != 1
-            ):
-                raise CapabilityError(
-                    "Need binary predict_proba or an explicit "
-                    "event-probability callable"
-                )
-            values = self.model.predict(frame)
-            if self.event_index == 0:
-                values = 1 - values
-        result = numeric(values, bounds=(0, 1))
-        if result.shape != (len(frame),):
-            raise ValueError(
-                "Prediction callable must return one event probability per row"
-            )
-        return result
-
-    def _raw(self, frame):
-        if self.raw_callable is not None:
-            values = self.raw_callable(frame)
-        elif hasattr(self.model, "decision_function"):
-            values = self.model.decision_function(frame)
-            if self.event_index == 0:
-                values = -values
-        else:
-            from lightgbm import Booster, LGBMClassifier
-
-            if not isinstance(self.model, (Booster, LGBMClassifier)):
-                raise CapabilityError(
-                    "Raw output unavailable; provide raw_callable explicitly"
-                )
-            values = self.model.predict(frame, raw_score=True)
-            if self.event_index == 0:
-                values = -values
-        result = numeric(values)
-        if result.shape != (len(frame),):
-            raise ValueError(
-                "Raw callable must return one event-oriented margin per row"
-            )
-        return result
-
-    def predict(
-        self, frame: pd.DataFrame, target: str = "event_probability"
-    ) -> np.ndarray:
-        choice(target, TARGETS, "target")
-        _features(frame, self.feature_cols)
-        if target == "raw":
-            return self._raw(frame)
-        p = self._base_event(frame)
-        if target == "event_probability":
-            return p
-        if self.calibrator is not None:
-            cal = self.calibrator
-            values = (
-                self._raw(frame)
-                if cal.input_space == "raw"
-                else 1 - p
-                if cal.input_probability == "non_event"
-                else p
-            )
-            p = cal.predict_event(values)
-        elif target.startswith("calibrated"):
-            raise ValueError("This target requires a calibrator")
-        if target == "calibrated_non_event_probability":
-            return 1 - p
-        if target == "business_score":
-            if self.score_aligner is None:
-                raise ValueError("business_score requires a ScoreAligner")
-            # Composition has known event semantics; display choices never flip scoring.
-            return self.score_aligner.score_event(p)
-        return p
-
-    def transform(self, df: pd.DataFrame, *, overwrite: bool = False) -> pd.DataFrame:
-        """Retain source columns and add explicitly named workflow outputs."""
-        names = ["event_probability"]
-        if self.calibrator is not None:
-            names += [
-                "calibrated_event_probability",
-                "calibrated_non_event_probability",
-            ]
-        if self.score_aligner is not None:
-            names += ["business_score_unrounded", "business_score"]
-        outputs(df.columns, names, overwrite)
-        features = df[self.feature_cols]
-        result = df.copy()
-        for name in names:
-            if name.startswith("business_score"):
-                values = self.predict(features, "business_score")
-                if name == "business_score":
-                    values = np.clip(
-                        rounded(values, self.score_aligner.decimals),
-                        self.score_aligner.score_min,
-                        self.score_aligner.score_max,
-                    )
-            else:
-                values = self.predict(features, name)
-            result[name] = values
-        return result
-
-    def metadata(self) -> dict:
-        return {
-            "model_class": type(self.model).__module__
-            + "."
-            + type(self.model).__name__,
-            "feature_order": self.feature_cols,
-            "event_label": self.event_label,
-            "calibration": self.calibrator.to_dict()
-            if self.calibrator is not None
-            else None,
-            "scoring": self.score_aligner.to_dict()
-            if self.score_aligner is not None
-            else None,
-        }
 
 
 class ModelExplainer:
@@ -242,11 +43,12 @@ class ModelExplainer:
         *,
         target: str = "raw",
         method: str = "optimized",
-        event_label=1,
+        event_label=None,
         class_labels=None,
         calibrator=None,
         score_aligner=None,
         prediction_callable=None,
+        probability_output=None,
         raw_callable=None,
         key_cols: list[str] | None = None,
         max_background: int = 100,
@@ -271,17 +73,23 @@ class ModelExplainer:
             raise ValueError(
                 "Reconstruction tolerances must be finite and non-negative"
             )
+        if isinstance(model, PredictionPipeline):
+            if feature_cols is not None and list(feature_cols) != model.feature_cols:
+                raise ValueError("Conflicting feature order")
+            if event_label is not None and model.event_label != event_label:
+                raise ValueError("Conflicting event_label on PredictionPipeline")
         self.pipeline = (
             model
             if isinstance(model, PredictionPipeline)
             else PredictionPipeline(
                 model,
-                feature_cols or list(background.columns),
+                feature_cols,
                 event_label=event_label,
                 class_labels=class_labels,
                 calibrator=calibrator,
                 score_aligner=score_aligner,
                 prediction_callable=prediction_callable,
+                probability_output=probability_output,
                 raw_callable=raw_callable,
             )
         )
@@ -293,10 +101,12 @@ class ModelExplainer:
                 score_aligner,
                 prediction_callable,
                 raw_callable,
+                probability_output,
                 class_labels,
             )
         ):
             raise ValueError("Configure components on PredictionPipeline, not twice")
+        background = select_inputs(background, self.features)
         _features(background, self.features)
         if background.empty:
             raise ValueError("Background must contain observations")
@@ -325,7 +135,9 @@ class ModelExplainer:
         self.target, self.method = target, method
         self.max_rows, self.max_evals, self.seed = max_rows, max_evals, seed
         self.atol, self.rtol = atol, rtol
-        self.feature_dictionary = deepcopy(feature_dictionary or {})
+        self.feature_dictionary = deepcopy(
+            feature_dictionary or getattr(self.pipeline, "feature_dictionary", {})
+        )
         digest = hashlib.sha256(
             pd.util.hash_pandas_object(self.background, index=True).values.tobytes()
         ).hexdigest()
@@ -338,11 +150,30 @@ class ModelExplainer:
             "feature_order": self.features,
         }
         self._explainer = None
+        # Independent masking operates on a numeric matrix. For discrete or
+        # nullable inputs, mask row indices and recover the original pandas values
+        # before prediction. This preserves None, categorical types and large ints.
+        self._lookup = {}
+        if method == "permutation":
+            for name, dtype in self.background.dtypes.items():
+                if not pd.api.types.is_float_dtype(dtype):
+                    self._lookup[name] = self.background[name].reset_index(drop=True)
+        else:
+            for name in self.features:
+                numeric(self.background[name])
         self._affine = (0.0, 1.0)
         # Fail unsupported targets before any expensive explanation work.
         self.pipeline.predict(self.background.iloc[:1], target)
         if method == "permutation" and max_evals < 2 * len(self.features) + 1:
             raise ValueError("max_evals must be at least 2 * feature_count + 1")
+
+    def _encoded(self, frame, offset=0):
+        if self.method != "permutation":
+            return frame
+        encoded = frame.copy()
+        for name in self._lookup:
+            encoded[name] = np.arange(offset, offset + len(frame))
+        return encoded.astype(float)
 
     def _initialize(self):
         try:
@@ -350,7 +181,7 @@ class ModelExplainer:
         except ImportError as exc:
             raise ImportError("Install brainmodelkit[explainability] for SHAP") from exc
         masker = shap.maskers.Independent(
-            self.background, max_samples=len(self.background)
+            self._encoded(self.background), max_samples=len(self.background)
         )
         pipeline = self.pipeline
         target = self.target
@@ -369,21 +200,16 @@ class ModelExplainer:
                 self._affine = pipeline.score_aligner.affine
 
             def predict(values):
-                frame = pd.DataFrame(values, columns=self.features).astype(
-                    dict(zip(self.features, self.dtypes, strict=True))
-                )
+                frame = pd.DataFrame(values, columns=self.features)
+                for name, lookup in self._lookup.items():
+                    frame[name] = lookup.iloc[frame[name].to_numpy(dtype=int)].array
+                frame = frame.astype(self.background.dtypes.to_dict())
                 return pipeline.predict(frame, explained)
 
             self._explainer = shap.PermutationExplainer(predict, masker, seed=self.seed)
             return
-        from sklearn.linear_model import LogisticRegression
-
         model = pipeline.model
-        if (
-            pipeline.prediction_callable is not None
-            or pipeline.raw_callable is not None
-        ):
-            raise CapabilityError("Custom callables require method='permutation'")
+        kind = getattr(pipeline.adapter, "optimized_kind", None)
         if target.startswith("calibrated") or (
             target == "business_score" and pipeline.calibrator is not None
         ):
@@ -391,13 +217,28 @@ class ModelExplainer:
                 "Nonlinear calibration requires explicit method='permutation' "
                 "for the complete prediction function"
             )
-        if isinstance(model, LogisticRegression) and target == "raw":
+        if kind == "linear_margin" and target == "raw":
             self._explainer = shap.LinearExplainer(model, masker)
             self._affine = (0.0, 1.0 if pipeline.event_index == 1 else -1.0)
             return
-        from lightgbm import Booster, LGBMClassifier
+        if kind in {"class_probability_tree", "boosted_tree"}:
+            self._multi_output = kind == "class_probability_tree"
+            self._explainer = shap.TreeExplainer(
+                model,
+                data=masker,
+                feature_perturbation="interventional",
+                model_output="raw" if target == "raw" else "probability",
+            )
+            if not self._multi_output and pipeline.event_index == 0:
+                self._affine = (0.0 if target == "raw" else 1.0, -1.0)
+            if target == "business_score":
+                offset, factor = pipeline.score_aligner.affine
+                a, b = self._affine
+                self._affine = (offset + factor * a, factor * b)
+            return
+        if kind == "lightgbm":
+            from lightgbm import Booster
 
-        if isinstance(model, (Booster, LGBMClassifier)):
             if isinstance(model, Booster):
                 objective = str(model.dump_model().get("objective", ""))
                 if not objective.startswith("binary"):
@@ -421,8 +262,7 @@ class ModelExplainer:
                 self._affine = (offset + factor * base_offset, factor * base_factor)
             return
         raise CapabilityError(
-            "Optimized support is logistic raw output or binary LightGBM "
-            "raw/probability on numeric model inputs. Use method='permutation' "
+            "No optimized adapter for this model and target. Use method='permutation' "
             "for sklearn preprocessing pipelines or other compatible callables."
         )
 
@@ -431,14 +271,7 @@ class ModelExplainer:
             raise ValueError(
                 "Explanation exceeds max_rows; select an explicit bounded batch"
             )
-        if len(df.columns) != len(set(df.columns)) or set(df.columns) != set(
-            self.features + self.keys
-        ):
-            raise ValueError(
-                "Explain frame must contain exactly features and configured keys"
-            )
-        if [name for name in df.columns if name not in self.keys] != self.features:
-            raise ValueError("Feature order differs from fitted schema")
+        df = select_inputs(df, self.features + self.keys)
         frame = _features(df[self.features], self.features, self.dtypes)
         if self.keys and (
             df[self.keys].isna().any().any() or df.duplicated(self.keys).any()
@@ -448,16 +281,30 @@ class ModelExplainer:
             )
         if frame.empty:
             raise ValueError("Explanation batch must not be empty")
+        for name in self._lookup:
+            if frame[name].dtype != self.background[name].dtype:
+                raise TypeError(f"Feature dtypes differ from reference for {name!r}")
+            self._lookup[name] = pd.concat(
+                [self.background[name], frame[name]], ignore_index=True
+            )
         if self._explainer is None:
             self._initialize()
         explanation = (
-            self._explainer(frame, max_evals=self.max_evals, silent=True)
+            self._explainer(
+                self._encoded(frame, len(self.background)),
+                max_evals=self.max_evals,
+                silent=True,
+            )
             if self.method == "permutation"
             else self._explainer(frame)
         )
         values = np.asarray(explanation.values, dtype=float)
+        base_values = explanation.base_values
+        if getattr(self, "_multi_output", False):
+            values = values[:, :, self.pipeline.event_index]
+            base_values = np.asarray(base_values)[:, self.pipeline.event_index]
         bases = np.broadcast_to(
-            np.asarray(explanation.base_values, dtype=float), (len(frame),)
+            np.asarray(base_values, dtype=float), (len(frame),)
         ).copy()
         if values.shape != frame.shape:
             raise CapabilityError(
@@ -473,7 +320,7 @@ class ModelExplainer:
                 "Explanation reconstruction failed in the declared output space"
             )
         units = (
-            "raw margin (log-odds for logistic/LightGBM)"
+            getattr(self.pipeline.adapter, "raw_units", "adapter-defined raw output")
             if self.target == "raw"
             else "score points"
             if self.target == "business_score"
@@ -483,7 +330,7 @@ class ModelExplainer:
             **self.pipeline.metadata(),
             "target": self.target,
             "units": units,
-            "feature_space": "original numeric inputs",
+            "feature_space": getattr(self.pipeline, "feature_space", "original"),
             "reference": self.reference,
             "method": self.method,
             "max_evals": self.max_evals if self.method == "permutation" else None,

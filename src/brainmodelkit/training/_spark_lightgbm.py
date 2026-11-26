@@ -119,7 +119,11 @@ class SparkLightGBMModel(Model, DefaultParamsReadable, DefaultParamsWritable):
     def _transform(self, dataset):
         scored = self._restore().transform(dataset)
         # Bridge outputs are array<double>; the rest of BrainModelKit uses vectors.
-        for name in ("probability", "rawPrediction"):
+        options = self.getOrDefault(self.options)
+        for name in (
+            options.get("probability_col", "probability"),
+            options.get("raw_prediction_col", "rawPrediction"),
+        ):
             scored = scored.withColumn(name, array_to_vector(name))
         return scored
 

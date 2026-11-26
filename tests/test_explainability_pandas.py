@@ -122,6 +122,7 @@ def test_reference_schema_reports_and_callable(sample):
     explainer = ModelExplainer(
         None,
         x,
+        feature_cols=list(x),
         prediction_callable=function,
         method="permutation",
         target="event_probability",
@@ -146,16 +147,17 @@ def test_reference_schema_reports_and_callable(sample):
         == ModelExplainer(
             None,
             x,
+            feature_cols=list(x),
             prediction_callable=function,
             method="permutation",
             target="event_probability",
             max_background=10,
         ).reference
     )
-    with pytest.raises(ValueError, match="order"):
-        explainer.explain(x[list(reversed(x.columns))].iloc[:1])
-    with pytest.raises(ValueError, match="exactly"):
-        explainer.explain(x.iloc[:1].assign(extra=1))
+    reordered = x[list(reversed(x.columns))].iloc[:1].assign(extra=1)
+    np.testing.assert_allclose(
+        explainer.explain(reordered).predictions, result.predictions[:1]
+    )
     with pytest.raises(TypeError, match="dtypes"):
         explainer.explain(x.iloc[:1].astype("float32"))
     with pytest.raises(ValueError, match="max_rows"):

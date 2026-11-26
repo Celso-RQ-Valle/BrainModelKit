@@ -181,7 +181,8 @@ class ScoringConfig(JsonConfig):
                     value = Decimal(str(bound))
                     if value != value.quantize(quantum):
                         raise ValueError(
-                            "Score bounds must be representable at the requested decimals"
+                            "Score bounds must be representable at the "
+                            "requested decimals"
                         )
 
     @property

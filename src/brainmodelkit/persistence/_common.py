@@ -60,7 +60,15 @@ def serializable_parameters(parameters):
 
 
 def write_metadata(
-    model, path, format, *, target_col=None, feature_cols=None, parameters=None
+    model,
+    path,
+    format,
+    *,
+    target_col=None,
+    feature_cols=None,
+    parameters=None,
+    schema=None,
+    class_labels=None,
 ):
     local = local_path(path)
     if local is None:
@@ -76,6 +84,15 @@ def write_metadata(
         "feature_cols": list(feature_cols) if feature_cols is not None else None,
         "parameters": serializable_parameters(parameters),
     }
+    if schema is not None:
+        metadata["schema"] = schema
+    labels = getattr(model, "classes_", class_labels)
+    if hasattr(labels, "tolist"):
+        labels = labels.tolist()
+    if isinstance(labels, (list, tuple)) and all(
+        isinstance(x, (str, int, float, bool)) for x in labels
+    ):
+        metadata["class_labels"] = list(labels)
     Path(str(local) + ".metadata.json").write_text(
         json.dumps(metadata, indent=2, allow_nan=False), encoding="utf-8"
     )

@@ -80,7 +80,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e ".[dev,pandas,optimization,mlflow,boruta,persistence]" "pyspark==${{ matrix.spark }}"
+      - run: python -m pip install -e ".[dev,pandas,optimization,mlflow,boruta,persistence,secure,onnx,xgboost,catboost]" "pyspark==${{ matrix.spark }}"
       - run: python -m pip check
       - run: python -m pip freeze
       - name: Full suite (optional integrations required; no skips)

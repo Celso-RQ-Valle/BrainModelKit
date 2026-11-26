@@ -112,6 +112,34 @@ def test_training_persistence(spark, tmp_path):
         output_dir=tmp_path / "reports",
         n_tiles=4,
     )
+    from brainmodelkit.persistence import ArtifactSpec
+    from brainmodelkit.pyspark import ModelExplainer, PredictionPipeline
+
+    workflow = PredictionPipeline(
+        ArtifactSpec(path=result.model_uri, format="spark", model_class=PipelineModel)
+    )
+    explainer = ModelExplainer(
+        workflow, data, key_cols=["key"], execution="local", max_rows=1
+    )
+    from pyspark.sql import functions as F
+
+    rows = data.withColumn("key", F.lit(1)).limit(1)
+    assert (
+        explainer.explain(workflow.transform(rows)).to_frame().reconstruction_ok.all()
+    )
+    from brainmodelkit.persistence import load_workflow, save_workflow
+    from brainmodelkit.pyspark import LogisticCalibrator, ScoreAligner
+
+    composed = PredictionPipeline(
+        workflow, calibrator=LogisticCalibrator(0.1, 1.2), score_aligner=ScoreAligner()
+    )
+    bundle = tmp_path / "workflow"
+    save_workflow(bundle, composed)
+    restored = load_workflow(bundle, format="spark", model_class=PipelineModel)
+    assert (
+        restored.transform(rows).first().business_score
+        == composed.transform(rows).first().business_score
+    )
     loaded = load_model(result.model_uri, "spark", model_class=PipelineModel)
     assert loaded.transform(data).select("prediction").collect() == (
         result.model.transform(data).select("prediction").collect()

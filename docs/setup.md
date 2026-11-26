@@ -243,3 +243,11 @@ print(spark.sparkContext._jvm.java.lang.System.getProperty("os.name"))
 See [Hadoop Shell](https://hadoop.apache.org/docs/current/api/org/apache/hadoop/util/Shell.html)
 for helper resolution. MLflow database migration and experiment-creation INFO
 messages are normal first-use output; inspect the final exception and its cause.
+
+## Reload a prediction workflow
+
+Doctor reports loading dependencies, native prediction, SQL transformations,
+calibration fitting, SHAP dependencies and worker export separately. Worker
+environments require execution checks on the target cluster. MLflow is optional. Install the backend and format extras on the runtime that reads the model. See the [executable workflow and capability matrices](../README.md#use-a-fitted-or-saved-model).
+
+On a configured classic Spark cluster, run `python -m pytest tests/integration_synapseml.py` to compare native SynapseML probabilities with exported explanations. The ordinary Spark suite uses Spark ML and the repository LightGBM wrapper.

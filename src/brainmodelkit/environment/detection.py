@@ -23,6 +23,10 @@ PACKAGES = (
     "skl2onnx",
     "onnx",
     "onnxruntime",
+    "shap",
+    "pyarrow",
+    "xgboost",
+    "catboost",
 )
 
 
