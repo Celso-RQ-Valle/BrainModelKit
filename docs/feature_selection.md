@@ -57,6 +57,8 @@ is intersected with the p-value gate, not used to refill rejected positions.
 
 ## API quick reference
 
+Browse [pandas and PySpark examples for all 16 selectors](feature_selection/examples.md) for code and links to each method's selection rules.
+
 Use the backend-specific namespace that matches your DataFrame type. Every link
 below opens the detailed section with parameter guidance and a runnable example.
 

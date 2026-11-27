@@ -599,6 +599,8 @@ Validate provider returns before generating features with
 
 #### Spark select features
 
+See [feature selection examples](docs/feature_selection/examples.md) for all 16 selectors in PySpark and pandas, with links to how each method works.
+
 Fit selectors on development training rows only, then carry their ordered output
 into training. This minimal filter removes constants; it is not supervised ranking.
 
@@ -1095,6 +1097,8 @@ python examples/temporal/feature_relationships.py simulated_credit.csv
 ```
 
 #### pandas select features
+
+See [feature selection examples](docs/feature_selection/examples.md) for all 16 selectors in pandas and PySpark, with links to how each method works.
 
 Fit selectors on development training rows only, then carry their ordered output
 into training. This minimal filter removes constants; it is not supervised ranking.
