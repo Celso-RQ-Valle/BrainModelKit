@@ -2,6 +2,29 @@
 
 Choose a function below and run its example after the setup for your backend. Each example returns the selected column names in `result.selected_features`.
 
+## Find a selector by goal
+
+Choose a goal, follow its example link, and run the [setup](#setup) for your backend. The relative cost tiers apply to both backends. Runtime depends on data size, estimator, and the number of fits or repeats. See the [backend cost comparison](../selection-costs.md) for the main cost drivers.
+
+| Goal | Method and examples | Relative cost |
+| --- | --- | --- |
+| Remove columns with too many missing values | [`completeness`](#completeness) | Low |
+| Drop constant or low-variance columns | [`variance_filter`](#variance_filter) | Low |
+| Screen columns by distinct value count | [`cardinality`](#cardinality) | Low to moderate |
+| Find numeric features whose class means differ | [`anova`](#anova) | Low to moderate |
+| Test counts or category codes for association with the target | [`chi_square`](#chi_square) | Low to moderate |
+| Compare event and non-event distributions across bins | [`information_value`](#information_value) | Moderate |
+| Detect nonlinear dependence on the target | [`mutual_information`](#mutual_information) | Moderate |
+| Remove highly correlated features | [`correlation_filter`](#correlation_filter) | Moderate to high |
+| Select a sparse set of logistic regression coefficients | [`l1_selection`](#l1_selection) | Moderate to high |
+| Rank features by fitted model importance | [`feature_importance_selection`](#feature_importance_selection) | Moderate to high |
+| Measure how much a fitted model relies on each feature | [`permutation_importance_selection`](#permutation_importance_selection) | High |
+| Remove the least important features until a chosen size | [`rfe`](#rfe) | High |
+| Find features repeatedly selected across samples | [`stability_selection`](#stability_selection) | High to very high |
+| Choose the elimination subset size by cross-validation | [`rfecv`](#rfecv) | Very high |
+| Build a subset by adding or removing one feature at a time | [`sequential_selection`](#sequential_selection) | Very high |
+| Identify all relevant features using shuffled shadow features | [`boruta`](#boruta) | Very high |
+
 ## Setup
 
 **pandas** — Run the [pandas data setup](setup.md), then define the training and validation frames used below.
@@ -18,6 +41,8 @@ train, validation = train_df, validation_df
 from brainmodelkit.feature_selection import pyspark as spark_fs
 ```
 
+Each selector call shows every parameter for that backend. Where a selector accepts `df` as an alias for `train_df`, the examples supply `train_df` and leave the alias at `None`. The same convention applies to `oot_df` and its alias `df_oot`. Each method link explains its parameters and selection rules.
+
 ## completeness
 
 [How completeness works](completeness.md#how-it-works).
@@ -25,14 +50,28 @@ from brainmodelkit.feature_selection import pyspark as spark_fs
 **pandas**
 
 ```python
-result = pd_fs.completeness(train, features, min_completeness=0.95)
+result = pd_fs.completeness(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    min_completeness=0.95,
+    group_by=None,
+    require_all_groups=False,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.completeness(train, features, min_completeness=0.95)
+result = spark_fs.completeness(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    min_completeness=0.95,
+    group_by=None,
+    require_all_groups=False,
+)
 print(result.selected_features)
 ```
 
@@ -43,14 +82,28 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.cardinality(train, features, min_unique=2)
+result = pd_fs.cardinality(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    min_unique=2,
+    max_unique=None,
+    max_unique_ratio=None,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.cardinality(train, features, min_unique=2)
+result = spark_fs.cardinality(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    min_unique=2,
+    max_unique=None,
+    max_unique_ratio=None,
+)
 print(result.selected_features)
 ```
 
@@ -61,14 +114,24 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.variance_filter(train, features, min_variance=0.0)
+result = pd_fs.variance_filter(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    min_variance=0.0,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.variance_filter(train, features, min_variance=0.0)
+result = spark_fs.variance_filter(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    min_variance=0.0,
+)
 print(result.selected_features)
 ```
 
@@ -79,14 +142,27 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.correlation_filter(train, features, threshold=0.9)
+result = pd_fs.correlation_filter(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    threshold=0.9,
+    method='pearson',
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.correlation_filter(train, features, threshold=0.9)
+result = spark_fs.correlation_filter(
+    train_df=train,
+    feature_cols=features,
+    df=None,
+    threshold=0.9,
+    method='pearson',
+    max_features=256,
+)
 print(result.selected_features)
 ```
 
@@ -97,14 +173,35 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.mutual_information(train, "target", features, top_k=1)
+result = pd_fs.mutual_information(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    threshold=None,
+    top_k=1,
+    random_state=42,
+    discrete_features=False,
+    n_neighbors=3,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.mutual_information(train, "target", features, top_k=1)
+result = spark_fs.mutual_information(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    threshold=None,
+    top_k=1,
+    discrete_features=False,
+    n_bins=10,
+    relative_error=0.001,
+    max_categories=1000,
+)
 print(result.selected_features)
 ```
 
@@ -116,7 +213,14 @@ print(result.selected_features)
 
 ```python
 counts = counts_df
-result = pd_fs.chi_square(counts, "target", features, max_p_value=0.05)
+result = pd_fs.chi_square(
+    train_df=counts,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    max_p_value=0.05,
+    top_k=None,
+)
 print(result.selected_features)
 ```
 
@@ -124,7 +228,15 @@ print(result.selected_features)
 
 ```python
 counts = train.select("target", *((F.col(c) > 0).cast("int").alias(c) for c in features))
-result = spark_fs.chi_square(counts, "target", features, max_p_value=0.05)
+result = spark_fs.chi_square(
+    train_df=counts,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    max_p_value=0.05,
+    top_k=None,
+    max_categories=1000,
+)
 print(result.selected_features)
 ```
 
@@ -135,14 +247,28 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.anova(train, "target", features, max_p_value=0.05)
+result = pd_fs.anova(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    max_p_value=0.05,
+    top_k=None,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.anova(train, "target", features, max_p_value=0.05)
+result = spark_fs.anova(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    max_p_value=0.05,
+    top_k=None,
+)
 print(result.selected_features)
 ```
 
@@ -153,14 +279,33 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.information_value(train, "target", features, min_iv=0.02)
+result = pd_fs.information_value(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    n_bins=10,
+    min_iv=0.02,
+    smoothing=0.5,
+    binning='quantile',
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.information_value(train, "target", features, min_iv=0.02)
+result = spark_fs.information_value(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    n_bins=10,
+    min_iv=0.02,
+    smoothing=0.5,
+    binning='quantile',
+    relative_error=0.001,
+)
 print(result.selected_features)
 ```
 
@@ -171,14 +316,43 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.feature_importance_selection(train, "target", features, model="decision_tree", top_k=1)
+result = pd_fs.feature_importance_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    model='decision_tree',
+    model_params=None,
+    threshold=None,
+    top_k=1,
+    random_state=42,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.feature_importance_selection(train, "target", features, model="decision_tree", top_k=1)
+result = spark_fs.feature_importance_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    n_tiles=10,
+    model='decision_tree',
+    model_params=None,
+    threshold=None,
+    top_k=1,
+    random_state=42,
+)
 print(result.selected_features)
 ```
 
@@ -189,14 +363,40 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.l1_selection(train, "target", features, C=1.0)
+result = pd_fs.l1_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    C=1.0,
+    coefficient_tolerance=1e-08,
+    random_state=42,
+    max_iter=1000,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.l1_selection(train, "target", features, reg_param=0.1)
+result = spark_fs.l1_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    n_tiles=10,
+    reg_param=0.1,
+    coefficient_tolerance=1e-08,
+    max_iter=100,
+)
 print(result.selected_features)
 ```
 
@@ -208,7 +408,18 @@ print(result.selected_features)
 
 ```python
 model = pd_fs.feature_importance_selection(train, "target", features, model="decision_tree").model
-result = pd_fs.permutation_importance_selection(model, validation, "target", features, top_k=1)
+result = pd_fs.permutation_importance_selection(
+    model=model,
+    df=validation,
+    target_col='target',
+    feature_cols=features,
+    scoring='roc_auc',
+    n_repeats=5,
+    random_state=42,
+    threshold=None,
+    top_k=1,
+    n_jobs=None,
+)
 print(result.selected_features)
 ```
 
@@ -216,7 +427,17 @@ print(result.selected_features)
 
 ```python
 model = spark_fs.feature_importance_selection(train, "target", features, model="decision_tree").model
-result = spark_fs.permutation_importance_selection(model, validation, "target", features, top_k=1)
+result = spark_fs.permutation_importance_selection(
+    model=model,
+    df=validation,
+    target_col='target',
+    feature_cols=features,
+    scoring='roc_auc',
+    n_repeats=5,
+    random_state=42,
+    threshold=None,
+    top_k=1,
+)
 print(result.selected_features)
 ```
 
@@ -227,14 +448,45 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.rfe("example", "target", train, validation, feature_cols=features, n_feat_final=1)
+result = pd_fs.rfe(
+    run_name='example',
+    target_col='target',
+    train_df=train,
+    oot_df=validation,
+    feature_cols=features,
+    model='logistic_regression',
+    df_oot=None,
+    step=1,
+    n_feat_final=1,
+    model_params=None,
+    output_dir='feature_selection_runs',
+    df_scoring=None,
+    mlflow_logging=False,
+    signature=False,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.rfe("example", "target", train, validation, feature_cols=features, n_feat_final=1)
+result = spark_fs.rfe(
+    run_name='example',
+    target_col='target',
+    train_df=train,
+    oot_df=validation,
+    feature_cols=features,
+    model='logistic_regression',
+    df_oot=None,
+    step=1,
+    n_feat_final=1,
+    model_params=None,
+    output_dir='feature_selection_runs',
+    df_scoring=None,
+    mlflow_logging=False,
+    signature=False,
+    n_tiles=10,
+)
 print(result.selected_features)
 ```
 
@@ -245,14 +497,44 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.rfecv(train, "target", features, cv=3)
+result = pd_fs.rfecv(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    model='logistic_regression',
+    model_params=None,
+    scoring='roc_auc',
+    cv=3,
+    step=1,
+    min_features_to_select=1,
+    n_jobs=None,
+    random_state=42,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.rfecv(train, "target", features, cv=3, fold_col="fold")
+result = spark_fs.rfecv(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    model='logistic_regression',
+    model_params=None,
+    scoring='roc_auc',
+    cv=3,
+    fold_col='fold',
+    step=1,
+    min_features_to_select=1,
+    random_state=42,
+)
 print(result.selected_features)
 ```
 
@@ -263,14 +545,44 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.sequential_selection(train, "target", features, n_features_to_select=1, cv=3)
+result = pd_fs.sequential_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    model='logistic_regression',
+    model_params=None,
+    direction='forward',
+    n_features_to_select=1,
+    scoring='roc_auc',
+    cv=3,
+    n_jobs=None,
+    random_state=42,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.sequential_selection(train, "target", features, n_features_to_select=1, cv=3, fold_col="fold")
+result = spark_fs.sequential_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    model='logistic_regression',
+    model_params=None,
+    direction='forward',
+    n_features_to_select=1,
+    scoring='roc_auc',
+    cv=3,
+    fold_col='fold',
+    random_state=42,
+)
 print(result.selected_features)
 ```
 
@@ -281,14 +593,43 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.stability_selection(train, "target", features, selector_kwargs={"top_k": 1})
+result = pd_fs.stability_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    method='feature_importance',
+    n_iterations=20,
+    sample_fraction=0.8,
+    min_frequency=0.8,
+    random_state=42,
+    group_by=None,
+    selector_kwargs={'top_k': 1},
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.stability_selection(train, "target", features, selector_kwargs={"top_k": 1})
+result = spark_fs.stability_selection(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    method='feature_importance',
+    n_iterations=20,
+    sample_fraction=0.8,
+    min_frequency=0.8,
+    random_state=42,
+    group_by=None,
+    selector_kwargs={'top_k': 1},
+    max_groups=100,
+)
 print(result.selected_features)
 ```
 
@@ -299,13 +640,42 @@ print(result.selected_features)
 **pandas**
 
 ```python
-result = pd_fs.boruta(train, "target", features, max_iter=30)
+result = pd_fs.boruta(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name='feature_selection',
+    model='random_forest',
+    model_params=None,
+    n_estimators='auto',
+    max_iter=30,
+    perc=100,
+    alpha=0.05,
+    random_state=42,
+)
 print(result.selected_features)
 ```
 
 **PySpark**
 
 ```python
-result = spark_fs.boruta(train, "target", features, max_iter=30)
+result = spark_fs.boruta(
+    train_df=train,
+    target_col='target',
+    feature_cols=features,
+    df=None,
+    model='random_forest',
+    model_params=None,
+    n_estimators=100,
+    max_iter=30,
+    perc=100,
+    alpha=0.05,
+    two_step=True,
+    random_state=42,
+)
 print(result.selected_features)
 ```
