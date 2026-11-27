@@ -1,4 +1,4 @@
-"""Pandas-native feature selection and backward-compatible OOT RFE.
+"""Pandas-native feature selection and RFE with OOT evaluation.
 
 Usage, method algorithms, parameters, and examples:
 https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection.md
@@ -21,7 +21,6 @@ from ._pandas_statistics import (
     mutual_information,
 )
 from ._pandas_wrappers import boruta, rfecv, sequential_selection, stability_selection
-from ._selection import resolve_frame
 
 __all__ = [
     "anova",
@@ -46,12 +45,11 @@ __all__ = [
 def rfe(
     run_name,
     target_col,
-    train_df,
-    oot_df=None,
+    df_train,
+    df_oot,
     feature_cols=None,
     model="logistic_regression",
     *,
-    df_oot=None,
     step=1,
     n_feat_final=1,
     model_params=None,
@@ -79,21 +77,20 @@ def rfe(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.rfe(
-            "demo", "target", train_df, oot_df, ["income", "age"], n_feat_final=1
+            "demo", "target", df_train, df_oot, ["income", "age"], n_feat_final=1
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/rfe.md
     """
-    oot_df = resolve_frame(oot_df, df_oot, "oot_df", "df_oot")
     return run_rfe(
         train_model,
         run_name,
         target_col,
         feature_cols,
-        train_df,
-        oot_df,
+        df_train,
+        df_oot,
         model,
         step,
         n_feat_final,

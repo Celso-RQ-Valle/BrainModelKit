@@ -19,7 +19,6 @@ from ._selection import (
     integer,
     number,
     ranked,
-    resolve_frame,
 )
 
 
@@ -45,10 +44,9 @@ def supervised(
 
 
 def correlation_filter(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     threshold: float = 0.9,
     method: str = "pearson",
 ) -> SelectionResult:
@@ -59,32 +57,30 @@ def correlation_filter(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.correlation_filter(
-            train_df, feature_cols=["income", "age"], threshold=0.9
+            df, feature_cols=["income", "age"], threshold=0.9
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/correlation_filter.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
+    features = columns(df, feature_cols)
     number(threshold, "threshold", maximum=1)
     if method not in ("pearson", "spearman"):
         raise ValueError("method must be pearson or spearman")
-    numeric(train_df, features)
-    if len(train_df) < 2:
+    numeric(df, features)
+    if len(df) < 2:
         raise ValueError("Correlation requires at least two rows")
     return correlation_result(
-        features, train_df[features].corr(method=method).to_numpy(), threshold, method
+        features, df[features].corr(method=method).to_numpy(), threshold, method
     )
 
 
 def mutual_information(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     threshold: float | None = None,
     top_k: int | None = None,
     random_state: int = 42,
@@ -98,19 +94,18 @@ def mutual_information(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.mutual_information(
-            train_df, "target", ["income", "age"], top_k=1
+            df, "target", ["income", "age"], top_k=1
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/mutual_information.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
+    features = supervised(df, target_col, feature_cols)
     integer(n_neighbors, "n_neighbors")
     values = mutual_info_classif(
-        train_df[features],
-        train_df[target_col],
+        df[features],
+        df[target_col],
         discrete_features=discrete_features,
         n_neighbors=n_neighbors,
         random_state=random_state,
@@ -123,11 +118,10 @@ def mutual_information(
 
 
 def chi_square(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     max_p_value: float | None = 0.05,
     top_k: int | None = None,
 ) -> SelectionResult:
@@ -138,27 +132,26 @@ def chi_square(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.chi_square(
-            train_df, "target", ["count", "indicator"], max_p_value=0.05
+            df, "target", ["count", "indicator"], max_p_value=0.05
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/chi_square.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
-    x = train_df[features].to_numpy(dtype=float)
+    features = supervised(df, target_col, feature_cols)
+    x = df[features].to_numpy(dtype=float)
     if (x < 0).any() or (x != np.floor(x)).any():
         raise ValueError(
             "Chi-Square requires nonnegative integer counts or indicators; "
             "bin/encode continuous inputs"
         )
-    statistic, p_values = chi2(x, train_df[target_col])
+    statistic, p_values = chi2(x, df[target_col])
     result = test_result(
         features, statistic, p_values, "statistic", "chi_square", max_p_value, top_k
     )
     for row in result.feature_table:
-        row["selected"] = row["selected"] and train_df[row["feature"]].nunique() > 1
+        row["selected"] = row["selected"] and df[row["feature"]].nunique() > 1
     return result
 
 
@@ -189,11 +182,10 @@ def test_result(
 
 
 def anova(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     max_p_value: float | None = 0.05,
     top_k: int | None = None,
 ) -> SelectionResult:
@@ -204,29 +196,27 @@ def anova(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.anova(
-            train_df, "target", ["income", "age"], max_p_value=0.05
+            df, "target", ["income", "age"], max_p_value=0.05
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/anova.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
-    if len(train_df) <= train_df[target_col].nunique():
+    features = supervised(df, target_col, feature_cols)
+    if len(df) <= df[target_col].nunique():
         raise ValueError("ANOVA requires residual degrees of freedom")
-    values, p_values = f_classif(train_df[features], train_df[target_col])
+    values, p_values = f_classif(df[features], df[target_col])
     return test_result(
         features, values, p_values, "f_statistic", "anova", max_p_value, top_k
     )
 
 
 def information_value(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     n_bins: int = 10,
     min_iv: float | None = None,
     smoothing: float = 0.5,
@@ -239,16 +229,15 @@ def information_value(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.information_value(
-            train_df, "target", ["income", "age"], min_iv=0.02
+            df, "target", ["income", "age"], min_iv=0.02
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/information_value.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
     features = supervised(
-        train_df, target_col, feature_cols, binary=True, numeric_features=False
+        df, target_col, feature_cols, binary=True, numeric_features=False
     )
     integer(n_bins, "n_bins", 2)
     number(smoothing, "smoothing")
@@ -258,10 +247,10 @@ def information_value(
         raise ValueError("binning must be quantile or uniform")
     rows, details, edges_by_feature = [], [], {}
     for f in features:
-        series = train_df[f]
+        series = df[f]
         edges = []
         if pd.api.types.is_numeric_dtype(series):
-            numeric(train_df, [f], allow_missing=True)
+            numeric(df, [f], allow_missing=True)
             valid = series.dropna().astype(float)
             if len(valid) and valid.nunique() > 1:
                 edges = (
@@ -275,23 +264,23 @@ def information_value(
                 np.searchsorted(
                     edges, series.fillna(0).to_numpy(dtype=float), side="left"
                 ),
-                index=train_df.index,
+                index=df.index,
             )
             codes = codes.where(series.notna(), -1)
         else:
-            codes = pd.Series(pd.factorize(series, sort=False)[0], index=train_df.index)
+            codes = pd.Series(pd.factorize(series, sort=False)[0], index=df.index)
         edges_by_feature[f] = edges
         frame = pd.DataFrame(
-            {"bin": codes.to_numpy(), "event": train_df[target_col].to_numpy()}
+            {"bin": codes.to_numpy(), "event": df[target_col].to_numpy()}
         )
         counts = frame.groupby("bin", sort=True)["event"].agg(["sum", "count"])
         k = len(counts)
-        total_event = float(train_df[target_col].sum())
+        total_event = float(df[target_col].sum())
         iv = 0.0
         for code, row in counts.iterrows():
             event, non_event = float(row["sum"]), float(row["count"] - row["sum"])
             de = (event + smoothing) / (total_event + smoothing * k)
-            dn = (non_event + smoothing) / (len(train_df) - total_event + smoothing * k)
+            dn = (non_event + smoothing) / (len(df) - total_event + smoothing * k)
             woe = float(np.log(de / dn))
             contribution = (de - dn) * woe
             label = (

@@ -94,11 +94,10 @@ unsuitable importance measures, or insufficient independent observations.
 
 ```python
 def boruta(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     model="random_forest",
     model_params=None,
     n_estimators=100,
@@ -114,12 +113,10 @@ def boruta(
 
 ```python
 def boruta(
-    train_df=None,
+    df_train,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
-    oot_df=None,
     df_oot=None,
     df_scoring=None,
     run_name="feature_selection",
@@ -133,7 +130,7 @@ def boruta(
 ): ...
 ```
 
-Pandas additionally accepts optional `oot_df` (alias `df_oot`), `df_scoring`,
+Pandas additionally accepts optional `df_oot`, `df_scoring`,
 and `run_name`. They control final selected-feature evaluation, not shadow tests.
 See [evaluation outputs](../feature_selection.md#evaluation-outputs). Spark accepts
 the selection arguments shown above and returns diagnostics without a final fit.
@@ -146,10 +143,9 @@ Use the [Spark setup](spark.md#example-data), then:
 
 ```python
 result = fs.boruta(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     model="random_forest",  # Estimator used to fit the candidate features.
     model_params={"maxDepth": 4},  # Estimator settings.
     n_estimators=30,  # Number of trees used to compare original and shadow features.
@@ -163,7 +159,7 @@ print(result.feature_table)
 print(result.history[-1]["shadow_threshold"])
 ```
 
-`train_df` (alias `df`) supplies nonempty training rows; `target_col` must contain
+`df` (Spark) or `df_train` (pandas) supplies nonempty training rows; `target_col` must contain
 both 0 and 1. `feature_cols` must be an explicit nonempty list of unique, finite
 numeric columns excluding the target. `model='random_forest'` is Spark's only
 supported Boruta model. `model_params` uses Spark names; set tree count with the
@@ -198,12 +194,10 @@ train = pd.DataFrame(
     }
 )
 result = boruta(
-    train_df=train,  # Training rows used to fit the selector.
+    df_train=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=["signal", "noise"],  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     model="random_forest",  # Estimator used to fit the candidate features.

@@ -17,11 +17,10 @@ the signatures for backend-specific arguments; they are not interchangeable.
 
 ```python
 def anova(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     max_p_value=0.05,
     top_k=None,
 ): ...
@@ -31,11 +30,10 @@ def anova(
 
 ```python
 def anova(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     max_p_value=0.05,
     top_k=None,
 ): ...
@@ -43,17 +41,14 @@ def anova(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
 | `max_p_value` | Inclusive unadjusted p-value cutoff in [0,1], or None to disable. Undefined tests are rejected. |
 | `top_k` | Optional positive integer rank limit no larger than candidate count. Intersects other gates; ties favor input order. |
 
@@ -85,10 +80,9 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 ```python
 result = fs.anova(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
     top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
@@ -109,10 +103,9 @@ comparable class variances.
 from brainmodelkit.feature_selection.pandas import anova
 
 result = anova(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
     top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )

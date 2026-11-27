@@ -18,10 +18,10 @@ from sklearn.tree import DecisionTreeClassifier
 from brainmodelkit.training._common import importance_records
 from brainmodelkit.training.pandas import train_model
 
-from ._evaluation import evaluation_frame, finalize_selection
+from ._evaluation import finalize_selection, validate_scoring_frame
 from ._pandas_evaluation import validate_evaluation
 from ._pandas_statistics import supervised
-from ._selection import SelectionResult, number, ranked, resolve_frame
+from ._selection import SelectionResult, number, ranked
 
 
 def estimator(
@@ -47,12 +47,10 @@ def estimator(
 
 
 def feature_importance_selection(
-    train_df: pd.DataFrame | None = None,
+    df_train: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
-    oot_df: pd.DataFrame | None = None,
     df_oot: pd.DataFrame | None = None,
     df_scoring: pd.DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -69,19 +67,18 @@ def feature_importance_selection(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.feature_importance_selection(
-            train_df, "target", ["income", "age"], top_k=1
+            df_train, "target", ["income", "age"], top_k=1
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/feature_importance_selection.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
-    features = supervised(train_df, target_col, feature_cols)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
+    features = supervised(df_train, target_col, feature_cols)
     fitted = estimator(model, model_params, random_state).fit(
-        train_df[features], train_df[target_col]
+        df_train[features], df_train[target_col]
     )
     values = getattr(fitted, "feature_importances_", None)
     coefficients = getattr(fitted, "coef_", None)
@@ -107,8 +104,8 @@ def feature_importance_selection(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=features,
         model=fitted,
@@ -118,12 +115,10 @@ def feature_importance_selection(
 
 
 def l1_selection(
-    train_df: pd.DataFrame | None = None,
+    df_train: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
-    oot_df: pd.DataFrame | None = None,
     df_oot: pd.DataFrame | None = None,
     df_scoring: pd.DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -139,23 +134,22 @@ def l1_selection(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.l1_selection(
-            train_df, "target", ["income", "age"]
+            df_train, "target", ["income", "age"]
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/l1_selection.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
     number(C, "C")
     number(coefficient_tolerance, "coefficient_tolerance")
     if C == 0:
         raise ValueError("C must be > 0")
-    supervised(train_df, target_col, feature_cols, binary=True)
+    supervised(df_train, target_col, feature_cols, binary=True)
     result = feature_importance_selection(
-        train_df,
+        df_train,
         target_col,
         feature_cols,
         model=LogisticRegression(
@@ -173,8 +167,8 @@ def l1_selection(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=feature_cols,
         model=result.model,

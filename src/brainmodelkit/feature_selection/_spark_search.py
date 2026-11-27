@@ -13,7 +13,7 @@ from pyspark.sql.types import LongType, StructField, StructType
 
 from brainmodelkit.model_selection.pyspark import cross_validate
 
-from ._selection import SelectionResult, integer, ranked, resolve_frame
+from ._selection import SelectionResult, integer, ranked
 from ._spark_model import feature_importance_selection
 from ._spark_quality import col
 from ._spark_statistics import supervised, vector_frame
@@ -166,11 +166,10 @@ def path(frame, target, features, model, params, seed, step, minimum):
 
 
 def rfecv(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     model="logistic_regression",
     model_params=None,
     scoring="roc_auc",
@@ -187,15 +186,14 @@ def rfecv(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.rfecv(
-            train_df, "target", ["income", "age"], cv=3
+            df, "target", ["income", "age"], cv=3
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/rfecv.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
+    features = supervised(df, target_col, feature_cols)
     integer(step, "step")
     integer(min_features_to_select, "min_features_to_select")
     if min_features_to_select > len(features):
@@ -205,7 +203,7 @@ def rfecv(
     scores = {}
     subsets = []
     for subset, _ in path(
-        train_df,
+        df,
         target_col,
         features,
         model,
@@ -216,7 +214,7 @@ def rfecv(
     ):
         subsets.append(subset)
         cv_result = cross_validate(
-            train_df,
+            df,
             target_col,
             subset,
             model,
@@ -230,7 +228,7 @@ def rfecv(
     best = max(sorted(scores), key=lambda n: np.mean(scores[n]))
     history = []
     for subset, fitted in path(  # noqa: B007 - final fit is returned below
-        train_df,
+        df,
         target_col,
         features,
         model,
@@ -270,11 +268,10 @@ def rfecv(
 
 
 def sequential_selection(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     model="logistic_regression",
     model_params=None,
     direction="forward",
@@ -291,15 +288,14 @@ def sequential_selection(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.sequential_selection(
-            train_df, "target", ["income", "age"], cv=3
+            df, "target", ["income", "age"], cv=3
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/sequential_selection.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
+    features = supervised(df, target_col, feature_cols)
     integer(n_features_to_select, "n_features_to_select")
     if n_features_to_select >= len(features):
         raise ValueError("n_features_to_select must be smaller than feature count")
@@ -323,7 +319,7 @@ def sequential_selection(
                 else [f for f in current if f != feature]
             )
             cv_result = cross_validate(
-                train_df,
+                df,
                 target_col,
                 subset,
                 model,
@@ -345,7 +341,7 @@ def sequential_selection(
         winner = max(candidates, key=lambda entry: entry["mean_test_score"])
         current = winner["features"]
         history.append({**winner, "candidates": candidates})
-    fitted = fit(train_df, target_col, current, model, model_params, random_state)
+    fitted = fit(df, target_col, current, model, model_params, random_state)
     return SelectionResult(
         [{"feature": f, "selected": f in current} for f in features],
         "sequential_selection",

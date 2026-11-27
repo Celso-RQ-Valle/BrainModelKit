@@ -13,10 +13,9 @@ See the [complete runnable workflows](../../examples/feature_selection/README.md
 
 ```python
 def correlation_filter(
-    train_df=None,
+    df,
     feature_cols=None,
     *,
-    df=None,
     threshold=0.9,
     method="pearson",
     max_features=256,
@@ -27,22 +26,19 @@ def correlation_filter(
 
 ```python
 def correlation_filter(
-    train_df=None, feature_cols=None, *, df=None, threshold=0.9, method="pearson"
+    df, feature_cols=None, *, threshold=0.9, method="pearson"
 ): ...
 ```
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
 | `threshold` | Inclusive score cutoff; None disables it. For correlation, reject at absolute correlation >= threshold in [0,1]. |
 | `method` | Algorithm variant: correlation accepts pearson/spearman; stability accepts feature_importance/l1. |
 | `max_features` | Spark correlation's positive feature-count budget for the dense driver-side correlation matrix. |
@@ -75,9 +71,8 @@ or `"spearman"`; both use absolute correlation for filtering.
 
 ```python
 result = fs.correlation_filter(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
     method="pearson",  # Correlation measure used to compare feature pairs.
     max_features=256,  # Limit the number of columns in the driver-side correlation matrix.
@@ -91,9 +86,8 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import correlation_filter
 
 result = correlation_filter(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
     method="spearman",  # Correlation measure used to compare feature pairs.
 )

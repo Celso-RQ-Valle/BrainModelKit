@@ -1,6 +1,8 @@
 """RFE elimination, validation and model integration tests."""
 
+import inspect
 import json
+from importlib import import_module
 from pathlib import Path
 
 import pandas as pd
@@ -11,6 +13,30 @@ from sklearn.dummy import DummyClassifier
 from brainmodelkit.feature_selection._common import run_rfe
 from brainmodelkit.feature_selection.pandas import rfe
 from brainmodelkit.training import TrainingResult
+
+
+@pytest.mark.parametrize("backend", ["pandas", "pyspark"])
+def test_public_dataframe_parameters(backend):
+    selectors = import_module(f"brainmodelkit.feature_selection.{backend}")
+    with_oot = {"feature_importance_selection", "l1_selection", "rfe"}
+    if backend == "pandas":
+        with_oot.update(
+            {"boruta", "rfecv", "sequential_selection", "stability_selection"}
+        )
+
+    for method in selectors.__all__:
+        params = inspect.signature(getattr(selectors, method)).parameters
+        expected = {"df_train", "df_oot"} if method in with_oot else {"df"}
+        assert (
+            params.keys() & {"df", "df_train", "df_oot", "train_df", "oot_df"}
+            == expected
+        ), method
+        primary = "df_train" if method in with_oot else "df"
+        assert params[primary].default is inspect.Parameter.empty
+        if method in with_oot:
+            assert params["df_oot"].default is (
+                inspect.Parameter.empty if method == "rfe" else None
+            )
 
 
 def test_elimination_order_and_exact_final_count(tmp_path):

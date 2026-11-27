@@ -18,17 +18,16 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from ._selection import SelectionResult, integer, number, ranked, resolve_frame
+from ._selection import SelectionResult, integer, number, ranked
 from ._spark_quality import col, numeric, present
 from ._spark_statistics import supervised
 
 
 def information_value(
-    train_df: DataFrame | None = None,
+    df: DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
     n_bins: int = 10,
     min_iv: float | None = None,
     smoothing: float = 0.5,
@@ -42,15 +41,14 @@ def information_value(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.information_value(
-            train_df, "target", ["income", "age"], min_iv=0.02
+            df, "target", ["income", "age"], min_iv=0.02
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/information_value.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols, numeric_features=False)
+    features = supervised(df, target_col, feature_cols, numeric_features=False)
     integer(n_bins, "n_bins", 2)
     number(smoothing, "smoothing")
     number(relative_error, "relative_error", maximum=1)
@@ -60,19 +58,19 @@ def information_value(
         raise ValueError("binning must be quantile or uniform")
     rows, tables, edges_by_feature = [], [], {}
     for f in features:
-        is_numeric = isinstance(train_df.schema[f].dataType, NumericType)
+        is_numeric = isinstance(df.schema[f].dataType, NumericType)
         if not isinstance(
-            train_df.schema[f].dataType,
+            df.schema[f].dataType,
             (NumericType, BooleanType, DateType, StringType, TimestampType, NullType),
         ):
             raise ValueError("IV requires numeric or scalar categorical features")
-        base = train_df.select(
+        base = df.select(
             col(target_col).cast("double").alias("event"),
-            F.when(present(train_df, f), col(f)).alias("value"),
+            F.when(present(df, f), col(f)).alias("value"),
         )
         edges = []
         if is_numeric:
-            numeric(train_df, [f], allow_missing=True)
+            numeric(df, [f], allow_missing=True)
             base = base.withColumn("value", col("value").cast("double"))
             if binning == "quantile":
                 edges = sorted(

@@ -19,19 +19,17 @@ from pyspark.sql import DataFrame
 from brainmodelkit.training._common import importance_records
 from brainmodelkit.training.pyspark import train_model
 
-from ._evaluation import evaluation_frame, finalize_selection
-from ._selection import SelectionResult, number, ranked, resolve_frame
+from ._evaluation import finalize_selection, validate_scoring_frame
+from ._selection import SelectionResult, number, ranked
 from ._spark_evaluation import validate_evaluation
 from ._spark_statistics import supervised, vector_frame
 
 
 def feature_importance_selection(
-    train_df: DataFrame | None = None,
+    df_train: DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
-    oot_df: DataFrame | None = None,
     df_oot: DataFrame | None = None,
     df_scoring: DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -49,17 +47,16 @@ def feature_importance_selection(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.feature_importance_selection(
-            train_df, "target", ["income", "age"], top_k=1
+            df_train, "target", ["income", "age"], top_k=1
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/feature_importance_selection.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
-    features = supervised(train_df, target_col, feature_cols)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
+    features = supervised(df_train, target_col, feature_cols)
     choices = {
         "logistic_regression": LogisticRegression,
         "decision_tree": DecisionTreeClassifier,
@@ -87,7 +84,7 @@ def feature_importance_selection(
     fitted_estimator.setParams(**(model_params or {}))
     fitted_estimator.set(fitted_estimator.getParam("featuresCol"), "features")
     fitted_estimator.set(fitted_estimator.getParam("labelCol"), "label")
-    fitted = fitted_estimator.fit(vector_frame(train_df, features, target_col))
+    fitted = fitted_estimator.fit(vector_frame(df_train, features, target_col))
     values = getattr(fitted, "featureImportances", None)
     coefficients = getattr(fitted, "coefficients", None)
     if values is None:
@@ -112,8 +109,8 @@ def feature_importance_selection(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=features,
         model=fitted_estimator,
@@ -124,12 +121,10 @@ def feature_importance_selection(
 
 
 def l1_selection(
-    train_df: DataFrame | None = None,
+    df_train: DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
-    oot_df: DataFrame | None = None,
     df_oot: DataFrame | None = None,
     df_scoring: DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -145,20 +140,19 @@ def l1_selection(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.l1_selection(
-            train_df, "target", ["income", "age"]
+            df_train, "target", ["income", "age"]
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/l1_selection.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
     number(reg_param, "reg_param")
     number(coefficient_tolerance, "coefficient_tolerance")
     result = feature_importance_selection(
-        train_df,
+        df_train,
         target_col,
         feature_cols,
         model="logistic_regression",
@@ -177,8 +171,8 @@ def l1_selection(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=feature_cols,
         model=LogisticRegression(

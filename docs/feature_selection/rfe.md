@@ -15,12 +15,11 @@ See the [complete runnable workflows](../../examples/feature_selection/README.md
 def rfe(
     run_name,
     target_col,
-    train_df,
-    oot_df=None,
+    df_train,
+    df_oot,
     feature_cols=None,
     model="logistic_regression",
     *,
-    df_oot=None,
     step=1,
     n_feat_final=1,
     model_params=None,
@@ -38,12 +37,11 @@ def rfe(
 def rfe(
     run_name,
     target_col,
-    train_df,
-    oot_df=None,
+    df_train,
+    df_oot,
     feature_cols=None,
     model="logistic_regression",
     *,
-    df_oot=None,
     step=1,
     n_feat_final=1,
     model_params=None,
@@ -56,8 +54,6 @@ def rfe(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
@@ -65,11 +61,10 @@ at call time. Unsupported backend keywords raise TypeError.
 | --- | --- |
 | `run_name` | Label used for final training outputs or RFE iteration reports. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
-| `oot_df` | Optional labeled OOT DataFrame for supported importance/wrapper final evaluation; required by historical RFE. It never chooses the feature subset. |
+| `df_train` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df_oot` | Required labeled validation frame used to report metrics for each fitted subset. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
 | `model` | Named or compatible native estimator; permutation requires an already fitted model. Model restrictions and return schemas are explained below. |
-| `df_oot` | Alias for oot_df. Supplying distinct frames under both spellings raises ValueError. |
 | `step` | Positive integer number of weakest features removed per RFE/RFECV step; final removal is clipped to the minimum. |
 | `n_feat_final` | RFE's required final count, integer between 1 and initial feature count. OOT metrics do not optimize this count. |
 | `model_params` | Optional dictionary of native estimator parameters: Spark camelCase, pandas snake_case. Custom estimators are copied/cloned. |
@@ -108,11 +103,10 @@ and repeat until `n_feat_final` remain. The final subset is fitted and evaluated
 result = fs.rfe(
     run_name="example",  # Label used to identify the training run and its outputs.
     target_col="target",  # Column containing the class label.
-    train_df=train,  # Training rows used to fit the selector.
-    oot_df=validation,  # Held-out rows used to evaluate the selected model.
+    df_train=train,  # Training rows used to fit the selector.
+    df_oot=validation,  # Held-out rows used to evaluate the selected model.
     feature_cols=features,  # Ordered candidate columns to evaluate.
     model="logistic_regression",  # Estimator used to fit the candidate features.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
     step=1,  # Number of features removed in each elimination round.
     n_feat_final=1,  # Number of features to retain at the end of elimination.
     model_params=None,  # Estimator settings.
@@ -133,11 +127,10 @@ from brainmodelkit.feature_selection.pandas import rfe
 result = rfe(
     run_name="credit_rfe",  # Label used to identify the training run and its outputs.
     target_col="target",  # Column containing the class label.
-    train_df=train_df,  # Training rows used to fit the selector.
-    oot_df=oot_df,  # Held-out rows used to evaluate the selected model.
+    df_train=train_df,  # Training rows used to fit the selector.
+    df_oot=oot_df,  # Held-out rows used to evaluate the selected model.
     feature_cols=features,  # Ordered candidate columns to evaluate.
     model="random_forest",  # Estimator used to fit the candidate features.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
     step=2,  # Number of features removed in each elimination round.
     n_feat_final=3,  # Number of features to retain at the end of elimination.
     model_params={"n_estimators": 50, "random_state": 42},  # Estimator settings.
@@ -150,7 +143,7 @@ print(result.history)
 print(result.training_result.metrics)
 ```
 
-Existing parameters include `run_name`, `target_col`, `train_df`, `oot_df`,
+Existing parameters include `run_name`, `target_col`, `df_train`, `df_oot`,
 `feature_cols`, `model`, `model_params`, `step`, `n_feat_final`, `output_dir`,
 `df_scoring`, `mlflow_logging`, and `signature`; Spark also has `n_tiles`.
 Omitting features selects `feat_` columns. `step` and final count are positive

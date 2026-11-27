@@ -7,14 +7,12 @@ https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from ._selection import SelectionResult, resolve_frame
+from ._selection import SelectionResult
 
 
-def evaluation_frame(oot_df: Any, df_oot: Any, df_scoring: Any) -> Any:
-    oot_df = resolve_frame(oot_df, df_oot, "oot_df", "df_oot", required=False)
-    if df_scoring is not None and oot_df is None:
-        raise ValueError("df_scoring requires oot_df for final model evaluation")
-    return oot_df
+def validate_scoring_frame(df_oot: Any, df_scoring: Any) -> None:
+    if df_scoring is not None and df_oot is None:
+        raise ValueError("df_scoring requires df_oot for final model evaluation")
 
 
 def finalize_selection(

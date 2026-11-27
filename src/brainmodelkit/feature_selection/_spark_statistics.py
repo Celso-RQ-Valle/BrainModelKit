@@ -20,7 +20,6 @@ from ._selection import (
     integer,
     number,
     ranked,
-    resolve_frame,
 )
 from ._spark_quality import col, numeric, present
 
@@ -62,10 +61,9 @@ def vector_frame(
 
 
 def correlation_filter(
-    train_df: DataFrame | None = None,
+    df: DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
     threshold: float = 0.9,
     method: str = "pearson",
     max_features: int = 256,
@@ -77,15 +75,14 @@ def correlation_filter(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.correlation_filter(
-            train_df, feature_cols=["income", "age"], threshold=0.9
+            df, feature_cols=["income", "age"], threshold=0.9
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/correlation_filter.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
+    features = columns(df, feature_cols)
     number(threshold, "threshold", maximum=1)
     integer(max_features, "max_features")
     if len(features) > max_features:
@@ -95,20 +92,19 @@ def correlation_filter(
         )
     if method not in ("pearson", "spearman"):
         raise ValueError("method must be pearson or spearman")
-    numeric(train_df, features)
-    if train_df.limit(2).count() < 2:
+    numeric(df, features)
+    if df.limit(2).count() < 2:
         raise ValueError("Correlation requires at least two rows")
-    frame = vector_frame(train_df, features)
+    frame = vector_frame(df, features)
     matrix = Correlation.corr(frame, "features", method).first()[0].toArray()
     return correlation_result(features, matrix, threshold, method)
 
 
 def chi_square(
-    train_df: DataFrame | None = None,
+    df: DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
     max_p_value: float | None = 0.05,
     top_k: int | None = None,
     max_categories: int = 1000,
@@ -122,19 +118,18 @@ def chi_square(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.chi_square(
-            train_df, "target", ["count", "indicator"], max_p_value=0.05
+            df, "target", ["count", "indicator"], max_p_value=0.05
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/chi_square.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
+    features = supervised(df, target_col, feature_cols)
     integer(max_categories, "max_categories", 2)
     if max_p_value is not None:
         number(max_p_value, "max_p_value", maximum=1)
-    counts = train_df.agg(
+    counts = df.agg(
         *[F.countDistinct(col(f)).alias(f"v{i}") for i, f in enumerate(features)]
     ).first()
     if any(v > max_categories for v in counts):
@@ -142,10 +137,10 @@ def chi_square(
             "Chi-Square feature exceeds max_categories; bin/encode explicitly"
         )
     for f in features:
-        if train_df.filter((col(f) < 0) | (col(f) != F.floor(col(f)))).limit(1).count():
+        if df.filter((col(f) < 0) | (col(f) != F.floor(col(f)))).limit(1).count():
             raise ValueError("Chi-Square requires nonnegative integer category codes")
     summary = ChiSquareTest.test(
-        vector_frame(train_df, features, target_col), "features", "label"
+        vector_frame(df, features, target_col), "features", "label"
     ).first()
     rows = [
         {

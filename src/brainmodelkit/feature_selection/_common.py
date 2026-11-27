@@ -74,6 +74,8 @@ def run_rfe(
     signature,
     **backend_options,
 ):
+    if oot_df is None:
+        raise ValueError("df_oot is required for RFE")
     for name, value in (("step", step), ("n_feat_final", n_feat_final)):
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer")

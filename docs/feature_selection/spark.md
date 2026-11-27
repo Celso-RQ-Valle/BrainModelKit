@@ -18,7 +18,7 @@ Select on development data and keep the final test set untouched. All new method
 return `SelectionResult`; `selected_features` always preserves the input order.
 An empty selection is valid. Check it before training a downstream classifier.
 
-The new wrappers accept selection data only; they do not take `oot_df`,
+The new wrappers accept selection data only; they do not take `df_oot`,
 `df_scoring`, or persistence arguments. Train/evaluate the resulting list using
 `brainmodelkit.training.pyspark.train_model`. Existing importance/L1 methods still
 support optional final OOT evaluation, and existing RFE writes iteration reports.

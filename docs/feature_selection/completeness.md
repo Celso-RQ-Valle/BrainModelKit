@@ -13,10 +13,9 @@ See the [complete runnable workflows](../../examples/feature_selection/README.md
 
 ```python
 def completeness(
-    train_df=None,
+    df,
     feature_cols=None,
     *,
-    df=None,
     min_completeness=0.7,
     group_by=None,
     require_all_groups=False,
@@ -27,10 +26,9 @@ def completeness(
 
 ```python
 def completeness(
-    train_df=None,
+    df,
     feature_cols=None,
     *,
-    df=None,
     min_completeness=0.7,
     group_by=None,
     require_all_groups=False,
@@ -39,16 +37,13 @@ def completeness(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
 | `min_completeness` | Inclusive non-missing fraction cutoff in [0,1]. |
 | `group_by` | List of grouping columns, including for one column. Use None for the whole frame. Observed null groups are retained. |
 | `require_all_groups` | When True, require global and every observed group's completeness to pass; requires group_by. |
@@ -89,9 +84,8 @@ passes only at an explicitly chosen zero threshold.
 
 ```python
 result = fs.completeness(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
     group_by=["fold"],  # Report completeness for each observed group.
     require_all_groups=False,  # Require the completeness cutoff in every group when enabled.
@@ -105,9 +99,8 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import completeness
 
 result = completeness(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_completeness=0.7,  # Keep columns with observed values in at least this fraction of rows.
     group_by=["reference_date"],  # Report completeness for each observed group.
     require_all_groups=False,  # Require the completeness cutoff in every group when enabled.

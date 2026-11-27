@@ -9,7 +9,7 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from ._selection import SelectionResult, columns, groups, integer, number, resolve_frame
+from ._selection import SelectionResult, columns, groups, integer, number
 
 
 def numeric(
@@ -35,10 +35,9 @@ def nonempty(df: pd.DataFrame) -> None:
 
 
 def completeness(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     min_completeness: float = 0.7,
     group_by: str | Sequence[str] | None = None,
     require_all_groups: bool = False,
@@ -50,34 +49,31 @@ def completeness(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.completeness(
-            train_df, feature_cols=["income", "age"], min_completeness=0.7
+            df, feature_cols=["income", "age"], min_completeness=0.7
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/completeness.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
-    names = groups(train_df, group_by)
+    features = columns(df, feature_cols)
+    names = groups(df, group_by)
     number(min_completeness, "min_completeness", maximum=1)
-    nonempty(train_df)
+    nonempty(df)
     if require_all_groups and not names:
         raise ValueError("require_all_groups requires group_by")
     rows = [
         {
             "feature": f,
-            "completeness": float(train_df[f].notna().mean()),
-            "missing_rate": float(train_df[f].isna().mean()),
-            "selected": bool(train_df[f].notna().mean() >= min_completeness),
+            "completeness": float(df[f].notna().mean()),
+            "missing_rate": float(df[f].isna().mean()),
+            "selected": bool(df[f].notna().mean() >= min_completeness),
         }
         for f in features
     ]
     grouped = []
     if names:
-        for key, frame in train_df.groupby(
-            names, dropna=False, observed=True, sort=False
-        ):
+        for key, frame in df.groupby(names, dropna=False, observed=True, sort=False):
             keys = key if isinstance(key, tuple) else (key,)
             for row in rows:
                 value = float(frame[row["feature"]].notna().mean())
@@ -104,10 +100,9 @@ def completeness(
 
 
 def variance_filter(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     min_variance: float = 0.0,
 ) -> SelectionResult:
     """Select population variance strictly above ``min_variance``.
@@ -117,25 +112,20 @@ def variance_filter(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.variance_filter(
-            train_df, feature_cols=["income", "age"]
+            df, feature_cols=["income", "age"]
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/variance_filter.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
+    features = columns(df, feature_cols)
     number(min_variance, "min_variance")
-    nonempty(train_df)
-    numeric(train_df, features, allow_missing=True)
+    nonempty(df)
+    numeric(df, features, allow_missing=True)
     rows = []
     for f in features:
-        value = (
-            float(train_df[f].var(ddof=0))
-            if train_df[f].notna().any()
-            else float("nan")
-        )
+        value = float(df[f].var(ddof=0)) if df[f].notna().any() else float("nan")
         rows.append(
             {"feature": f, "variance": value, "selected": bool(value > min_variance)}
         )
@@ -143,10 +133,9 @@ def variance_filter(
 
 
 def cardinality(
-    train_df: pd.DataFrame | None = None,
+    df: pd.DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
     min_unique: int = 2,
     max_unique: int | None = None,
     max_unique_ratio: float | None = None,
@@ -158,25 +147,24 @@ def cardinality(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.cardinality(
-            train_df, feature_cols=["category"], max_unique=100
+            df, feature_cols=["category"], max_unique=100
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/cardinality.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
+    features = columns(df, feature_cols)
     integer(min_unique, "min_unique", 0)
     if max_unique is not None:
         integer(max_unique, "max_unique", min_unique)
     if max_unique_ratio is not None:
         number(max_unique_ratio, "max_unique_ratio", maximum=1)
-    nonempty(train_df)
+    nonempty(df)
     rows = []
     for f in features:
-        count = int(train_df[f].nunique(dropna=True))
-        ratio = count / len(train_df)
+        count = int(df[f].nunique(dropna=True))
+        ratio = count / len(df)
         rows.append(
             {
                 "feature": f,

@@ -8,17 +8,16 @@ import math
 
 from pyspark.sql import functions as F
 
-from ._selection import integer, number, ranked, resolve_frame
+from ._selection import integer, number, ranked
 from ._spark_quality import col
 from ._spark_statistics import supervised
 
 
 def mutual_information(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     threshold=None,
     top_k=None,
     discrete_features=False,
@@ -35,15 +34,14 @@ def mutual_information(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.mutual_information(
-            train_df, "target", ["income", "age"], top_k=1
+            df, "target", ["income", "age"], top_k=1
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/mutual_information.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
+    features = supervised(df, target_col, feature_cols)
     integer(n_bins, "n_bins", 2)
     integer(max_categories, "max_categories", 2)
     number(relative_error, "relative_error", maximum=1)
@@ -54,11 +52,9 @@ def mutual_information(
     )
     if len(flags) != len(features) or any(type(v) is not bool for v in flags):
         raise ValueError("discrete_features must be a Boolean or per-feature mask")
-    n = train_df.count()
+    n = df.count()
     labels = (
-        train_df.groupBy(col(target_col).alias("y"))
-        .count()
-        .withColumnRenamed("count", "ny")
+        df.groupBy(col(target_col).alias("y")).count().withColumnRenamed("count", "ny")
     )
     rows, boundaries = [], {}
     for feature, discrete in zip(features, flags, strict=True):
@@ -66,14 +62,14 @@ def mutual_information(
         value = col(feature)
         if discrete:
             if (
-                train_df.select(value).distinct().limit(max_categories + 1).count()
+                df.select(value).distinct().limit(max_categories + 1).count()
                 > max_categories
             ):
                 raise ValueError("Discrete feature exceeds max_categories")
         else:
             edges = sorted(
                 set(
-                    train_df.select(value.alias("v")).approxQuantile(
+                    df.select(value.alias("v")).approxQuantile(
                         "v", [i / n_bins for i in range(1, n_bins)], relative_error
                     )
                 )
@@ -82,7 +78,7 @@ def mutual_information(
             for edge in edges:
                 value = value + F.when(col(feature) > edge, 1).otherwise(0)
         counts = (
-            train_df.select(value.alias("x"), col(target_col).alias("y"))
+            df.select(value.alias("x"), col(target_col).alias("y"))
             .groupBy("x", "y")
             .count()
         )
@@ -113,11 +109,10 @@ def mutual_information(
 
 
 def anova(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     max_p_value=0.05,
     top_k=None,
 ):
@@ -128,7 +123,7 @@ def anova(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.anova(
-            train_df, "target", ["income", "age"], max_p_value=0.05
+            df, "target", ["income", "age"], max_p_value=0.05
         )
         print(result.selected_features)
 
@@ -137,14 +132,13 @@ def anova(
     """
     from scipy.stats import f as f_distribution
 
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = supervised(train_df, target_col, feature_cols)
+    features = supervised(df, target_col, feature_cols)
     if max_p_value is not None:
         number(max_p_value, "max_p_value", maximum=1)
     rows = []
     for feature in features:
         summaries = (
-            train_df.groupBy(col(target_col))
+            df.groupBy(col(target_col))
             .agg(
                 F.count("*").alias("n"),
                 F.avg(col(feature)).alias("mean"),

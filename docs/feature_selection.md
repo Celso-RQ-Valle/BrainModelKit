@@ -15,6 +15,16 @@ separate optional extra. Spark requires a caller-configured Spark session and
 Java installation.
 See [Spark's dependency requirements](https://spark.apache.org/docs/3.5.7/api/python/getting_started/install.html).
 
+Use `df` for selectors that take one frame. For permutation importance, this is
+the held-out frame on which the fitted model is evaluated. Selectors that
+support out-of-time (OOT) evaluation take `df_train` for fitting and `df_oot`
+for validation. RFE requires both frames. Other selectors with OOT support
+can run with `df_train` alone.
+
+When migrating keyword calls, replace `train_df=` with `df=` for single-frame
+selectors. For selectors with OOT support, use `df_train=` for the training
+frame and replace `oot_df=` with `df_oot=`. Positional frame order is unchanged.
+
 Except for the existing RFE, selectors return a lightweight `SelectionResult`:
 
 | Attribute | Meaning |
@@ -86,9 +96,8 @@ Basic usage follows the same pattern for all composable selectors:
 
 ```python
 result = fs.completeness(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
     group_by=["fold"],  # Report completeness for each observed group.
     require_all_groups=False,  # Require the completeness cutoff in every group when enabled.
@@ -102,9 +111,8 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import completeness
 
 result = completeness(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     feature_cols=["income", "age"],  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_completeness=0.7,  # Keep columns with observed values in at least this fraction of rows.
     group_by=["reference_date"],  # Report completeness for each observed group.
     require_all_groups=False,  # Require the completeness cutoff in every group when enabled.
@@ -120,7 +128,7 @@ backward-compatible `RFEResult`; all other selectors return `SelectionResult`.
 ## Evaluation outputs
 
 Importance and L1 in both backends, and Pandas RFECV, sequential, stability, and
-Boruta accept `oot_df` (alias `df_oot`). Selection uses training data only. With a
+Boruta accept `df_oot`. Selection uses training data only. With a
 nonempty selection the final classifier is refitted on selected training columns,
 evaluated on OOT, and optionally scores `df_scoring`. Read `training_result`,
 `metrics`, and predictions from the result; no persistence is requested. If no
@@ -167,9 +175,8 @@ passes only at an explicitly chosen zero threshold.
 
 ```python
 result = fs.completeness(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
     group_by=["fold"],  # Report completeness for each observed group.
     require_all_groups=False,  # Require the completeness cutoff in every group when enabled.
@@ -183,9 +190,8 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import completeness
 
 result = completeness(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_completeness=0.7,  # Keep columns with observed values in at least this fraction of rows.
     group_by=["reference_date"],  # Report completeness for each observed group.
     require_all_groups=False,  # Require the completeness cutoff in every group when enabled.
@@ -220,9 +226,8 @@ undefined variance and are rejected.
 
 ```python
 result = fs.variance_filter(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
 )
 print(result.selected_features)
@@ -234,9 +239,8 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import variance_filter
 
 result = variance_filter(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
 )
 ```
@@ -259,9 +263,8 @@ denominator. Defaults are `min_unique=2`, `max_unique=None`, and
 
 ```python
 result = fs.cardinality(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
     max_unique=None,  # Optional upper limit on distinct nonmissing values.
     max_unique_ratio=None,  # Optional upper limit on distinct nonmissing values divided by total rows.
@@ -275,9 +278,8 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import cardinality
 
 result = cardinality(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
     max_unique=100,  # Optional upper limit on distinct nonmissing values.
     max_unique_ratio=0.5,  # Optional upper limit on distinct nonmissing values divided by total rows.
@@ -304,9 +306,8 @@ or `"spearman"`; both use absolute correlation for filtering.
 
 ```python
 result = fs.correlation_filter(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
     method="pearson",  # Correlation measure used to compare feature pairs.
     max_features=256,  # Limit the number of columns in the driver-side correlation matrix.
@@ -320,9 +321,8 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import correlation_filter
 
 result = correlation_filter(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
     method="spearman",  # Correlation measure used to compare feature pairs.
 )
@@ -356,10 +356,9 @@ univariate dependence, not proof of independence.
 
 ```python
 result = fs.mutual_information(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=None,  # Optional minimum score a feature must reach to qualify.
     top_k=1,  # Optional limit on the number of highest-ranked features retained.
     discrete_features=False,  # Identify discrete inputs. False treats the feature columns as continuous.
@@ -376,10 +375,9 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import mutual_information
 
 result = mutual_information(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=None,  # Optional minimum score a feature must reach to qualify.
     top_k=5,  # Optional limit on the number of highest-ranked features retained.
     random_state=42,  # Seed for reproducible random choices.
@@ -416,10 +414,9 @@ counts = train.select(
     "target", *((F.col(c) > 0).cast("int").alias(c) for c in features)
 )
 result = fs.chi_square(
-    train_df=counts,  # Training rows used to fit the selector.
+    df=counts,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
     top_k=None,  # Optional limit on the number of highest-ranked features retained.
     max_categories=1000,  # Limit distinct levels per discrete feature to bound counting costs.
@@ -433,10 +430,9 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import chi_square
 
 result = chi_square(
-    train_df=counts_df,  # Training rows used to fit the selector.
+    df=counts_df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=count_features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
     top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
@@ -469,10 +465,9 @@ comparable class variances.
 
 ```python
 result = fs.anova(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
     top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
@@ -485,10 +480,9 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import anova
 
 result = anova(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
     top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
@@ -521,10 +515,9 @@ IV = sum((de[b] - dn[b]) * WoE[b])
 
 ```python
 result = fs.information_value(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     n_bins=10,  # Requested number of bins for continuous values.
     min_iv=0.02,  # Minimum information value required to retain a feature.
     smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.
@@ -540,10 +533,9 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import information_value
 
 result = information_value(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     n_bins=10,  # Requested number of bins for continuous values.
     min_iv=0.02,  # Minimum information value required to retain a feature.
     smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.
@@ -594,12 +586,10 @@ in diagnostics. Training/RFE's importance record convention is reused.
 
 ```python
 result = fs.feature_importance_selection(
-    train_df=train,  # Training rows used to fit the selector.
+    df_train=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
@@ -618,12 +608,10 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import feature_importance_selection
 
 result = feature_importance_selection(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     model="random_forest",  # Estimator used to fit the candidate features.
@@ -643,7 +631,7 @@ caller's responsibility. Pandas LightGBM needs its optional extra. Spark LightGB
 requires SynapseML and matching JVM packages configured outside BrainModelKit.
 
 Outputs include `feature`, `importance`, `ranking`, and `selected`, plus `model`.
-Without oot_df, this is selection only. Supplying oot_df refits the selected
+Without `df_oot`, this is selection only. Supplying `df_oot` refits the selected
 features for final OOT evaluation; see [evaluation outputs](#evaluation-outputs). Spark returns the fitted native
 classifier expecting an assembled `features` vector, not a raw-column pipeline.
 Models must expose one finite native importance per feature; arbitrary pipelines
@@ -665,12 +653,10 @@ requires `abs(coefficient) > coefficient_tolerance` (default `1e-8`).
 
 ```python
 result = fs.l1_selection(
-    train_df=train,  # Training rows used to fit the selector.
+    df_train=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
@@ -687,12 +673,10 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import l1_selection
 
 result = l1_selection(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     C=1.0,  # Inverse regularization strength. Smaller values shrink coefficients more.
@@ -782,11 +766,10 @@ and repeat until `n_feat_final` remain. The final subset is fitted and evaluated
 result = fs.rfe(
     run_name="example",  # Label used to identify the training run and its outputs.
     target_col="target",  # Column containing the class label.
-    train_df=train,  # Training rows used to fit the selector.
-    oot_df=validation,  # Held-out rows used to evaluate the selected model.
+    df_train=train,  # Training rows used to fit the selector.
+    df_oot=validation,  # Held-out rows used to evaluate the selected model.
     feature_cols=features,  # Ordered candidate columns to evaluate.
     model="logistic_regression",  # Estimator used to fit the candidate features.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
     step=1,  # Number of features removed in each elimination round.
     n_feat_final=1,  # Number of features to retain at the end of elimination.
     model_params=None,  # Estimator settings.
@@ -807,11 +790,10 @@ from brainmodelkit.feature_selection.pandas import rfe
 result = rfe(
     run_name="credit_rfe",  # Label used to identify the training run and its outputs.
     target_col="target",  # Column containing the class label.
-    train_df=train_df,  # Training rows used to fit the selector.
-    oot_df=oot_df,  # Held-out rows used to evaluate the selected model.
+    df_train=train_df,  # Training rows used to fit the selector.
+    df_oot=oot_df,  # Held-out rows used to evaluate the selected model.
     feature_cols=features,  # Ordered candidate columns to evaluate.
     model="random_forest",  # Estimator used to fit the candidate features.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
     step=2,  # Number of features removed in each elimination round.
     n_feat_final=3,  # Number of features to retain at the end of elimination.
     model_params={"n_estimators": 50, "random_state": 42},  # Estimator settings.
@@ -824,7 +806,7 @@ print(result.history)
 print(result.training_result.metrics)
 ```
 
-Existing parameters include `run_name`, `target_col`, `train_df`, `oot_df`,
+Existing parameters include `run_name`, `target_col`, `df_train`, `df_oot`,
 `feature_cols`, `model`, `model_params`, `step`, `n_feat_final`, `output_dir`,
 `df_scoring`, `mlflow_logging`, and `signature`; Spark also has `n_tiles`.
 Omitting features selects `feat_` columns. `step` and final count are positive
@@ -860,10 +842,9 @@ BrainModelKit's OOT RFE or its persistence contract.
 
 ```python
 result = fs.rfecv(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     model="logistic_regression",  # Estimator used to fit the candidate features.
     model_params=None,  # Estimator settings.
     scoring="roc_auc",  # Metric used to evaluate predictions. Here it is area under the ROC curve.
@@ -882,12 +863,10 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import rfecv
 
 result = rfecv(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     model="logistic_regression",  # Estimator used to fit the candidate features.
@@ -925,10 +904,9 @@ native importance attributes.
 
 ```python
 result = fs.sequential_selection(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     model="logistic_regression",  # Estimator used to fit the candidate features.
     model_params=None,  # Estimator settings.
     direction="forward",  # Forward adds one feature at a time. Backward starts with all candidates.
@@ -947,12 +925,10 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import sequential_selection
 
 result = sequential_selection(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     model="logistic_regression",  # Estimator used to fit the candidate features.
@@ -989,10 +965,9 @@ does not claim the formal error bounds of specialized stability-selection method
 
 ```python
 result = fs.stability_selection(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     method="feature_importance",  # Base selector to run on each resample or group.
     n_iterations=20,  # Number of bootstrap selection rounds.
     sample_fraction=0.8,  # Size of each bootstrap sample relative to the training data.
@@ -1011,12 +986,10 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import stability_selection
 
 result = stability_selection(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     method="feature_importance",  # Base selector to run on each resample or group.
@@ -1063,10 +1036,9 @@ for the hypotheses, multiplicity rules, and backend differences.
 
 ```python
 result = fs.boruta(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     model="random_forest",  # Estimator used to fit the candidate features.
     model_params=None,  # Estimator settings.
     n_estimators=100,  # Number of trees used to compare original and shadow features.
@@ -1085,12 +1057,10 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import boruta
 
 result = boruta(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     model="random_forest",  # Estimator used to fit the candidate features.
@@ -1139,11 +1109,10 @@ if len(features) < 3:
 result = rfe(
     run_name="screened_rfe",  # Label used to identify the training run and its outputs.
     target_col="target",  # Column containing the class label.
-    train_df=train_df,  # Training rows used to fit the selector.
-    oot_df=oot_df,  # Held-out rows used to evaluate the selected model.
+    df_train=train_df,  # Training rows used to fit the selector.
+    df_oot=oot_df,  # Held-out rows used to evaluate the selected model.
     feature_cols=features,  # Ordered candidate columns to evaluate.
     model="logistic_regression",  # Estimator used to fit the candidate features.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
     step=1,  # Number of features removed in each elimination round.
     n_feat_final=3,  # Number of features to retain at the end of elimination.
     model_params=None,  # Estimator settings.

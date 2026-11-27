@@ -11,7 +11,7 @@ from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, FloatType, NumericType
 
-from ._selection import SelectionResult, columns, groups, integer, number, resolve_frame
+from ._selection import SelectionResult, columns, groups, integer, number
 
 
 def col(name: str) -> Column:
@@ -41,10 +41,9 @@ def numeric(df: DataFrame, features: list[str], *, allow_missing: bool = False) 
 
 
 def completeness(
-    train_df: DataFrame | None = None,
+    df: DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
     min_completeness: float = 0.7,
     group_by: str | Sequence[str] | None = None,
     require_all_groups: bool = False,
@@ -56,24 +55,23 @@ def completeness(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.completeness(
-            train_df, feature_cols=["income", "age"], min_completeness=0.7
+            df, feature_cols=["income", "age"], min_completeness=0.7
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/completeness.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
-    names = groups(train_df, group_by)
+    features = columns(df, feature_cols)
+    names = groups(df, group_by)
     number(min_completeness, "min_completeness", maximum=1)
     if require_all_groups and not names:
         raise ValueError("require_all_groups requires group_by")
     expressions = [
-        F.avg(present(train_df, f).cast("double")).alias(f"v{i}")
+        F.avg(present(df, f).cast("double")).alias(f"v{i}")
         for i, f in enumerate(features)
     ]
-    summary = train_df.agg(*expressions).first()
+    summary = df.agg(*expressions).first()
     if summary[0] is None:
         raise ValueError("DataFrame must contain at least one row")
     rows = [
@@ -88,9 +86,9 @@ def completeness(
     grouped = None
     if names:
         # Aggregate each feature together; explode only the group-level summary.
-        summaries = train_df.groupBy(*[col(n) for n in names]).agg(
+        summaries = df.groupBy(*[col(n) for n in names]).agg(
             *[
-                F.avg(present(train_df, f).cast("double")).alias(f"__bmk_{i}")
+                F.avg(present(df, f).cast("double")).alias(f"__bmk_{i}")
                 for i, f in enumerate(features)
             ]
         )
@@ -137,10 +135,9 @@ def completeness(
 
 
 def variance_filter(
-    train_df: DataFrame | None = None,
+    df: DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
     min_variance: float = 0.0,
 ) -> SelectionResult:
     """Select native population variance strictly above the threshold.
@@ -150,23 +147,20 @@ def variance_filter(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.variance_filter(
-            train_df, feature_cols=["income", "age"]
+            df, feature_cols=["income", "age"]
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/variance_filter.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
+    features = columns(df, feature_cols)
     number(min_variance, "min_variance")
-    numeric(train_df, features, allow_missing=True)
-    summary = train_df.agg(
+    numeric(df, features, allow_missing=True)
+    summary = df.agg(
         F.count(F.lit(1)).alias("n"),
         *[
-            F.var_pop(F.when(present(train_df, f), col(f).cast("double"))).alias(
-                f"v{i}"
-            )
+            F.var_pop(F.when(present(df, f), col(f).cast("double"))).alias(f"v{i}")
             for i, f in enumerate(features)
         ],
     ).first()
@@ -180,10 +174,9 @@ def variance_filter(
 
 
 def cardinality(
-    train_df: DataFrame | None = None,
+    df: DataFrame,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: DataFrame | None = None,
     min_unique: int = 2,
     max_unique: int | None = None,
     max_unique_ratio: float | None = None,
@@ -195,24 +188,23 @@ def cardinality(
     Import `brainmodelkit.feature_selection.pyspark` as `fs`, then call:
 
         result = fs.cardinality(
-            train_df, feature_cols=["category"], max_unique=100
+            df, feature_cols=["category"], max_unique=100
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/cardinality.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    features = columns(train_df, feature_cols)
+    features = columns(df, feature_cols)
     integer(min_unique, "min_unique", 0)
     if max_unique is not None:
         integer(max_unique, "max_unique", min_unique)
     if max_unique_ratio is not None:
         number(max_unique_ratio, "max_unique_ratio", maximum=1)
-    summary = train_df.agg(
+    summary = df.agg(
         F.count(F.lit(1)).alias("n"),
         *[
-            F.countDistinct(F.when(present(train_df, f), col(f))).alias(f"v{i}")
+            F.countDistinct(F.when(present(df, f), col(f))).alias(f"v{i}")
             for i, f in enumerate(features)
         ],
     ).first()

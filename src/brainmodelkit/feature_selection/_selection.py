@@ -120,18 +120,6 @@ class SelectionResult(TrainingOutputs):
         return len(self.selected_features)
 
 
-def resolve_frame(
-    primary: Any, alias_value: Any, name: str, alias: str, *, required: bool = True
-) -> Any:
-    """Resolve frame aliases by identity, never DataFrame equality/truthiness."""
-    if primary is not None and alias_value is not None and primary is not alias_value:
-        raise ValueError(f"{name} conflicts with {alias}; pass only one spelling")
-    result = primary if primary is not None else alias_value
-    if required and result is None:
-        raise ValueError(f"{name} is required")
-    return result
-
-
 def columns(
     df: Any, feature_cols: Sequence[str], target_col: str | None = None
 ) -> list[str]:

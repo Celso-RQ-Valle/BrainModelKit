@@ -50,15 +50,13 @@ def permutation_importance_selection(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
 | `model` | Named or compatible native estimator; permutation requires an already fitted model. Model restrictions and return schemas are explained below. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
+| `df` | Held-out development DataFrame used to measure permutation importance. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
 | `scoring` | Spark accepts roc_auc or average_precision (Spark PR area). Pandas accepts a sklearn scorer. |

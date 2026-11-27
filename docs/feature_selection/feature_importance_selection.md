@@ -13,12 +13,10 @@ See the [complete runnable workflows](../../examples/feature_selection/README.md
 
 ```python
 def feature_importance_selection(
-    train_df=None,
+    df_train,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
-    oot_df=None,
     df_oot=None,
     df_scoring=None,
     run_name="feature_selection",
@@ -35,12 +33,10 @@ def feature_importance_selection(
 
 ```python
 def feature_importance_selection(
-    train_df=None,
+    df_train,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
-    oot_df=None,
     df_oot=None,
     df_scoring=None,
     run_name="feature_selection",
@@ -54,19 +50,15 @@ def feature_importance_selection(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df_train` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
-| `oot_df` | Optional labeled OOT DataFrame for supported importance/wrapper final evaluation; required by historical RFE. It never chooses the feature subset. |
-| `df_oot` | Alias for oot_df. Supplying distinct frames under both spellings raises ValueError. |
+| `df_oot` | Optional labeled validation frame for final evaluation. |
 | `df_scoring` | Optional unlabeled frame to score with the final selected-feature classifier; requires OOT evaluation. RFE scores it only at the final fit. |
 | `run_name` | Label used for final training outputs or RFE iteration reports. |
 | `model` | Named or compatible native estimator; permutation requires an already fitted model. Model restrictions and return schemas are explained below. |
@@ -106,12 +98,10 @@ in diagnostics. Training/RFE's importance record convention is reused.
 
 ```python
 result = fs.feature_importance_selection(
-    train_df=train,  # Training rows used to fit the selector.
+    df_train=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
@@ -130,12 +120,10 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import feature_importance_selection
 
 result = feature_importance_selection(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     model="random_forest",  # Estimator used to fit the candidate features.
@@ -155,7 +143,7 @@ caller's responsibility. Pandas LightGBM needs its optional extra. Spark LightGB
 requires SynapseML and matching JVM packages configured outside BrainModelKit.
 
 Outputs include `feature`, `importance`, `ranking`, and `selected`, plus `model`.
-With no oot_df, no OOT scoring is performed. When oot_df is supplied, selected
+With no `df_oot`, no OOT scoring is performed. When `df_oot` is supplied, selected
 features are refitted for final evaluation; see [evaluation outputs](../feature_selection.md#evaluation-outputs).
 Without OOT evaluation Spark returns a native classifier expecting an assembled
 `features` vector; after OOT evaluation `model` is the final raw-column training

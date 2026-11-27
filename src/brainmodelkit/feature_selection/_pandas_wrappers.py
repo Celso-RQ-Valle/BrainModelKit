@@ -14,20 +14,18 @@ import pandas as pd
 from brainmodelkit.model_selection.pandas import cross_validate
 from brainmodelkit.training.pandas import train_model
 
-from ._evaluation import evaluation_frame, finalize_selection
+from ._evaluation import finalize_selection, validate_scoring_frame
 from ._pandas_evaluation import validate_evaluation
 from ._pandas_model import estimator, feature_importance_selection, l1_selection
 from ._pandas_statistics import supervised
-from ._selection import SelectionResult, groups, integer, number, resolve_frame
+from ._selection import SelectionResult, groups, integer, number
 
 
 def rfecv(
-    train_df: pd.DataFrame | None = None,
+    df_train: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
-    oot_df: pd.DataFrame | None = None,
     df_oot: pd.DataFrame | None = None,
     df_scoring: pd.DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -47,17 +45,16 @@ def rfecv(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.rfecv(
-            train_df, "target", ["income", "age"], cv=3
+            df_train, "target", ["income", "age"], cv=3
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/rfecv.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
-    features = supervised(train_df, target_col, feature_cols)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
+    features = supervised(df_train, target_col, feature_cols)
     integer(step, "step")
     integer(min_features_to_select, "min_features_to_select")
     if min_features_to_select > len(features):
@@ -66,10 +63,10 @@ def rfecv(
     paths = []
     while True:
         fitted = estimator(model, model_params, random_state).fit(
-            train_df[current], train_df[target_col]
+            df_train[current], df_train[target_col]
         )
         cv_result = cross_validate(
-            train_df,
+            df_train,
             target_col,
             current,
             model,
@@ -104,7 +101,7 @@ def rfecv(
         {"feature": f, "ranking": ranks[f], "selected": f in selected} for f in features
     ]
     selector_model = estimator(model, model_params, random_state).fit(
-        train_df[best[0]], train_df[target_col]
+        df_train[best[0]], df_train[target_col]
     )
     result = SelectionResult(
         rows,
@@ -120,8 +117,8 @@ def rfecv(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=features,
         model=selector_model,
@@ -131,12 +128,10 @@ def rfecv(
 
 
 def sequential_selection(
-    train_df: pd.DataFrame | None = None,
+    df_train: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
-    oot_df: pd.DataFrame | None = None,
     df_oot: pd.DataFrame | None = None,
     df_scoring: pd.DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -156,17 +151,16 @@ def sequential_selection(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.sequential_selection(
-            train_df, "target", ["income", "age"], cv=3
+            df_train, "target", ["income", "age"], cv=3
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/sequential_selection.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
-    features = supervised(train_df, target_col, feature_cols)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
+    features = supervised(df_train, target_col, feature_cols)
     if direction not in ("forward", "backward"):
         raise ValueError("direction must be forward or backward")
     if (
@@ -187,7 +181,7 @@ def sequential_selection(
                 else [f for f in current if f != feature]
             )
             cv_result = cross_validate(
-                train_df,
+                df_train,
                 target_col,
                 subset,
                 model,
@@ -201,7 +195,7 @@ def sequential_selection(
             )
         _, _, current = max(candidates, key=lambda x: x[0])
     selector_model = estimator(model, model_params, random_state).fit(
-        train_df[current], train_df[target_col]
+        df_train[current], df_train[target_col]
     )
     result = SelectionResult(
         [{"feature": f, "selected": f in current} for f in features],
@@ -212,8 +206,8 @@ def sequential_selection(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=features,
         model=selector_model,
@@ -223,12 +217,10 @@ def sequential_selection(
 
 
 def stability_selection(
-    train_df: pd.DataFrame | None = None,
+    df_train: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
-    oot_df: pd.DataFrame | None = None,
     df_oot: pd.DataFrame | None = None,
     df_scoring: pd.DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -250,18 +242,17 @@ def stability_selection(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.stability_selection(
-            train_df, "target", ["income", "age"], n_iterations=5
+            df_train, "target", ["income", "age"], n_iterations=5
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/stability_selection.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
-    features = supervised(train_df, target_col, feature_cols)
-    names = groups(train_df, group_by)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
+    features = supervised(df_train, target_col, feature_cols)
+    names = groups(df_train, group_by)
     integer(n_iterations, "n_iterations")
     number(sample_fraction, "sample_fraction", maximum=1)
     number(min_frequency, "min_frequency", maximum=1)
@@ -286,9 +277,9 @@ def stability_selection(
     counts = np.zeros(len(features), dtype=int)
     values, history = [], []
     frames = (
-        train_df.groupby(names, dropna=False, observed=True, sort=False)
+        df_train.groupby(names, dropna=False, observed=True, sort=False)
         if names
-        else [(None, train_df)]
+        else [(None, df_train)]
     )
     for key, frame in frames:
         supervised(frame, target_col, features)
@@ -347,8 +338,8 @@ def stability_selection(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=features,
         model=evaluation_model,
@@ -358,12 +349,10 @@ def stability_selection(
 
 
 def boruta(
-    train_df: pd.DataFrame | None = None,
+    df_train: pd.DataFrame,
     target_col: str | None = None,
     feature_cols: Sequence[str] | None = None,
     *,
-    df: pd.DataFrame | None = None,
-    oot_df: pd.DataFrame | None = None,
     df_oot: pd.DataFrame | None = None,
     df_scoring: pd.DataFrame | None = None,
     run_name: str = "feature_selection",
@@ -382,17 +371,16 @@ def boruta(
     Import `brainmodelkit.feature_selection.pandas` as `fs`, then call:
 
         result = fs.boruta(
-            train_df, "target", ["income", "age"], n_estimators=30, max_iter=30
+            df_train, "target", ["income", "age"], n_estimators=30, max_iter=30
         )
         print(result.selected_features)
 
     Parameters, return fields, algorithm, assumptions, and complete examples:
     https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/boruta.md
     """
-    train_df = resolve_frame(train_df, df, "train_df", "df")
-    oot_df = evaluation_frame(oot_df, df_oot, df_scoring)
-    validate_evaluation(train_df, oot_df, df_scoring, target_col, feature_cols)
-    features = supervised(train_df, target_col, feature_cols)
+    validate_scoring_frame(df_oot, df_scoring)
+    validate_evaluation(df_train, df_oot, df_scoring, target_col, feature_cols)
+    features = supervised(df_train, target_col, feature_cols)
     try:
         implementation = importlib.import_module("boruta").BorutaPy
     except ImportError as exc:
@@ -407,7 +395,7 @@ def boruta(
         alpha=alpha,
         random_state=random_state,
     )
-    fitted.fit(train_df[features].to_numpy(), train_df[target_col].to_numpy())
+    fitted.fit(df_train[features].to_numpy(), df_train[target_col].to_numpy())
     rows = [
         {
             "feature": f,
@@ -433,8 +421,8 @@ def boruta(
     return finalize_selection(
         result,
         train_model,
-        train_df=train_df,
-        oot_df=oot_df,
+        train_df=df_train,
+        oot_df=df_oot,
         target_col=target_col,
         feature_cols=features,
         model=estimator(model, model_params, random_state),

@@ -13,11 +13,10 @@ See the [complete runnable workflows](../../examples/feature_selection/README.md
 
 ```python
 def information_value(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     n_bins=10,
     min_iv=None,
     smoothing=0.5,
@@ -30,11 +29,10 @@ def information_value(
 
 ```python
 def information_value(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     n_bins=10,
     min_iv=None,
     smoothing=0.5,
@@ -44,17 +42,14 @@ def information_value(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
 | `n_bins` | Number of requested numeric bins, integer >=2. Duplicate boundaries can reduce effective bins. |
 | `min_iv` | Optional inclusive IV cutoff; None reports/selects all defined IV values. |
 | `smoothing` | Strictly positive additive per-observed-bin count smoothing for both classes. |
@@ -95,10 +90,9 @@ IV = sum((de[b] - dn[b]) * WoE[b])
 
 ```python
 result = fs.information_value(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     n_bins=10,  # Requested number of bins for continuous values.
     min_iv=0.02,  # Minimum information value required to retain a feature.
     smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.
@@ -114,10 +108,9 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import information_value
 
 result = information_value(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     n_bins=10,  # Requested number of bins for continuous values.
     min_iv=0.02,  # Minimum information value required to retain a feature.
     smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.

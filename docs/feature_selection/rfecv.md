@@ -17,11 +17,10 @@ the signatures for backend-specific arguments; they are not interchangeable.
 
 ```python
 def rfecv(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     model="logistic_regression",
     model_params=None,
     scoring="roc_auc",
@@ -37,12 +36,10 @@ def rfecv(
 
 ```python
 def rfecv(
-    train_df=None,
+    df_train,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
-    oot_df=None,
     df_oot=None,
     df_scoring=None,
     run_name="feature_selection",
@@ -59,19 +56,15 @@ def rfecv(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df` (Spark) or `df_train` (pandas) | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
-| `oot_df` | Optional labeled OOT DataFrame for supported importance/wrapper final evaluation; required by historical RFE. It never chooses the feature subset. |
-| `df_oot` | Alias for oot_df. Supplying distinct frames under both spellings raises ValueError. |
+| `df_oot` | Optional labeled validation frame for final evaluation in pandas. |
 | `df_scoring` | Optional unlabeled frame to score with the final selected-feature classifier; requires OOT evaluation. RFE scores it only at the final fit. |
 | `run_name` | Label used for final training outputs or RFE iteration reports. |
 | `model` | Named or compatible native estimator; permutation requires an already fitted model. Model restrictions and return schemas are explained below. |
@@ -112,10 +105,9 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 ```python
 result = fs.rfecv(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     model="logistic_regression",  # Estimator used to fit the candidate features.
     model_params=None,  # Estimator settings.
     scoring="roc_auc",  # Metric used to evaluate predictions. Here it is area under the ROC curve.
@@ -140,12 +132,10 @@ BrainModelKit's OOT RFE or its persistence contract.
 from brainmodelkit.feature_selection.pandas import rfecv
 
 result = rfecv(
-    train_df=df,  # Training rows used to fit the selector.
+    df_train=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
-    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
-    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_oot=None,  # Optional held-out frame for evaluating the selected-feature model.
     df_scoring=None,  # Optional additional frame to score with the final model.
     run_name="feature_selection",  # Label used to identify the training run and its outputs.
     model="logistic_regression",  # Estimator used to fit the candidate features.

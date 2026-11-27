@@ -17,11 +17,10 @@ the signatures for backend-specific arguments; they are not interchangeable.
 
 ```python
 def mutual_information(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     threshold=None,
     top_k=None,
     discrete_features=False,
@@ -35,11 +34,10 @@ def mutual_information(
 
 ```python
 def mutual_information(
-    train_df=None,
+    df,
     target_col=None,
     feature_cols=None,
     *,
-    df=None,
     threshold=None,
     top_k=None,
     random_state=42,
@@ -50,17 +48,14 @@ def mutual_information(
 
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
-`None` placeholders for train/target/features do not make those inputs optional
-at call time. Unsupported backend keywords raise TypeError.
 
 ## Parameters
 
 | Name | Meaning |
 | --- | --- |
-| `train_df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
+| `df` | Training DataFrame for the selected backend. Fit selection on development/training rows only. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
 | `threshold` | Inclusive score cutoff; None disables it. For correlation, reject at absolute correlation >= threshold in [0,1]. |
 | `top_k` | Optional positive integer rank limit no larger than candidate count. Intersects other gates; ties favor input order. |
 | `random_state` | Seed for supported random estimators/resampling. Spark partition/order changes may still change results. |
@@ -98,10 +93,9 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 
 ```python
 result = fs.mutual_information(
-    train_df=train,  # Training rows used to fit the selector.
+    df=train,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=None,  # Optional minimum score a feature must reach to qualify.
     top_k=1,  # Optional limit on the number of highest-ranked features retained.
     discrete_features=False,  # Identify discrete inputs. False treats the feature columns as continuous.
@@ -125,10 +119,9 @@ univariate dependence, not proof of independence.
 from brainmodelkit.feature_selection.pandas import mutual_information
 
 result = mutual_information(
-    train_df=df,  # Training rows used to fit the selector.
+    df=df,  # Training rows used to fit the selector.
     target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=None,  # Optional minimum score a feature must reach to qualify.
     top_k=5,  # Optional limit on the number of highest-ranked features retained.
     random_state=42,  # Seed for reproducible random choices.
