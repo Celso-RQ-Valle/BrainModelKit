@@ -27,6 +27,12 @@ Choose a goal, follow its example link, and run the [setup](#setup) for your bac
 
 ## Setup
 
+**PySpark** — Run the [Spark data setup](spark.md#example-data) to create `train`, `validation`, and `features`, then import the selectors.
+
+```python
+from brainmodelkit.feature_selection import pyspark as spark_fs
+```
+
 **pandas** — Run the [pandas data setup](setup.md), then define the training and validation frames used below.
 
 ```python
@@ -35,42 +41,36 @@ from brainmodelkit.feature_selection import pandas as pd_fs
 train, validation = train_df, validation_df
 ```
 
-**PySpark** — Run the [Spark data setup](spark.md#example-data) to create `train`, `validation`, and `features`, then import the selectors.
-
-```python
-from brainmodelkit.feature_selection import pyspark as spark_fs
-```
-
 Each selector call shows every parameter for that backend. Where a selector accepts `df` as an alias for `train_df`, the examples supply `train_df` and leave the alias at `None`. The same convention applies to `oot_df` and its alias `df_oot`. Each method link explains its parameters and selection rules.
 
 ## completeness
 
 [How completeness works](completeness.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.completeness(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    min_completeness=0.95,
-    group_by=None,
-    require_all_groups=False,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.completeness(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    min_completeness=0.95,
-    group_by=None,
-    require_all_groups=False,
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
+    group_by=None,  # Optional grouping columns for per-group completeness reports.
+    require_all_groups=False,  # Require the completeness cutoff in every group when enabled.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.completeness(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
+    group_by=None,  # Optional grouping columns for per-group completeness reports.
+    require_all_groups=False,  # Require the completeness cutoff in every group when enabled.
 )
 print(result.selected_features)
 ```
@@ -79,30 +79,30 @@ print(result.selected_features)
 
 [How cardinality works](cardinality.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.cardinality(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    min_unique=2,
-    max_unique=None,
-    max_unique_ratio=None,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.cardinality(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    min_unique=2,
-    max_unique=None,
-    max_unique_ratio=None,
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
+    max_unique=None,  # Optional upper limit on distinct nonmissing values.
+    max_unique_ratio=None,  # Optional upper limit on distinct nonmissing values divided by total rows.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.cardinality(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
+    max_unique=None,  # Optional upper limit on distinct nonmissing values.
+    max_unique_ratio=None,  # Optional upper limit on distinct nonmissing values divided by total rows.
 )
 print(result.selected_features)
 ```
@@ -111,26 +111,26 @@ print(result.selected_features)
 
 [How variance_filter works](variance_filter.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.variance_filter(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    min_variance=0.0,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.variance_filter(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    min_variance=0.0,
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.variance_filter(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
 )
 print(result.selected_features)
 ```
@@ -139,29 +139,29 @@ print(result.selected_features)
 
 [How correlation_filter works](correlation_filter.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.correlation_filter(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    threshold=0.9,
-    method='pearson',
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.correlation_filter(
-    train_df=train,
-    feature_cols=features,
-    df=None,
-    threshold=0.9,
-    method='pearson',
-    max_features=256,
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
+    method='pearson',  # Correlation measure used to compare feature pairs.
+    max_features=256,  # Limit the number of columns in the driver-side correlation matrix.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.correlation_filter(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
+    method='pearson',  # Correlation measure used to compare feature pairs.
 )
 print(result.selected_features)
 ```
@@ -170,37 +170,37 @@ print(result.selected_features)
 
 [How mutual_information works](mutual_information.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.mutual_information(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    threshold=None,
-    top_k=1,
-    random_state=42,
-    discrete_features=False,
-    n_neighbors=3,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.mutual_information(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    threshold=None,
-    top_k=1,
-    discrete_features=False,
-    n_bins=10,
-    relative_error=0.001,
-    max_categories=1000,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+    discrete_features=False,  # Identify discrete inputs. False treats the feature columns as continuous.
+    n_bins=10,  # Requested number of bins for continuous values.
+    relative_error=0.001,  # Allowed rank error when Spark approximates quantile boundaries.
+    max_categories=1000,  # Limit distinct levels per discrete feature to bound counting costs.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.mutual_information(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+    random_state=42,  # Seed for reproducible random choices.
+    discrete_features=False,  # Identify discrete inputs. False treats the feature columns as continuous.
+    n_neighbors=3,  # Number of neighbors used to estimate dependence for continuous inputs.
 )
 print(result.selected_features)
 ```
@@ -209,33 +209,33 @@ print(result.selected_features)
 
 [How chi_square works](chi_square.md#how-it-works). Binary indicators satisfy the pandas count and Spark category-code requirements.
 
-**pandas**
-
-```python
-counts = counts_df
-result = pd_fs.chi_square(
-    train_df=counts,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    max_p_value=0.05,
-    top_k=None,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 counts = train.select("target", *((F.col(c) > 0).cast("int").alias(c) for c in features))
 result = spark_fs.chi_square(
-    train_df=counts,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    max_p_value=0.05,
-    top_k=None,
-    max_categories=1000,
+    train_df=counts,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
+    max_categories=1000,  # Limit distinct levels per discrete feature to bound counting costs.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+counts = counts_df
+result = pd_fs.chi_square(
+    train_df=counts,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
 print(result.selected_features)
 ```
@@ -244,30 +244,30 @@ print(result.selected_features)
 
 [How anova works](anova.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.anova(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    max_p_value=0.05,
-    top_k=None,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.anova(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    max_p_value=0.05,
-    top_k=None,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.anova(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
 print(result.selected_features)
 ```
@@ -276,35 +276,35 @@ print(result.selected_features)
 
 [How information_value works](information_value.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.information_value(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    n_bins=10,
-    min_iv=0.02,
-    smoothing=0.5,
-    binning='quantile',
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.information_value(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    n_bins=10,
-    min_iv=0.02,
-    smoothing=0.5,
-    binning='quantile',
-    relative_error=0.001,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    n_bins=10,  # Requested number of bins for continuous values.
+    min_iv=0.02,  # Minimum information value required to retain a feature.
+    smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.
+    binning='quantile',  # Rule for placing numeric bin boundaries. Quantile uses sample quantiles.
+    relative_error=0.001,  # Allowed rank error when Spark approximates quantile boundaries.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.information_value(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    n_bins=10,  # Requested number of bins for continuous values.
+    min_iv=0.02,  # Minimum information value required to retain a feature.
+    smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.
+    binning='quantile',  # Rule for placing numeric bin boundaries. Quantile uses sample quantiles.
 )
 print(result.selected_features)
 ```
@@ -313,45 +313,45 @@ print(result.selected_features)
 
 [How feature_importance_selection works](feature_importance_selection.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.feature_importance_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    model='decision_tree',
-    model_params=None,
-    threshold=None,
-    top_k=1,
-    random_state=42,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.feature_importance_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    n_tiles=10,
-    model='decision_tree',
-    model_params=None,
-    threshold=None,
-    top_k=1,
-    random_state=42,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
+    model='decision_tree',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+    random_state=42,  # Seed for reproducible random choices.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.feature_importance_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    model='decision_tree',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(result.selected_features)
 ```
@@ -360,42 +360,42 @@ print(result.selected_features)
 
 [How l1_selection works](l1_selection.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.l1_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    C=1.0,
-    coefficient_tolerance=1e-08,
-    random_state=42,
-    max_iter=1000,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.l1_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    n_tiles=10,
-    reg_param=0.1,
-    coefficient_tolerance=1e-08,
-    max_iter=100,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
+    reg_param=0.1,  # Regularization strength. Larger values shrink coefficients more.
+    coefficient_tolerance=1e-08,  # Keep features whose absolute coefficient exceeds this value.
+    max_iter=100,  # Maximum solver iterations for the regularized logistic fit.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.l1_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    C=1.0,  # Inverse regularization strength. Smaller values shrink coefficients more.
+    coefficient_tolerance=1e-08,  # Keep features whose absolute coefficient exceeds this value.
+    random_state=42,  # Seed for reproducible random choices.
+    max_iter=1000,  # Maximum solver iterations for the regularized logistic fit.
 )
 print(result.selected_features)
 ```
@@ -404,39 +404,39 @@ print(result.selected_features)
 
 [How permutation_importance_selection works](permutation_importance_selection.md#how-it-works). Fit on training rows and measure the score change on held-out validation rows.
 
-**pandas**
-
-```python
-model = pd_fs.feature_importance_selection(train, "target", features, model="decision_tree").model
-result = pd_fs.permutation_importance_selection(
-    model=model,
-    df=validation,
-    target_col='target',
-    feature_cols=features,
-    scoring='roc_auc',
-    n_repeats=5,
-    random_state=42,
-    threshold=None,
-    top_k=1,
-    n_jobs=None,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 model = spark_fs.feature_importance_selection(train, "target", features, model="decision_tree").model
 result = spark_fs.permutation_importance_selection(
-    model=model,
-    df=validation,
-    target_col='target',
-    feature_cols=features,
-    scoring='roc_auc',
-    n_repeats=5,
-    random_state=42,
-    threshold=None,
-    top_k=1,
+    model=model,  # Already-fitted classifier to rescore after each shuffle.
+    df=validation,  # Held-out rows on which shuffling a feature measures the score decrease.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    scoring='roc_auc',  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    n_repeats=5,  # Number of shuffles per feature when measuring the score decrease.
+    random_state=42,  # Seed for reproducible random choices.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+model = pd_fs.feature_importance_selection(train, "target", features, model="decision_tree").model
+result = pd_fs.permutation_importance_selection(
+    model=model,  # Already-fitted classifier to rescore after each shuffle.
+    df=validation,  # Held-out rows on which shuffling a feature measures the score decrease.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    scoring='roc_auc',  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    n_repeats=5,  # Number of shuffles per feature when measuring the score decrease.
+    random_state=42,  # Seed for reproducible random choices.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+    n_jobs=None,  # Number of parallel workers. None uses the configured joblib default.
 )
 print(result.selected_features)
 ```
@@ -445,47 +445,47 @@ print(result.selected_features)
 
 [How rfe works](rfe.md#how-it-works). Both examples write iteration reports under `feature_selection_runs/`.
 
-**pandas**
-
-```python
-result = pd_fs.rfe(
-    run_name='example',
-    target_col='target',
-    train_df=train,
-    oot_df=validation,
-    feature_cols=features,
-    model='logistic_regression',
-    df_oot=None,
-    step=1,
-    n_feat_final=1,
-    model_params=None,
-    output_dir='feature_selection_runs',
-    df_scoring=None,
-    mlflow_logging=False,
-    signature=False,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.rfe(
-    run_name='example',
-    target_col='target',
-    train_df=train,
-    oot_df=validation,
-    feature_cols=features,
-    model='logistic_regression',
-    df_oot=None,
-    step=1,
-    n_feat_final=1,
-    model_params=None,
-    output_dir='feature_selection_runs',
-    df_scoring=None,
-    mlflow_logging=False,
-    signature=False,
-    n_tiles=10,
+    run_name='example',  # Label used to identify the training run and its outputs.
+    target_col='target',  # Column containing the class label.
+    train_df=train,  # Training rows used to fit the selector.
+    oot_df=validation,  # Held-out rows used to evaluate the elimination fits.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    step=1,  # Number of features removed in each elimination round.
+    n_feat_final=1,  # Number of features to retain at the end of elimination.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    output_dir='feature_selection_runs',  # Parent directory for iteration reports and selected-feature outputs.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    mlflow_logging=False,  # Enable MLflow tracking for this run.
+    signature=False,  # Include an MLflow model signature when logging the model.
+    n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.rfe(
+    run_name='example',  # Label used to identify the training run and its outputs.
+    target_col='target',  # Column containing the class label.
+    train_df=train,  # Training rows used to fit the selector.
+    oot_df=validation,  # Held-out rows used to evaluate the elimination fits.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    step=1,  # Number of features removed in each elimination round.
+    n_feat_final=1,  # Number of features to retain at the end of elimination.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    output_dir='feature_selection_runs',  # Parent directory for iteration reports and selected-feature outputs.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    mlflow_logging=False,  # Enable MLflow tracking for this run.
+    signature=False,  # Include an MLflow model signature when logging the model.
 )
 print(result.selected_features)
 ```
@@ -494,46 +494,46 @@ print(result.selected_features)
 
 [How rfecv works](rfecv.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.rfecv(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    model='logistic_regression',
-    model_params=None,
-    scoring='roc_auc',
-    cv=3,
-    step=1,
-    min_features_to_select=1,
-    n_jobs=None,
-    random_state=42,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.rfecv(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    model='logistic_regression',
-    model_params=None,
-    scoring='roc_auc',
-    cv=3,
-    fold_col='fold',
-    step=1,
-    min_features_to_select=1,
-    random_state=42,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    scoring='roc_auc',  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    cv=3,  # Number of cross-validation folds used to score candidate subsets.
+    fold_col='fold',  # Column assigning each training row to a validation fold.
+    step=1,  # Number of features removed in each elimination round.
+    min_features_to_select=1,  # Smallest subset size considered during elimination.
+    random_state=42,  # Seed for reproducible random choices.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.rfecv(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    scoring='roc_auc',  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    cv=3,  # Number of cross-validation folds used to score candidate subsets.
+    step=1,  # Number of features removed in each elimination round.
+    min_features_to_select=1,  # Smallest subset size considered during elimination.
+    n_jobs=None,  # Number of parallel workers. None uses the configured joblib default.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(result.selected_features)
 ```
@@ -542,46 +542,46 @@ print(result.selected_features)
 
 [How sequential_selection works](sequential_selection.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.sequential_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    model='logistic_regression',
-    model_params=None,
-    direction='forward',
-    n_features_to_select=1,
-    scoring='roc_auc',
-    cv=3,
-    n_jobs=None,
-    random_state=42,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.sequential_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    model='logistic_regression',
-    model_params=None,
-    direction='forward',
-    n_features_to_select=1,
-    scoring='roc_auc',
-    cv=3,
-    fold_col='fold',
-    random_state=42,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    direction='forward',  # Forward adds one feature at a time. Backward starts with all candidates.
+    n_features_to_select=1,  # Number of features in the final greedy subset.
+    scoring='roc_auc',  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    cv=3,  # Number of cross-validation folds used to score candidate subsets.
+    fold_col='fold',  # Column assigning each training row to a validation fold.
+    random_state=42,  # Seed for reproducible random choices.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.sequential_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    direction='forward',  # Forward adds one feature at a time. Backward starts with all candidates.
+    n_features_to_select=1,  # Number of features in the final greedy subset.
+    scoring='roc_auc',  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    cv=3,  # Number of cross-validation folds used to score candidate subsets.
+    n_jobs=None,  # Number of parallel workers. None uses the configured joblib default.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(result.selected_features)
 ```
@@ -590,45 +590,45 @@ print(result.selected_features)
 
 [How stability_selection works](stability_selection.md#how-it-works).
 
-**pandas**
-
-```python
-result = pd_fs.stability_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    method='feature_importance',
-    n_iterations=20,
-    sample_fraction=0.8,
-    min_frequency=0.8,
-    random_state=42,
-    group_by=None,
-    selector_kwargs={'top_k': 1},
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.stability_selection(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    method='feature_importance',
-    n_iterations=20,
-    sample_fraction=0.8,
-    min_frequency=0.8,
-    random_state=42,
-    group_by=None,
-    selector_kwargs={'top_k': 1},
-    max_groups=100,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    method='feature_importance',  # Base selector to run on each resample or group.
+    n_iterations=20,  # Number of bootstrap selection rounds.
+    sample_fraction=0.8,  # Size of each bootstrap sample relative to the training data.
+    min_frequency=0.8,  # Minimum fraction of selections a feature must appear in to survive.
+    random_state=42,  # Seed for reproducible random choices.
+    group_by=None,  # Optional columns defining groups for separate selection fits.
+    selector_kwargs={'top_k': 1},  # Options passed to the base selector on each fit.
+    max_groups=100,  # Maximum number of groups Spark will process for grouped selection.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.stability_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    method='feature_importance',  # Base selector to run on each resample or group.
+    n_iterations=20,  # Number of bootstrap selection rounds.
+    sample_fraction=0.8,  # Size of each bootstrap sample relative to the training data.
+    min_frequency=0.8,  # Minimum fraction of selections a feature must appear in to survive.
+    random_state=42,  # Seed for reproducible random choices.
+    group_by=None,  # Optional columns defining groups for separate selection fits.
+    selector_kwargs={'top_k': 1},  # Options passed to the base selector on each fit.
 )
 print(result.selected_features)
 ```
@@ -637,45 +637,45 @@ print(result.selected_features)
 
 [How boruta works](boruta.md#what-a-shadow-feature-is). Install the `boruta` extra for the pandas example.
 
-**pandas**
-
-```python
-result = pd_fs.boruta(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name='feature_selection',
-    model='random_forest',
-    model_params=None,
-    n_estimators='auto',
-    max_iter=30,
-    perc=100,
-    alpha=0.05,
-    random_state=42,
-)
-print(result.selected_features)
-```
-
 **PySpark**
 
 ```python
 result = spark_fs.boruta(
-    train_df=train,
-    target_col='target',
-    feature_cols=features,
-    df=None,
-    model='random_forest',
-    model_params=None,
-    n_estimators=100,
-    max_iter=30,
-    perc=100,
-    alpha=0.05,
-    two_step=True,
-    random_state=42,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    model='random_forest',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    n_estimators=100,  # Number of trees used to compare original and shadow features.
+    max_iter=30,  # Iteration budget for comparing features with randomized shadows.
+    perc=100,  # Percentile of shadow importances that an original feature must beat.
+    alpha=0.05,  # Significance level for testing repeated wins against shadow features.
+    two_step=True,  # Apply the two-stage multiple-testing correction for Boruta decisions.
+    random_state=42,  # Seed for reproducible random choices.
+)
+print(result.selected_features)
+```
+
+**pandas**
+
+```python
+result = pd_fs.boruta(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name='feature_selection',  # Label used to identify the training run and its outputs.
+    model='random_forest',  # Estimator used to fit the candidate features.
+    model_params=None,  # Optional backend-specific settings passed to the estimator.
+    n_estimators='auto',  # Let BorutaPy choose the forest size from the remaining feature count.
+    max_iter=30,  # Iteration budget for comparing features with randomized shadows.
+    perc=100,  # Percentile of shadow importances that an original feature must beat.
+    alpha=0.05,  # Significance level for testing repeated wins against shadow features.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(result.selected_features)
 ```

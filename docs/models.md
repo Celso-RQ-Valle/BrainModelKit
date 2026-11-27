@@ -46,12 +46,23 @@ and logarithmic sampling.
 
 Choose one model and its search space below, then pass them to `optimize`:
 
+### Spark
+
+```python
+from brainmodelkit.optimization.pyspark import optimize
+```
+
 ### Pandas
 
 ```python
 from brainmodelkit.optimization.pandas import optimize
-# For Spark: from brainmodelkit.optimization.pyspark import optimize
+```
 
+### Run the search
+
+After choosing the import for your backend, run the same call with its DataFrames.
+
+```python
 # Define model and search_space using one backend-specific example below.
 tuning = optimize(
     train_df=train_df,
@@ -117,6 +128,37 @@ A linear classifier. Scale numeric inputs inside a pandas pipeline so that each
 CV fold learns its own scaling. Smaller `C` means stronger regularization;
 larger Spark `regParam` means stronger regularization. They are not interchangeable.
 
+### Spark
+
+```python
+# Spark: built-in standardization is enabled by default.
+model = "logistic_regression"
+search_space = {
+    "maxIter": [100],  # Default if omitted: 100; max number of iterations (>= 0)
+    "regParam": [
+        0.001,
+        1.0,
+    ],  # Default if omitted: 0.0; regularization parameter (>= 0)
+    "fitIntercept": [
+        False,
+        True,
+    ],  # Default if omitted: True; whether to fit an intercept term
+    # "elasticNetParam": [0.0], # Default if omitted: 0.0; the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty
+    # "tol": [1e-06], # Default if omitted: 1e-06; the convergence tolerance for iterative algorithms (>= 0)
+    # "threshold": [0.5], # Default if omitted: 0.5; Threshold in binary classification prediction, in range [0, 1]. If threshold and thresholds are both set, they must match.e.g....
+    # "thresholds": [None], # Default if omitted: None; Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to...
+    # "standardization": [False, True], # Default if omitted: True; whether to standardize the training features before fitting the model
+    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
+    # "aggregationDepth": [2], # Default if omitted: 2; suggested depth for treeAggregate (>= 2)
+    # "family": ['auto'], # Default if omitted: 'auto'; The name of family which is a description of the label distribution to be used in the model. Supported options: auto,...
+    # "lowerBoundsOnCoefficients": [None], # Default if omitted: None; The lower bounds on coefficients if fitting under bound constrained optimization. The bound matrix must be compatible with the...
+    # "upperBoundsOnCoefficients": [None], # Default if omitted: None; The upper bounds on coefficients if fitting under bound constrained optimization. The bound matrix must be compatible with the...
+    # "lowerBoundsOnIntercepts": [None], # Default if omitted: None; The lower bounds on intercepts if fitting under bound constrained optimization. The bounds vector size must beequal with 1 for...
+    # "upperBoundsOnIntercepts": [None], # Default if omitted: None; The upper bounds on intercepts if fitting under bound constrained optimization. The bound vector size must be equal with 1 for...
+    # "maxBlockSizeInMB": [0.0], # Default if omitted: 0.0; maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size...
+}
+```
+
 ### Pandas
 
 ```python
@@ -151,42 +193,37 @@ search_space = {
 }
 ```
 
-### Spark
-
-```python
-# Spark: built-in standardization is enabled by default.
-model = "logistic_regression"
-search_space = {
-    "maxIter": [100],  # Default if omitted: 100; max number of iterations (>= 0)
-    "regParam": [
-        0.001,
-        1.0,
-    ],  # Default if omitted: 0.0; regularization parameter (>= 0)
-    "fitIntercept": [
-        False,
-        True,
-    ],  # Default if omitted: True; whether to fit an intercept term
-    # "elasticNetParam": [0.0], # Default if omitted: 0.0; the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty
-    # "tol": [1e-06], # Default if omitted: 1e-06; the convergence tolerance for iterative algorithms (>= 0)
-    # "threshold": [0.5], # Default if omitted: 0.5; Threshold in binary classification prediction, in range [0, 1]. If threshold and thresholds are both set, they must match.e.g....
-    # "thresholds": [None], # Default if omitted: None; Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to...
-    # "standardization": [False, True], # Default if omitted: True; whether to standardize the training features before fitting the model
-    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
-    # "aggregationDepth": [2], # Default if omitted: 2; suggested depth for treeAggregate (>= 2)
-    # "family": ['auto'], # Default if omitted: 'auto'; The name of family which is a description of the label distribution to be used in the model. Supported options: auto,...
-    # "lowerBoundsOnCoefficients": [None], # Default if omitted: None; The lower bounds on coefficients if fitting under bound constrained optimization. The bound matrix must be compatible with the...
-    # "upperBoundsOnCoefficients": [None], # Default if omitted: None; The upper bounds on coefficients if fitting under bound constrained optimization. The bound matrix must be compatible with the...
-    # "lowerBoundsOnIntercepts": [None], # Default if omitted: None; The lower bounds on intercepts if fitting under bound constrained optimization. The bounds vector size must beequal with 1 for...
-    # "upperBoundsOnIntercepts": [None], # Default if omitted: None; The upper bounds on intercepts if fitting under bound constrained optimization. The bound vector size must be equal with 1 for...
-    # "maxBlockSizeInMB": [0.0], # Default if omitted: 0.0; maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size...
-}
-```
-
 ## Decision tree
 
 A single tree. Depth limits complexity; minimum leaf size limits small leaves.
 Use an estimator object in pandas so the same `model` also works with
 `train_model` (the string `"decision_tree"` works in pandas optimization/CV only).
+
+### Spark
+
+```python
+# Spark
+model = "decision_tree"
+search_space = {
+    "maxDepth": [
+        3,
+        8,
+    ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
+    "minInstancesPerNode": [
+        10,
+    ],  # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
+    # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
+    # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
+    # "maxMemoryInMB": [256], # Default if omitted: 256; Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its...
+    # "cacheNodeIds": [False, True], # Default if omitted: False; If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs...
+    # "checkpointInterval": [10], # Default if omitted: 10; set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10...
+    # "impurity": ['gini'], # Default if omitted: 'gini'; Criterion used for information gain calculation (case-insensitive). Supported options: entropy, gini
+    # "seed": [None], # Default if omitted: None; built-in model string: optimization seed (default 42); random seed
+    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
+    # "leafCol": [''], # Default if omitted: ''; Leaf indices column name. Predicted leaf index of each instance in each tree by preorder
+    # "minWeightFractionPerNode": [0.0], # Default if omitted: 0.0; Minimum fraction of the weighted sample count that each child must have after split. If a split causes the fraction of the...
+}
+```
 
 ### Pandas
 
@@ -218,36 +255,41 @@ search_space = {
 }
 ```
 
+## Random forest
+
+An ensemble of randomized trees. Tree count affects fit cost; depth and minimum
+leaf size control each tree's complexity.
+
 ### Spark
 
 ```python
 # Spark
-model = "decision_tree"
+model = "random_forest"
 search_space = {
     "maxDepth": [
-        3,
-        8,
+        5,
+        10,
     ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
     "minInstancesPerNode": [
         10,
+        50,
     ],  # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
+    "numTrees": [100, 200],  # Default if omitted: 20; Number of trees to train (>= 1)
     # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
     # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
     # "maxMemoryInMB": [256], # Default if omitted: 256; Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its...
     # "cacheNodeIds": [False, True], # Default if omitted: False; If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs...
     # "checkpointInterval": [10], # Default if omitted: 10; set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10...
     # "impurity": ['gini'], # Default if omitted: 'gini'; Criterion used for information gain calculation (case-insensitive). Supported options: entropy, gini
+    # "featureSubsetStrategy": ['auto'], # Default if omitted: 'auto'; The number of features to consider for splits at each tree node. Supported options: 'auto' (choose automatically for task: If...
     # "seed": [None], # Default if omitted: None; built-in model string: optimization seed (default 42); random seed
-    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
+    # "subsamplingRate": [1.0], # Default if omitted: 1.0; Fraction of the training data used for learning each decision tree, in range (0, 1]
     # "leafCol": [''], # Default if omitted: ''; Leaf indices column name. Predicted leaf index of each instance in each tree by preorder
     # "minWeightFractionPerNode": [0.0], # Default if omitted: 0.0; Minimum fraction of the weighted sample count that each child must have after split. If a split causes the fraction of the...
+    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
+    # "bootstrap": [False, True], # Default if omitted: True; Whether bootstrap samples are used when building trees
 }
 ```
-
-## Random forest
-
-An ensemble of randomized trees. Tree count affects fit cost; depth and minimum
-leaf size control each tree's complexity.
 
 ### Pandas
 
@@ -286,41 +328,44 @@ search_space = {
 }
 ```
 
-### Spark
-
-```python
-# Spark
-model = "random_forest"
-search_space = {
-    "maxDepth": [
-        5,
-        10,
-    ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
-    "minInstancesPerNode": [
-        10,
-        50,
-    ],  # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
-    "numTrees": [100, 200],  # Default if omitted: 20; Number of trees to train (>= 1)
-    # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
-    # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
-    # "maxMemoryInMB": [256], # Default if omitted: 256; Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its...
-    # "cacheNodeIds": [False, True], # Default if omitted: False; If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs...
-    # "checkpointInterval": [10], # Default if omitted: 10; set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10...
-    # "impurity": ['gini'], # Default if omitted: 'gini'; Criterion used for information gain calculation (case-insensitive). Supported options: entropy, gini
-    # "featureSubsetStrategy": ['auto'], # Default if omitted: 'auto'; The number of features to consider for splits at each tree node. Supported options: 'auto' (choose automatically for task: If...
-    # "seed": [None], # Default if omitted: None; built-in model string: optimization seed (default 42); random seed
-    # "subsamplingRate": [1.0], # Default if omitted: 1.0; Fraction of the training data used for learning each decision tree, in range (0, 1]
-    # "leafCol": [''], # Default if omitted: ''; Leaf indices column name. Predicted leaf index of each instance in each tree by preorder
-    # "minWeightFractionPerNode": [0.0], # Default if omitted: 0.0; Minimum fraction of the weighted sample count that each child must have after split. If a split causes the fraction of the...
-    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
-    # "bootstrap": [False, True], # Default if omitted: True; Whether bootstrap samples are used when building trees
-}
-```
-
 ## Gradient boosting
 
 Sequential boosted trees. Tune the learning rate together with the number of
 iterations; smaller learning rates often need more iterations.
+
+### Spark
+
+```python
+# Spark
+model = "gradient_boosting"
+search_space = {
+    "maxDepth": [
+        2,
+        5,
+    ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
+    "maxIter": [100, 200],  # Default if omitted: 20; max number of iterations (>= 0)
+    "stepSize": [
+        0.03,
+        0.1,
+    ],  # Default if omitted: 0.1; Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator
+    # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
+    # "minInstancesPerNode": [1], # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
+    # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
+    # "maxMemoryInMB": [256], # Default if omitted: 256; Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its...
+    # "cacheNodeIds": [False, True], # Default if omitted: False; If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs...
+    # "checkpointInterval": [10], # Default if omitted: 10; set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10...
+    # "lossType": ['logistic'], # Default if omitted: 'logistic'; Loss function which GBT tries to minimize (case-insensitive). Supported options: logistic
+    # "seed": [None], # Default if omitted: None; built-in model string: optimization seed (default 42); random seed
+    # "subsamplingRate": [1.0], # Default if omitted: 1.0; Fraction of the training data used for learning each decision tree, in range (0, 1]
+    # "impurity": ['variance'], # Default if omitted: 'variance'; Criterion used for information gain calculation (case-insensitive). Supported options: variance
+    # "featureSubsetStrategy": ['all'], # Default if omitted: 'all'; The number of features to consider for splits at each tree node. Supported options: 'auto' (choose automatically for task: If...
+    # "validationTol": [0.01], # Default if omitted: 0.01; Threshold for stopping early when fit with validation is used. If the error rate on the validation input changes by less than...
+    # "validationIndicatorCol": [None], # Default if omitted: None; name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates...
+    # "leafCol": [''], # Default if omitted: ''; Leaf indices column name. Predicted leaf index of each instance in each tree by preorder
+    # "minWeightFractionPerNode": [0.0], # Default if omitted: 0.0; Minimum fraction of the weighted sample count that each child must have after split. If a split causes the fraction of the...
+    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
+}
+```
 
 ### Pandas
 
@@ -360,78 +405,13 @@ search_space = {
 }
 ```
 
-### Spark
-
-```python
-# Spark
-model = "gradient_boosting"
-search_space = {
-    "maxDepth": [
-        2,
-        5,
-    ],  # Default if omitted: 5; Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. Must be in...
-    "maxIter": [100, 200],  # Default if omitted: 20; max number of iterations (>= 0)
-    "stepSize": [
-        0.03,
-        0.1,
-    ],  # Default if omitted: 0.1; Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator
-    # "maxBins": [32], # Default if omitted: 32; Max number of bins for discretizing continuous features. Must be >=2 and >= number of categories for any categorical feature
-    # "minInstancesPerNode": [1], # Default if omitted: 1; Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than...
-    # "minInfoGain": [0.0], # Default if omitted: 0.0; Minimum information gain for a split to be considered at a tree node
-    # "maxMemoryInMB": [256], # Default if omitted: 256; Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its...
-    # "cacheNodeIds": [False, True], # Default if omitted: False; If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs...
-    # "checkpointInterval": [10], # Default if omitted: 10; set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10...
-    # "lossType": ['logistic'], # Default if omitted: 'logistic'; Loss function which GBT tries to minimize (case-insensitive). Supported options: logistic
-    # "seed": [None], # Default if omitted: None; built-in model string: optimization seed (default 42); random seed
-    # "subsamplingRate": [1.0], # Default if omitted: 1.0; Fraction of the training data used for learning each decision tree, in range (0, 1]
-    # "impurity": ['variance'], # Default if omitted: 'variance'; Criterion used for information gain calculation (case-insensitive). Supported options: variance
-    # "featureSubsetStrategy": ['all'], # Default if omitted: 'all'; The number of features to consider for splits at each tree node. Supported options: 'auto' (choose automatically for task: If...
-    # "validationTol": [0.01], # Default if omitted: 0.01; Threshold for stopping early when fit with validation is used. If the error rate on the validation input changes by less than...
-    # "validationIndicatorCol": [None], # Default if omitted: None; name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates...
-    # "leafCol": [''], # Default if omitted: ''; Leaf indices column name. Predicted leaf index of each instance in each tree by preorder
-    # "minWeightFractionPerNode": [0.0], # Default if omitted: 0.0; Minimum fraction of the weighted sample count that each child must have after split. If a split causes the fraction of the...
-    # "weightCol": [None], # Default if omitted: None; weight column name. If this is not set or empty, we treat all instance weights as 1.0
-}
-```
-
 ## LightGBM
 
 Leaf-wise boosted trees. Leaf count and minimum data per leaf control complexity.
 The example leaf sizes below need sufficiently large training folds; reduce them
 for small samples. These are illustrative search spaces, not universal defaults.
 
-### Pandas
-
-```python
-# pandas: native LightGBM sklearn wrapper
-model = "lightgbm"
-search_space = {
-    "num_leaves": [15, 63],  # Default if omitted: 31
-    "learning_rate": [0.03, 0.1],  # Default if omitted: 0.1
-    "n_estimators": [100, 200],  # Default if omitted: 100
-    "min_child_samples": [200, 1000],  # Default if omitted: 20
-    # "boosting_type": ['gbdt'], # Default if omitted: 'gbdt'
-    # "max_depth": [-1], # Default if omitted: -1
-    # "subsample_for_bin": [200000], # Default if omitted: 200000
-    # "objective": [None], # Default if omitted: None
-    # "class_weight": [None], # Default if omitted: None
-    # "min_split_gain": [0.0], # Default if omitted: 0.0
-    # "min_child_weight": [0.001], # Default if omitted: 0.001
-    # "subsample": [1.0], # Default if omitted: 1.0
-    # "subsample_freq": [0], # Default if omitted: 0
-    # "colsample_bytree": [1.0], # Default if omitted: 1.0
-    # "reg_alpha": [0.0], # Default if omitted: 0.0
-    # "reg_lambda": [0.0], # Default if omitted: 0.0
-    # "random_state": [None], # Default if omitted: None; built-in model string: optimization seed (default 42)
-    # "n_jobs": [None], # Default if omitted: None
-    # "importance_type": ['split'], # Default if omitted: 'split'
-}
-```
-
-`min_child_samples` is the sklearn wrapper's parameter for minimum data per leaf.
-Use that name in pandas to avoid supplying it alongside its native alias.
-
-### Spark
+### Spark (SparkLightGBM)
 
 ```python
 # SparkLightGBM: default Spark backend, native parameter names
@@ -456,7 +436,7 @@ search_space = {
 }
 ```
 
-### Spark
+### Spark (SynapseML)
 
 ```python
 # SynapseML: pass lgbm_backend="synapseml" to optimize AND train_model.
@@ -567,13 +547,44 @@ search_space = {
 accepts `model="lgbm"`. See [LightGBM setup and execution](optimization.md#spark-lightgbm)
 for dependencies, executor requirements, and local/distributed behavior.
 
-## Custom classifiers and pipelines
+### Pandas
 
-Pandas accepts cloneable sklearn classifiers with `predict_proba`. Use their
-parameter names directly, or `step_name__parameter` for pipeline steps, as in the
-logistic-regression example. Keep learned preprocessing inside the pipeline.
+```python
+# pandas: native LightGBM sklearn wrapper
+model = "lightgbm"
+search_space = {
+    "num_leaves": [15, 63],  # Default if omitted: 31
+    "learning_rate": [0.03, 0.1],  # Default if omitted: 0.1
+    "n_estimators": [100, 200],  # Default if omitted: 100
+    "min_child_samples": [200, 1000],  # Default if omitted: 20
+    # "boosting_type": ['gbdt'], # Default if omitted: 'gbdt'
+    # "max_depth": [-1], # Default if omitted: -1
+    # "subsample_for_bin": [200000], # Default if omitted: 200000
+    # "objective": [None], # Default if omitted: None
+    # "class_weight": [None], # Default if omitted: None
+    # "min_split_gain": [0.0], # Default if omitted: 0.0
+    # "min_child_weight": [0.001], # Default if omitted: 0.001
+    # "subsample": [1.0], # Default if omitted: 1.0
+    # "subsample_freq": [0], # Default if omitted: 0
+    # "colsample_bytree": [1.0], # Default if omitted: 1.0
+    # "reg_alpha": [0.0], # Default if omitted: 0.0
+    # "reg_lambda": [0.0], # Default if omitted: 0.0
+    # "random_state": [None], # Default if omitted: None; built-in model string: optimization seed (default 42)
+    # "n_jobs": [None], # Default if omitted: None
+    # "importance_type": ['split'], # Default if omitted: 'split'
+}
+```
+
+`min_child_samples` is the sklearn wrapper's parameter for minimum data per leaf.
+Use that name in pandas to avoid supplying it alongside its native alias.
+
+## Custom classifiers and pipelines
 
 Spark accepts compatible Spark ML estimators exposing feature, label, prediction,
 probability, and raw-prediction parameters. Supply native Spark parameter names;
 the library assembles raw feature columns into its pipeline. See the
 [training contract](training.md#training-parameter-reference) for details.
+
+Pandas accepts cloneable sklearn classifiers with `predict_proba`. Use their
+parameter names directly, or `step_name__parameter` for pipeline steps, as in the
+logistic-regression example. Keep learned preprocessing inside the pipeline.
