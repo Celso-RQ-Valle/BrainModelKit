@@ -75,7 +75,7 @@ Existing positional calls continue to work.
 from brainmodelkit.metrics.pyspark import auc_gini
 
 overall = auc_gini(df=spark_df, n_tiles=10)
-by_segment = auc_gini(df=spark_df, group_by="segment", n_tiles=10)
+by_segment = auc_gini(df=spark_df, group_by=["segment"], n_tiles=10)
 overall.show()
 ```
 
@@ -268,7 +268,7 @@ Existing positional calls continue to work. The lower-level
 from brainmodelkit.metrics.pandas import auc_gini
 
 overall = auc_gini(df=df)
-by_segment = auc_gini(df=df, group_by="segment")
+by_segment = auc_gini(df=df, group_by=["segment"])
 print(overall)  # auc = 1.0, gini = 1.0
 ```
 

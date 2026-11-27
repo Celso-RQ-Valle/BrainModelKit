@@ -101,9 +101,16 @@ requires `abs(coefficient) > coefficient_tolerance` (default `1e-8`).
 ```python
 result = fs.l1_selection(
     train_df=train,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name="feature_selection",  # Label used to identify the training run and its outputs.
+    n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
     reg_param=0.1,  # Regularization strength. Larger values shrink coefficients more.
+    coefficient_tolerance=1e-08,  # Keep features whose absolute coefficient exceeds this value.
     max_iter=100,  # Maximum solver iterations for the regularized logistic fit.
 )
 print(result.selected_features)
@@ -114,7 +121,20 @@ print(result.selected_features)
 ```python
 from brainmodelkit.feature_selection.pandas import l1_selection
 
-result = l1_selection(df, target_col="target", feature_cols=features, C=1.0)
+result = l1_selection(
+    train_df=df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name="feature_selection",  # Label used to identify the training run and its outputs.
+    C=1.0,  # Inverse regularization strength. Smaller values shrink coefficients more.
+    coefficient_tolerance=1e-08,  # Keep features whose absolute coefficient exceeds this value.
+    random_state=42,  # Seed for reproducible random choices.
+    max_iter=1000,  # Maximum solver iterations for the regularized logistic fit.
+)
 ```
 
 Spark uses native logistic regression with `elasticNetParam=1`, `reg_param=0.1`,

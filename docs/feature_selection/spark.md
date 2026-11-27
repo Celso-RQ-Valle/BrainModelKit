@@ -234,7 +234,7 @@ stable = fs.stability_selection(
 print(stable.feature_table)
 ```
 
-`group_by=None` uses the whole frame. A column name or list splits fits across
+`group_by=None` uses the whole frame. A list such as `group_by=["fold"]` splits fits across
 observed groups including null keys; `max_groups=100` limits collected group keys.
 Each group contributes equally many fits regardless of size. Every group and
 bootstrap must contain both classes; a sample losing a class raises an error

@@ -82,12 +82,17 @@ cell counts and independent observations.
 **Spark** | [Example data](spark.md#example-data)
 
 ```python
-counts = train.select("target", *((F.col(c) > 0).cast("int").alias(c) for c in features))
+counts = train.select(
+    "target", *((F.col(c) > 0).cast("int").alias(c) for c in features)
+)
 result = fs.chi_square(
     train_df=counts,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
+    max_categories=1000,  # Limit distinct levels per discrete feature to bound counting costs.
 )
 print(result.selected_features)
 ```
@@ -98,7 +103,12 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import chi_square
 
 result = chi_square(
-    counts_df, target_col="target", feature_cols=count_features, max_p_value=0.05
+    train_df=counts_df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=count_features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
 ```
 

@@ -99,9 +99,15 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 ```python
 result = fs.mutual_information(
     train_df=train,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
     top_k=1,  # Optional limit on the number of highest-ranked features retained.
+    discrete_features=False,  # Identify discrete inputs. False treats the feature columns as continuous.
+    n_bins=10,  # Requested number of bins for continuous values.
+    relative_error=0.001,  # Allowed rank error when Spark approximates quantile boundaries.
+    max_categories=1000,  # Limit distinct levels per discrete feature to bound counting costs.
 )
 print(result.selected_features)
 ```
@@ -119,7 +125,15 @@ univariate dependence, not proof of independence.
 from brainmodelkit.feature_selection.pandas import mutual_information
 
 result = mutual_information(
-    df, target_col="target", feature_cols=features, top_k=5, random_state=42
+    train_df=df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=5,  # Optional limit on the number of highest-ranked features retained.
+    random_state=42,  # Seed for reproducible random choices.
+    discrete_features=False,  # Identify discrete inputs. False treats the feature columns as continuous.
+    n_neighbors=3,  # Number of neighbors used to estimate dependence for continuous inputs.
 )
 ```
 

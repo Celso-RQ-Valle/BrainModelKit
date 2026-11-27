@@ -83,7 +83,10 @@ denominator. Defaults are `min_unique=2`, `max_unique=None`, and
 result = fs.cardinality(
     train_df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
+    max_unique=None,  # Optional upper limit on distinct nonmissing values.
+    max_unique_ratio=None,  # Optional upper limit on distinct nonmissing values divided by total rows.
 )
 print(result.selected_features)
 ```
@@ -94,7 +97,12 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import cardinality
 
 result = cardinality(
-    df, feature_cols=features, min_unique=2, max_unique=100, max_unique_ratio=0.50
+    train_df=df,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
+    max_unique=100,  # Optional upper limit on distinct nonmissing values.
+    max_unique_ratio=0.5,  # Optional upper limit on distinct nonmissing values divided by total rows.
 )
 ```
 

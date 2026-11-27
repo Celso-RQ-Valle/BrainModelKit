@@ -96,9 +96,14 @@ IV = sum((de[b] - dn[b]) * WoE[b])
 ```python
 result = fs.information_value(
     train_df=train,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    n_bins=10,  # Requested number of bins for continuous values.
     min_iv=0.02,  # Minimum information value required to retain a feature.
+    smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.
+    binning="quantile",  # Rule for placing numeric bin boundaries. Quantile uses sample quantiles.
+    relative_error=0.001,  # Allowed rank error when Spark approximates quantile boundaries.
 )
 print(result.selected_features)
 ```
@@ -109,13 +114,14 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import information_value
 
 result = information_value(
-    df,
-    target_col="target",
-    feature_cols=features,
-    n_bins=10,
-    min_iv=0.02,
-    smoothing=0.5,
-    binning="quantile",
+    train_df=df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    n_bins=10,  # Requested number of bins for continuous values.
+    min_iv=0.02,  # Minimum information value required to retain a feature.
+    smoothing=0.5,  # Pseudocount added to event and non-event bin counts before calculating WoE.
+    binning="quantile",  # Rule for placing numeric bin boundaries. Quantile uses sample quantiles.
 )
 print(result.bin_details)
 ```

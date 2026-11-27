@@ -138,23 +138,26 @@ and `run_name`. They control final selected-feature evaluation, not shadow tests
 See [evaluation outputs](../feature_selection.md#evaluation-outputs). Spark accepts
 the selection arguments shown above and returns diagnostics without a final fit.
 
-## Spark example and parameters
+## How it works
+
+### Spark example and parameters
 
 Use the [Spark setup](spark.md#example-data), then:
 
 ```python
 result = fs.boruta(
-    train,
-    "target",
-    features,
-    model="random_forest",
-    model_params={"maxDepth": 4},
-    n_estimators=30,
-    max_iter=30,
-    perc=100,
-    alpha=0.05,
-    two_step=True,
-    random_state=42,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    model="random_forest",  # Estimator used to fit the candidate features.
+    model_params={"maxDepth": 4},  # Estimator settings.
+    n_estimators=30,  # Number of trees used to compare original and shadow features.
+    max_iter=30,  # Iteration budget for comparing features with randomized shadows.
+    perc=100,  # Percentile of shadow importances that an original feature must beat.
+    alpha=0.05,  # Significance level for testing repeated wins against shadow features.
+    two_step=True,  # Apply the two-stage multiple-testing correction for Boruta decisions.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(result.feature_table)
 print(result.history[-1]["shadow_threshold"])
@@ -176,7 +179,7 @@ differ across backends. Do not expect matching selected lists just from matching
 seeds. Spark uses distributed sorts/joins and Python RDD indexing, without
 converting data to Pandas, and needs classic Spark workers and executor storage.
 
-## Complete Pandas example
+### Complete Pandas example
 
 Install `pip install "BrainModelKit[pandas,boruta]"`.
 
@@ -195,13 +198,21 @@ train = pd.DataFrame(
     }
 )
 result = boruta(
-    train,
-    "target",
-    ["signal", "noise"],
-    n_estimators=100,
-    model_params={"max_depth": 5},
-    max_iter=30,
-    random_state=42,
+    train_df=train,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=["signal", "noise"],  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name="feature_selection",  # Label used to identify the training run and its outputs.
+    model="random_forest",  # Estimator used to fit the candidate features.
+    model_params={"max_depth": 5},  # Estimator settings.
+    n_estimators=100,  # Number of trees used to compare original and shadow features.
+    max_iter=30,  # Iteration budget for comparing features with randomized shadows.
+    perc=100,  # Percentile of shadow importances that an original feature must beat.
+    alpha=0.05,  # Significance level for testing repeated wins against shadow features.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(pd.DataFrame(result.feature_table))
 print(result.selected_features)

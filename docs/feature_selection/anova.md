@@ -86,9 +86,11 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 ```python
 result = fs.anova(
     train_df=train,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
 )
 print(result.selected_features)
 ```
@@ -106,7 +108,14 @@ comparable class variances.
 ```python
 from brainmodelkit.feature_selection.pandas import anova
 
-result = anova(df, target_col="target", feature_cols=features, max_p_value=0.05)
+result = anova(
+    train_df=df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+    top_k=None,  # Optional limit on the number of highest-ranked features retained.
+)
 ```
 
 This wraps sklearn `f_classif`. Outputs are `feature`, `f_statistic`, `p_value`,

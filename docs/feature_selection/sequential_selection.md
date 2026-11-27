@@ -113,12 +113,17 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 ```python
 result = fs.sequential_selection(
     train_df=train,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    model='logistic_regression',  # Estimator used to fit the candidate features.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    model="logistic_regression",  # Estimator used to fit the candidate features.
+    model_params=None,  # Estimator settings.
+    direction="forward",  # Forward adds one feature at a time. Backward starts with all candidates.
     n_features_to_select=1,  # Number of features in the final greedy subset.
+    scoring="roc_auc",  # Metric used to evaluate predictions. Here it is area under the ROC curve.
     cv=3,  # Number of cross-validation folds used to score candidate subsets.
-    fold_col='fold',  # Column assigning each training row to a validation fold.
+    fold_col="fold",  # Column assigning each training row to a validation fold.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(result.selected_features)
 ```
@@ -136,13 +141,22 @@ native importance attributes.
 from brainmodelkit.feature_selection.pandas import sequential_selection
 
 result = sequential_selection(
-    df,
-    target_col="target",
-    feature_cols=features,
-    direction="forward",
-    n_features_to_select=3,
-    scoring="roc_auc",
-    cv=5,
+    train_df=df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name="feature_selection",  # Label used to identify the training run and its outputs.
+    model="logistic_regression",  # Estimator used to fit the candidate features.
+    model_params=None,  # Estimator settings.
+    direction="forward",  # Forward adds one feature at a time. Backward starts with all candidates.
+    n_features_to_select=3,  # Number of features in the final greedy subset.
+    scoring="roc_auc",  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    cv=5,  # Number of cross-validation folds used to score candidate subsets.
+    n_jobs=None,  # Number of parallel workers. None uses the configured joblib default.
+    random_state=42,  # Seed for reproducible random choices.
 )
 ```
 

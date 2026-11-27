@@ -95,12 +95,18 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 [Example data](spark.md#example-data)
 
 ```python
-model = fs.feature_importance_selection(train, "target", features, model="decision_tree").model
+model = fs.feature_importance_selection(
+    train, "target", features, model="decision_tree"
+).model
 result = fs.permutation_importance_selection(
     model=model,  # Already-fitted classifier to rescore after each shuffle.
     df=validation,  # Held-out rows on which shuffling a feature measures the score decrease.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    scoring="roc_auc",  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    n_repeats=5,  # Number of shuffles per feature when measuring the score decrease.
+    random_state=42,  # Seed for reproducible random choices.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
     top_k=1,  # Optional limit on the number of highest-ranked features retained.
 )
 print(result.selected_features)
@@ -118,14 +124,16 @@ indicate stronger model reliance. This function does not refit the model.
 from brainmodelkit.feature_selection.pandas import permutation_importance_selection
 
 result = permutation_importance_selection(
-    model=fitted_model,
-    df=oot_df,
-    target_col="target",
-    feature_cols=features,
-    scoring="roc_auc",
-    n_repeats=5,
-    random_state=42,
-    top_k=5,
+    model=fitted_model,  # Already-fitted classifier to rescore after each shuffle.
+    df=oot_df,  # Held-out rows on which shuffling a feature measures the score decrease.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    scoring="roc_auc",  # Metric used to evaluate predictions. Here it is area under the ROC curve.
+    n_repeats=5,  # Number of shuffles per feature when measuring the score decrease.
+    random_state=42,  # Seed for reproducible random choices.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=5,  # Optional limit on the number of highest-ranked features retained.
+    n_jobs=None,  # Number of parallel workers. None uses the configured joblib default.
 )
 ```
 

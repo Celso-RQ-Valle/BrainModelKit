@@ -78,7 +78,7 @@ at call time. Unsupported backend keywords raise TypeError.
 | `sample_fraction` | Sampling fraction in (0,1]. Spark uses Poisson multiplicities with this mean. Pandas uses a class-stratified fixed-size bootstrap. |
 | `min_frequency` | Inclusive stability selection frequency threshold in [0,1]. |
 | `random_state` | Seed for supported random estimators/resampling. Spark partition/order changes may still change results. |
-| `group_by` | Optional grouping column name or list, including observed null groups. Controls grouped diagnostics or separate stability fits. |
+| `group_by` | List of grouping columns, including for one column. Use None for the whole frame. Observed null groups are retained. |
 | `selector_kwargs` | Base stability selector configuration; specify top_k or threshold for importance. Outer resampling controls must not be placed here. |
 | `max_groups` | Positive Spark limit on collected distinct group keys before stability fitting. |
 
@@ -111,9 +111,17 @@ distributed algorithm, parameters, result fields, limits, and interpretation.
 ```python
 result = fs.stability_selection(
     train_df=train,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    selector_kwargs={'top_k': 1},  # Options passed to the base selector on each fit.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    method="feature_importance",  # Base selector to run on each resample or group.
+    n_iterations=20,  # Number of bootstrap selection rounds.
+    sample_fraction=0.8,  # Size of each bootstrap sample relative to the training data.
+    min_frequency=0.8,  # Minimum fraction of selections a feature must appear in to survive.
+    random_state=42,  # Seed for reproducible random choices.
+    group_by=["fold"],  # Resample within each group.
+    selector_kwargs={"top_k": 1},  # Base selector options.
+    max_groups=100,  # Maximum number of groups Spark will process for grouped selection.
 )
 print(result.selected_features)
 ```
@@ -131,15 +139,21 @@ does not claim the formal error bounds of specialized stability-selection method
 from brainmodelkit.feature_selection.pandas import stability_selection
 
 result = stability_selection(
-    df,
-    target_col="target",
-    feature_cols=features,
-    method="feature_importance",
-    n_iterations=20,
-    sample_fraction=0.8,
-    min_frequency=0.80,
-    random_state=42,
-    selector_kwargs={"model": "random_forest", "top_k": 3},
+    train_df=df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name="feature_selection",  # Label used to identify the training run and its outputs.
+    method="feature_importance",  # Base selector to run on each resample or group.
+    n_iterations=20,  # Number of bootstrap selection rounds.
+    sample_fraction=0.8,  # Size of each bootstrap sample relative to the training data.
+    min_frequency=0.8,  # Minimum fraction of selections a feature must appear in to survive.
+    random_state=42,  # Seed for reproducible random choices.
+    group_by=["reference_date"],  # Resample within each group.
+    selector_kwargs={"model": "random_forest", "top_k": 3},  # Base selector options.
 )
 ```
 
@@ -151,7 +165,7 @@ the top half (at least one) of features. Otherwise give an explicit `top_k` or
 For L1, pass `C` and tolerance through `selector_kwargs`. Pass the resampling seed
 to this function; configure custom estimator seeds explicitly if needed.
 
-Use `group_by="reference_date"` or a list of group names to run `n_iterations`
+Use `group_by=["reference_date"]` or a list of several group names to run `n_iterations`
 within each observed group. Every group must contain the required classes. Groups
 have equal weight in overall frequencies regardless of row count; inspect `history`
 for group-specific selections. This is within-group resampling, not chronological

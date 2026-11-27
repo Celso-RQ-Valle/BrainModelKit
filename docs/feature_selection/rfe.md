@@ -106,13 +106,21 @@ and repeat until `n_feat_final` remain. The final subset is fitted and evaluated
 
 ```python
 result = fs.rfe(
-    run_name='example',  # Label used to identify the training run and its outputs.
-    target_col='target',  # Column containing the class label.
+    run_name="example",  # Label used to identify the training run and its outputs.
+    target_col="target",  # Column containing the class label.
     train_df=train,  # Training rows used to fit the selector.
-    oot_df=validation,  # Held-out rows used to evaluate the elimination fits.
+    oot_df=validation,  # Held-out rows used to evaluate the selected model.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    model='logistic_regression',  # Estimator used to fit the candidate features.
+    model="logistic_regression",  # Estimator used to fit the candidate features.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    step=1,  # Number of features removed in each elimination round.
     n_feat_final=1,  # Number of features to retain at the end of elimination.
+    model_params=None,  # Estimator settings.
+    output_dir="feature_selection_runs",  # Parent directory for iteration reports and selected-feature outputs.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    mlflow_logging=False,  # Enable MLflow tracking for this run.
+    signature=False,  # Include an MLflow model signature when logging the model.
+    n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
 )
 print(result.selected_features)
 ```
@@ -123,16 +131,20 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import rfe
 
 result = rfe(
-    "credit_rfe",
-    "target",
-    train_df,
-    oot_df,
-    feature_cols=features,
-    model="random_forest",
-    model_params={"n_estimators": 50, "random_state": 42},
-    step=2,
-    n_feat_final=3,
-    output_dir="feature_selection_runs",
+    run_name="credit_rfe",  # Label used to identify the training run and its outputs.
+    target_col="target",  # Column containing the class label.
+    train_df=train_df,  # Training rows used to fit the selector.
+    oot_df=oot_df,  # Held-out rows used to evaluate the selected model.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model="random_forest",  # Estimator used to fit the candidate features.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    step=2,  # Number of features removed in each elimination round.
+    n_feat_final=3,  # Number of features to retain at the end of elimination.
+    model_params={"n_estimators": 50, "random_state": 42},  # Estimator settings.
+    output_dir="feature_selection_runs",  # Parent directory for iteration reports and selected-feature outputs.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    mlflow_logging=False,  # Enable MLflow tracking for this run.
+    signature=False,  # Include an MLflow model signature when logging the model.
 )
 print(result.history)
 print(result.training_result.metrics)

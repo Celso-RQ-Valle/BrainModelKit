@@ -107,10 +107,19 @@ in diagnostics. Training/RFE's importance record convention is reused.
 ```python
 result = fs.feature_importance_selection(
     train_df=train,  # Training rows used to fit the selector.
-    target_col='target',  # Column containing the class label.
+    target_col="target",  # Column containing the class label.
     feature_cols=features,  # Ordered candidate columns to evaluate.
-    model='decision_tree',  # Estimator used to fit the candidate features.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name="feature_selection",  # Label used to identify the training run and its outputs.
+    n_tiles=10,  # Number of score tiles used for Spark evaluation metrics.
+    model="decision_tree",  # Estimator used to fit the candidate features.
+    model_params=None,  # Estimator settings.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
     top_k=1,  # Optional limit on the number of highest-ranked features retained.
+    random_state=42,  # Seed for reproducible random choices.
 )
 print(result.selected_features)
 ```
@@ -121,12 +130,19 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import feature_importance_selection
 
 result = feature_importance_selection(
-    df,
-    target_col="target",
-    feature_cols=features,
-    model="random_forest",
-    model_params={"n_estimators": 100},
-    top_k=5,
+    train_df=df,  # Training rows used to fit the selector.
+    target_col="target",  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    oot_df=None,  # Optional held-out frame for evaluating the selected-feature model.
+    df_oot=None,  # Alternative name for oot_df. Leave unset when using oot_df.
+    df_scoring=None,  # Optional additional frame to score with the final model.
+    run_name="feature_selection",  # Label used to identify the training run and its outputs.
+    model="random_forest",  # Estimator used to fit the candidate features.
+    model_params={"n_estimators": 100},  # Estimator settings.
+    threshold=None,  # Optional minimum score a feature must reach to qualify.
+    top_k=5,  # Optional limit on the number of highest-ranked features retained.
+    random_state=42,  # Seed for reproducible random choices.
 )
 ```
 

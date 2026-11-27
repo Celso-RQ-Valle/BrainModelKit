@@ -66,6 +66,7 @@ undefined variance and are rejected.
 result = fs.variance_filter(
     train_df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
 )
 print(result.selected_features)
@@ -76,7 +77,12 @@ print(result.selected_features)
 ```python
 from brainmodelkit.feature_selection.pandas import variance_filter
 
-result = variance_filter(df, feature_cols=features, min_variance=0.0)
+result = variance_filter(
+    train_df=df,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
+)
 ```
 
 Outputs are `feature`, `variance`, and `selected`. Numeric features are required.

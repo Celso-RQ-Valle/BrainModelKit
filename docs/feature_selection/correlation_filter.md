@@ -77,7 +77,10 @@ or `"spearman"`; both use absolute correlation for filtering.
 result = fs.correlation_filter(
     train_df=train,  # Training rows used to fit the selector.
     feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
     threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
+    method="pearson",  # Correlation measure used to compare feature pairs.
+    max_features=256,  # Limit the number of columns in the driver-side correlation matrix.
 )
 print(result.selected_features)
 ```
@@ -88,7 +91,11 @@ print(result.selected_features)
 from brainmodelkit.feature_selection.pandas import correlation_filter
 
 result = correlation_filter(
-    df, feature_cols=features, threshold=0.90, method="spearman"
+    train_df=df,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    df=None,  # Alternative training frame. Leave unset when supplying train_df.
+    threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
+    method="spearman",  # Correlation measure used to compare feature pairs.
 )
 print(result.correlation_pairs)
 ```

@@ -89,7 +89,9 @@ Import the Spark calibrator for use with Spark DataFrames.
 ```python
 from brainmodelkit.calibration.pyspark import LogisticCalibrator
 
-calibrated = LogisticCalibrator(intercept=-0.2, slope=1.1).transform(predictions, input_col="score")
+calibrated = LogisticCalibrator(intercept=-0.2, slope=1.1).transform(
+    predictions, input_col="score"
+)
 ```
 
 Spark transformations are native SQL expressions, without Python UDFs, RDD access, or driver collection.
