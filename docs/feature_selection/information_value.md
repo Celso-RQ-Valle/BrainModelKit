@@ -2,28 +2,12 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
-
-### Pandas
-
-```python
-def information_value(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    n_bins=10,
-    min_iv=None,
-    smoothing=0.5,
-    binning="quantile",
-): ...
-```
 
 ### PySpark
 
@@ -39,6 +23,22 @@ def information_value(
     smoothing=0.5,
     binning="quantile",
     relative_error=0.001,
+): ...
+```
+
+### Pandas
+
+```python
+def information_value(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    n_bins=10,
+    min_iv=None,
+    smoothing=0.5,
+    binning="quantile",
 ): ...
 ```
 
@@ -76,14 +76,11 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method information_value`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method information_value`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Supervised binary classification; Pandas and native Spark.** IV compares the
+**Supervised binary classification; native Spark and pandas.** IV compares the
 event and non-event distributions across a feature's bins. Event means target 1.
 For observed bin b, additive smoothing alpha gives:
 
@@ -93,6 +90,20 @@ dn[b] = (non_events[b] + alpha) / (total_non_events + alpha * observed_bin_count
 WoE[b] = log(de[b] / dn[b])
 IV = sum((de[b] - dn[b]) * WoE[b])
 ```
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.information_value(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_iv=0.02,  # Minimum information value required to retain a feature.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import information_value
@@ -140,7 +151,7 @@ It is unsuitable for multiclass targets without a separately designed extension.
 
 Typical relative cost: **moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: binning and class counts. Spark: quantiles and grouped bin counts.
+Spark: quantiles and grouped bin counts. Pandas: binning and class counts.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for inspect woe bins when justified;
 do not run every selector as a fixed pipeline.

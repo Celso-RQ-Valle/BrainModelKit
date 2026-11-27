@@ -2,34 +2,12 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
-
-### Pandas
-
-```python
-def rfe(
-    run_name,
-    target_col,
-    train_df,
-    oot_df=None,
-    feature_cols=None,
-    model="logistic_regression",
-    *,
-    df_oot=None,
-    step=1,
-    n_feat_final=1,
-    model_params=None,
-    output_dir="feature_selection_runs",
-    df_scoring=None,
-    mlflow_logging=False,
-    signature=False,
-): ...
-```
 
 ### PySpark
 
@@ -54,6 +32,28 @@ def rfe(
 ): ...
 ```
 
+### Pandas
+
+```python
+def rfe(
+    run_name,
+    target_col,
+    train_df,
+    oot_df=None,
+    feature_cols=None,
+    model="logistic_regression",
+    *,
+    df_oot=None,
+    step=1,
+    n_feat_final=1,
+    model_params=None,
+    output_dir="feature_selection_runs",
+    df_scoring=None,
+    mlflow_logging=False,
+    signature=False,
+): ...
+```
+
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
 `None` placeholders for train/target/features do not make those inputs optional
@@ -72,7 +72,7 @@ at call time. Unsupported backend keywords raise TypeError.
 | `df_oot` | Alias for oot_df. Supplying distinct frames under both spellings raises ValueError. |
 | `step` | Positive integer number of weakest features removed per RFE/RFECV step; final removal is clipped to the minimum. |
 | `n_feat_final` | RFE's required final count, integer between 1 and initial feature count. OOT metrics do not optimize this count. |
-| `model_params` | Optional dictionary of native estimator parameters: Pandas snake_case, Spark camelCase. Custom estimators are copied/cloned. |
+| `model_params` | Optional dictionary of native estimator parameters: Spark camelCase, pandas snake_case. Custom estimators are copied/cloned. |
 | `output_dir` | Root of RFE's unique run directory, with per-fit reports and history.json/selected_features.json. RFE has filesystem side effects. |
 | `df_scoring` | Optional unlabeled frame to score with the final selected-feature classifier; requires OOT evaluation. RFE scores it only at the final fit. |
 | `mlflow_logging` | Historical RFE persistence toggle; True sends model persistence to MLflow, False uses local folders. Requires configured optional MLflow when enabled. |
@@ -93,17 +93,31 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method rfe`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method rfe`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Supervised; Pandas and native Spark.** The original RFE API and implementation
+**Supervised; native Spark and pandas.** The original RFE API and implementation
 remain available at both backend import paths. RFE is the recursive elimination
 mechanism: fit, calculate native importance, remove the weakest features, refit,
 and repeat until `n_feat_final` remain. The final subset is fitted and evaluated.
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.rfe(
+    run_name='example',  # Label used to identify the training run and its outputs.
+    target_col='target',  # Column containing the class label.
+    train_df=train,  # Training rows used to fit the selector.
+    oot_df=validation,  # Held-out rows used to evaluate the elimination fits.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    n_feat_final=1,  # Number of features to retain at the end of elimination.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import rfe
@@ -154,7 +168,7 @@ but can be costly and inherits the model's importance biases and scaling issues.
 
 Typical relative cost: **high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: fits per elimination step; reports. Spark: distributed fits per step; reports.
+Spark: distributed fits per step; reports. Pandas: fits per elimination step; reports.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for conditional importance when justified;
 do not run every selector as a fixed pipeline.

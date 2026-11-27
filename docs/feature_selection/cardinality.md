@@ -2,14 +2,14 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
 
-### Pandas
+### PySpark
 
 ```python
 def cardinality(
@@ -23,7 +23,7 @@ def cardinality(
 ): ...
 ```
 
-### PySpark
+### Pandas
 
 ```python
 def cardinality(
@@ -68,17 +68,27 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method cardinality`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method cardinality`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Unsupervised; Pandas and native Spark.** Cardinality counts distinct non-missing
+**Unsupervised; native Spark and pandas.** Cardinality counts distinct non-missing
 values. `unique_ratio = unique_count / total_rows`, including missing rows in the
 denominator. Defaults are `min_unique=2`, `max_unique=None`, and
 `max_unique_ratio=None`; specified bounds are inclusive.
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.cardinality(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import cardinality
@@ -99,7 +109,7 @@ completeness separately rather than treating the ratio as coverage.
 
 Typical relative cost: **low to moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: exact per-column distinct sets. Spark: exact distinct counts and shuffles.
+Spark: exact distinct counts and shuffles. Pandas: exact per-column distinct sets.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for before encoding when justified;
 do not run every selector as a fixed pipeline.

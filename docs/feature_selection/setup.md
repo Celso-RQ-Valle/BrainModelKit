@@ -1,6 +1,10 @@
 # Shared setup for method examples
 
-The per-method snippets use these names. Run this setup once in a notebook,
+For Spark, run the [native Spark example setup](spark.md#example-data).
+
+## pandas setup
+
+The pandas per-method snippets use these names. Run this setup once in a notebook,
 then run the snippet for the chosen method. Install `BrainModelKit[pandas]`;
 add the `boruta` extra for Pandas Boruta. For a standalone executable example use
 [method_example.py](../../examples/feature_selection/method_example.py).

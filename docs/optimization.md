@@ -2,16 +2,16 @@
 
 [Documentation home](README.md) ? [Backend journeys](../README.md)
 
-Install `brainmodelkit[pandas,optimization]` or
-`brainmodelkit[pyspark,optimization]`. Both optimization modules expose the same
+Install `brainmodelkit[pyspark,optimization]` or
+`brainmodelkit[pandas,optimization]`. Both optimization modules expose the same
 `objective_metric`, `direction`, `target_metric`, `target_limit`, and
 `target_operator` arguments. The three target arguments must be supplied together;
 omit all three for ordinary unconstrained optimization (CV KS maximization by
 default). `metrics` selects the base metrics to calculate, defaulting to all three.
 
 ```python
-from brainmodelkit.optimization.pandas import optimize
-# For Spark: from brainmodelkit.optimization.pyspark import optimize
+from brainmodelkit.optimization.pyspark import optimize
+# For pandas: from brainmodelkit.optimization.pandas import optimize
 
 space = {"num_leaves": [8, 64]}
 result = optimize(
@@ -97,7 +97,7 @@ only CV. In-sample training metrics are not estimates of generalization.
 ## Search spaces
 
 See [models and hyperparameters](models.md) for each supported model,
-including pandas, SparkLightGBM, and SynapseML parameter names.
+including SparkLightGBM, SynapseML, and pandas parameter names.
 
 Use `[minimum, maximum]` intervals in `search_space`:
 

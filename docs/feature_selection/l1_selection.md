@@ -2,32 +2,12 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
-
-### Pandas
-
-```python
-def l1_selection(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name="feature_selection",
-    C=1.0,
-    coefficient_tolerance=1e-08,
-    random_state=42,
-    max_iter=1000,
-): ...
-```
 
 ### PySpark
 
@@ -46,6 +26,26 @@ def l1_selection(
     reg_param=0.1,
     coefficient_tolerance=1e-08,
     max_iter=100,
+): ...
+```
+
+### Pandas
+
+```python
+def l1_selection(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name="feature_selection",
+    C=1.0,
+    coefficient_tolerance=1e-08,
+    random_state=42,
+    max_iter=1000,
 ): ...
 ```
 
@@ -88,16 +88,28 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method l1_selection`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method l1_selection`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Supervised binary classification; Pandas and native Spark.** L1 logistic
+**Supervised binary classification; native Spark and pandas.** L1 logistic
 regression penalizes `sum(abs(coefficient))`, encouraging exact zeros. Selection
 requires `abs(coefficient) > coefficient_tolerance` (default `1e-8`).
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.l1_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    reg_param=0.1,  # Regularization strength. Larger values shrink coefficients more.
+    max_iter=100,  # Maximum solver iterations for the regularized logistic fit.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import l1_selection
@@ -105,9 +117,8 @@ from brainmodelkit.feature_selection.pandas import l1_selection
 result = l1_selection(df, target_col="target", feature_cols=features, C=1.0)
 ```
 
-Pandas uses L1/liblinear with `C > 0`, an inverse regularization strength, and
-`max_iter=1000`. Spark uses native logistic regression with `elasticNetParam=1`,
-`reg_param=0.1`, and `max_iter=100`. Spark's regularization parameter is **not**
+Spark uses native logistic regression with `elasticNetParam=1`, `reg_param=0.1`,
+and `max_iter=100`. Pandas uses L1/liblinear with `C > 0`, an inverse regularization strength, and `max_iter=1000`. Spark's regularization parameter is **not**
 an alias for sklearn C. Diagnostics are the same as feature importance.
 
 Scale predictors and inspect convergence before interpreting coefficients. Spark
@@ -120,7 +131,7 @@ nonlinear interactions. Strong regularization can validly select no features.
 
 Typical relative cost: **moderate to high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: iterative penalized logistic fit. Spark: distributed logistic iterations.
+Spark: distributed logistic iterations. Pandas: iterative penalized logistic fit.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for compact linear models when justified;
 do not run every selector as a fixed pipeline.

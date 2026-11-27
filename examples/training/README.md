@@ -1,8 +1,8 @@
 # Training examples
 
-From the repository root, install `python -m pip install -e ".[pandas]"`
-and execute `python examples/training/pandas_example.py`. For Spark, install
-`.[pyspark]`, configure Java/Spark, and run `python examples/training/spark_example.py`.
+From the repository root, configure Java/Spark, install `python -m pip install -e ".[pyspark]"`,
+and run `python examples/training/spark_example.py`. For pandas, install
+`python -m pip install -e ".[pandas]"` and run `python examples/training/pandas_example.py`.
 
 Edit the arguments in either script to describe your model, features and target.
 Both use random holdouts for demonstration; supply an actual later-period dataset
@@ -10,8 +10,7 @@ as `oot_df` for out-of-time evaluation. Data preprocessing is the caller's respo
 
 Model names: `logistic_regression` (default), `random_forest`,
 `gradient_boosting`, `lightgbm`. Parameters use each backend's native names.
-You can also pass an estimator instance through `model`. Pandas clones it; Spark
-copies it. Both train fresh models. Pandas LightGBM needs `.[pandas,lightgbm]`;
+You can also pass an estimator instance through `model`. Spark copies it and pandas clones it. Both train fresh models.
 Spark LightGBM defaults to `lgbm_backend="default"` (SparkLightGBM, included in
 `.[pyspark]`), with native snake_case parameters such as `num_iterations`.
 For `lgbm_backend="synapseml"`, install `.[synapseml]` and load a matching JVM
@@ -19,6 +18,7 @@ package before creating the Spark session. For Spark 4.0.x use
 `com.microsoft.azure:synapseml_2.13:1.1.3-spark4.0` with the SynapseML Maven
 repository; use the matching `_2.12` coordinate for Spark 3.5.x. See
 [backend setup and persistence](../../docs/optimization.md#spark-lightgbm).
+Pandas LightGBM needs `.[pandas,lightgbm]`.
 
 Results expose `model`, `oot_predictions`, `scoring_predictions`, `metrics`,
 `feature_importance`, `output_dir`, and optional MLflow `run_id`. The `score`
@@ -34,7 +34,7 @@ does not require Windows Hadoop helpers for the first training run. Select
 With the API default `save_model_to="folder"`, each call creates `training_runs/<run_name>_<run_id>/` containing
 the fitted model, `model_info.json`, `metrics.json`, `metadata.json`, and
 `feature_importance.csv`. Change the parent with `output_dir`.
-Pandas defaults to `model_format="pickle"`; Spark uses `model_format="spark"`.
+Spark defaults to `model_format="spark"` and pandas to `model_format="pickle"`.
 The result exposes `save_model_to`, `model_format`, `run_id`, `output_dir`, and `model_uri`.
 Use `save_model_to="none"` for training without artifacts.
 

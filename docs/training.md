@@ -260,7 +260,7 @@ result = train_model(
 print(result.analysis_cube)
 ```
 
-Pandas returns a Pandas DataFrame; PySpark returns a Spark DataFrame. Breakdown
+PySpark returns a Spark DataFrame and pandas returns a pandas DataFrame. Breakdown
 columns must exist in the OOT frame and are never used to train the model.
 
 ### Supported Models
@@ -337,8 +337,8 @@ metadata; model files go to the experiment's artifact location.
 Install the MLflow extra together with the backend you use:
 
 ```bash
-python -m pip install "BrainModelKit[pandas,mlflow]"
-# or: python -m pip install "BrainModelKit[pyspark,mlflow]"
+python -m pip install "BrainModelKit[pyspark,mlflow]"
+# or: python -m pip install "BrainModelKit[pandas,mlflow]"
 ```
 
 Configure a tracking URI and experiment in a writable working directory:
@@ -512,12 +512,12 @@ Arguments after `model` must be passed by keyword.
 | `train_df` | Required | Labeled development DataFrame used to fit. Its backend must match the import. |
 | `oot_df` | Required | Separate labeled evaluation frame. Prefer a later period for real OOT. Single-class metrics are undefined (NaN). |
 | `model` | `"logistic_regression"` | Name: `logistic_regression`, `random_forest`, `gradient_boosting`, `lightgbm`; or compatible estimator. A fresh clone/copy is fitted. |
-| `model_params` | `None` | Estimator options using native backend names, e.g. Pandas `{"max_iter": 100}` versus Spark `{"maxIter": 100}`. `None` uses estimator defaults. |
+| `model_params` | `None` | Estimator options using native backend names, e.g. Spark `{"maxIter": 100}` or pandas `{"max_iter": 100}`. `None` uses estimator defaults. |
 | `lgbm_backend` (Spark-only) | `"default"` | LightGBM backend: `"default"` (SparkLightGBM) or `"synapseml"`. Pass directly to `train_model()`, outside `model_params`; see [backend examples](../docs/training.md#choosing-the-lightgbm-backend). |
 | `df_scoring` | `None` | Optional frame with every feature. Label is optional and may remain present. Omission produces `scoring_predictions=None`. |
 | `save_model_to` | `"folder"` | `folder`, `mlflow` or `none`; see execution examples above. |
 | `output_dir` | `"training_runs"` | Folder-mode parent directory, created if needed. Ignored in other modes, where `None` is accepted. |
-| `model_format` | `None` | Folder format, defaulting to Pandas `pickle` or Spark `spark`. Other formats/dependencies are listed above. Ignored outside folder mode. |
+| `model_format` | `None` | Folder format, defaulting to Spark `spark` or pandas `pickle`. Other formats/dependencies are listed above. Ignored outside folder mode. |
 | `signature` | `False` | Infer MLflow input/native prediction schemas. Does not change fitting or add score output to the logged model. Ignored outside MLflow. |
 | `analysis_cube` | `None` | Grouping column or list, e.g. `["company_size", "industry_section"]`, present in OOT. Returns `result.analysis_cube`. `[]` requests overall metrics; `None` disables it. More dimensions create exponentially more groups. Not included in the four persisted reports. |
 | `n_tiles` (Spark-only) | `10` | Integer >= 2 for approximate KS/AUC/Gini and the optional metric cube. Changes approximation granularity, not model fitting. Pandas has no training `n_tiles` argument. |

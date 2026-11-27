@@ -73,8 +73,8 @@ indexing, so they do not support Spark Connect. Neither this inventory nor a
 successful local run certifies Spark Connect support for every other selector.
 See [Spark algorithm contracts](feature_selection/spark.md).
 
-Pandas chi-square uses nonnegative integer counts/indicators; Spark uses integer
-category codes. Pandas MI uses sklearn estimation; Spark MI uses binned counts.
-Pandas L1 uses `C`; Spark uses `reg_param`. Search/refit costs, scorer definitions,
+Spark chi-square uses integer category codes and pandas uses nonnegative integer counts or indicators.
+Spark MI uses binned counts and pandas uses sklearn estimation.
+Spark L1 uses `reg_param` and pandas uses `C`. Search/refit costs, scorer definitions,
 bootstrap semantics, and estimator parameter spelling also differ. Preserve the
 method-specific feature order and inspect diagnostics, including empty selections.

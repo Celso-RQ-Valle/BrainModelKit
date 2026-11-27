@@ -81,7 +81,7 @@ within rejected features.
 | `p_accept`, `p_reject` (Spark) | Last raw upper/lower binomial tails |
 | `history` (Spark) | Iteration, shadow threshold, real importances, cumulative hits |
 | `metadata` (Spark) | Iterations, alpha, perc, corrections, seed, ranking convention |
-| `model` | Pandas: BorutaPy selector; Spark: None |
+| `model` | Spark: None; pandas: BorutaPy selector |
 
 Spark's internal forest contains temporary shadow columns, so it is not returned
 as a deployment classifier. Train a new model on `result.selected_features`.
@@ -89,6 +89,26 @@ Increasing max_iter can resolve some tentative cases but cannot repair leakage,
 unsuitable importance measures, or insufficient independent observations.
 
 ## API signatures
+
+### pyspark
+
+```python
+def boruta(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    model="random_forest",
+    model_params=None,
+    n_estimators=100,
+    max_iter=100,
+    perc=100,
+    alpha=0.05,
+    two_step=True,
+    random_state=42,
+): ...
+```
 
 ### pandas
 
@@ -113,61 +133,10 @@ def boruta(
 ): ...
 ```
 
-### pyspark
-
-```python
-def boruta(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    model="random_forest",
-    model_params=None,
-    n_estimators=100,
-    max_iter=100,
-    perc=100,
-    alpha=0.05,
-    two_step=True,
-    random_state=42,
-): ...
-```
-
 Pandas additionally accepts optional `oot_df` (alias `df_oot`), `df_scoring`,
 and `run_name`. They control final selected-feature evaluation, not shadow tests.
 See [evaluation outputs](../feature_selection.md#evaluation-outputs). Spark accepts
 the selection arguments shown above and returns diagnostics without a final fit.
-
-## Complete Pandas example
-
-Install `pip install "BrainModelKit[pandas,boruta]"`.
-
-```python
-import numpy as np
-import pandas as pd
-from brainmodelkit.feature_selection.pandas import boruta
-
-rng = np.random.default_rng(42)
-x = rng.normal(size=500)
-train = pd.DataFrame(
-    {
-        "signal": x,
-        "noise": rng.normal(size=500),
-        "target": (x + rng.normal(scale=0.4, size=500) > 0).astype(int),
-    }
-)
-result = boruta(
-    train,
-    "target",
-    ["signal", "noise"],
-    n_estimators=100,
-    model_params={"max_depth": 5},
-    max_iter=30,
-    random_state=42,
-)
-print(pd.DataFrame(result.feature_table))
-print(result.selected_features)
-```
 
 ## Spark example and parameters
 
@@ -207,6 +176,37 @@ differ across backends. Do not expect matching selected lists just from matching
 seeds. Spark uses distributed sorts/joins and Python RDD indexing, without
 converting data to Pandas, and needs classic Spark workers and executor storage.
 
+## Complete Pandas example
+
+Install `pip install "BrainModelKit[pandas,boruta]"`.
+
+```python
+import numpy as np
+import pandas as pd
+from brainmodelkit.feature_selection.pandas import boruta
+
+rng = np.random.default_rng(42)
+x = rng.normal(size=500)
+train = pd.DataFrame(
+    {
+        "signal": x,
+        "noise": rng.normal(size=500),
+        "target": (x + rng.normal(scale=0.4, size=500) > 0).astype(int),
+    }
+)
+result = boruta(
+    train,
+    "target",
+    ["signal", "noise"],
+    n_estimators=100,
+    model_params={"max_depth": 5},
+    max_iter=30,
+    random_state=42,
+)
+print(pd.DataFrame(result.feature_table))
+print(result.selected_features)
+```
+
 ## Validating a selection in practice
 
 Develop the selector on training data only. Check feature availability, target
@@ -221,7 +221,7 @@ tentative diagnostics in the report even when only confirmed features are deploy
 
 Typical relative cost: **very high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: forests on real + shadow columns. Spark: shadow sorts/joins + repeated forests.
+Spark: shadow sorts/joins + repeated forests. Pandas: forests on real + shadow columns.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for all-relevant hypothesis testing when justified;
 do not run every selector as a fixed pipeline.

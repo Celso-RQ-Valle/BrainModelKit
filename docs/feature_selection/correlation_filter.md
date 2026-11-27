@@ -2,20 +2,12 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
-
-### Pandas
-
-```python
-def correlation_filter(
-    train_df=None, feature_cols=None, *, df=None, threshold=0.9, method="pearson"
-): ...
-```
 
 ### PySpark
 
@@ -28,6 +20,14 @@ def correlation_filter(
     threshold=0.9,
     method="pearson",
     max_features=256,
+): ...
+```
+
+### Pandas
+
+```python
+def correlation_filter(
+    train_df=None, feature_cols=None, *, df=None, threshold=0.9, method="pearson"
 ): ...
 ```
 
@@ -62,17 +62,27 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method correlation_filter`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method correlation_filter`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Unsupervised; Pandas and native Spark.** Pearson correlation is normalized
+**Unsupervised; native Spark and pandas.** Pearson correlation is normalized
 covariance; Spearman correlation is Pearson correlation of ranks and captures
 monotonic rather than only linear relationships. `method` accepts `"pearson"`
 or `"spearman"`; both use absolute correlation for filtering.
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.correlation_filter(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import correlation_filter
@@ -103,7 +113,7 @@ See the [Spark correlation API](https://spark.apache.org/docs/3.5.7/api/python/r
 
 Typical relative cost: **moderate to high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: feature-pair matrix; Spearman ranks. Spark: distributed correlation (ranking for Spearman); O(p^2) driver memory.
+Spark: distributed correlation (ranking for Spearman); O(p^2) driver memory. Pandas: feature-pair matrix; Spearman ranks.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for after quality checks when justified;
 do not run every selector as a fixed pipeline.

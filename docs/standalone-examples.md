@@ -628,7 +628,7 @@ Choose [Spark simulation](../docs/standalone-examples.md#spark-simulated-data) o
 ## Feature selection
 
 Start here to choose features, inspect the reasons, and evaluate a final model.
-All sixteen methods are available in both Pandas and Spark. Backend algorithms
+All sixteen methods are available in both Spark and pandas. Backend algorithms
 and arguments can differ; each method link below explains the actual computation,
 assumptions, decision rules, diagnostics, and examples.
 
@@ -636,7 +636,7 @@ Examples: [Spark feature selection quickstart](../docs/standalone-examples.md#sp
 
 ### Choose a method and read its algorithm
 
-| Method | Question answered | Detailed guide (Pandas and Spark) |
+| Method | Question answered | Detailed guide (Spark and pandas) |
 | --- | --- | --- |
 | `completeness` | Is the feature sufficiently available, globally and by group? | [Completeness](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/completeness.md) |
 | `variance_filter` | Is there variation beyond a chosen floor? | [Variance](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/variance_filter.md) |
@@ -655,8 +655,7 @@ Examples: [Spark feature selection quickstart](../docs/standalone-examples.md#sp
 | `stability_selection` | Which features recur across resamples/groups? | [Stability](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/stability_selection.md) |
 | `boruta` | Which real features consistently beat shuffled shadows? | [Boruta hypotheses and decisions](https://github.com/Celso-RQ-Valle/BrainModelKit/blob/main/docs/feature_selection/boruta.md) |
 
-Pandas Boruta requires `BrainModelKit[pandas,boruta]`; Spark Boruta uses the
-native forest with the Spark extra. Its guide explains shadow construction,
+Spark Boruta uses the native forest with the Spark extra. Pandas Boruta requires `BrainModelKit[pandas,boruta]`. Its guide explains shadow construction,
 binomial hit tests, multiple-testing corrections, and why an unresolved
 hypothesis is not a validated null.
 
@@ -721,7 +720,7 @@ and its [feature output summary](../docs/standalone-examples.md#feature-output-s
 | --- | --- | --- |
 | 1. Prepare data | [Simulate data](../docs/standalone-examples.md#simulate-data) | Generate sample credit data for experiments. |
 | 2. Build features | [Numeric time-series features](../docs/standalone-examples.md#numeric-time-series-features) | Create current values, lags, rolling statistics, and differences from numeric history. |
-| 3. Select features | [Feature selection](../docs/standalone-examples.md#feature-selection) | Choose useful inputs with pandas or Spark. |
+| 3. Select features | [Feature selection](../docs/standalone-examples.md#feature-selection) | Choose useful inputs with Spark or pandas. |
 | 4. Train models | [Model Training](../docs/training.md#model-training) | Fit models, configure backends, and save or load fitted models. |
 | 5. Validate and tune | [Cross-validation](../docs/standalone-examples.md#cross-validation) and [Optimization](../docs/standalone-examples.md#optimization) | Compare models and search hyperparameters. |
 | 6. Evaluate results | [Metrics](../docs/evaluation.md#metrics) and [Cube analysis](../docs/evaluation.md#cube-analysis) | Evaluate discrimination, risk tables, and performance across segments. |

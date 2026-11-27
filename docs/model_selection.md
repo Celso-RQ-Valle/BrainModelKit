@@ -8,7 +8,8 @@ fold-level and aggregate metrics. It does not persist models, create MLflow
 runs, mutate the input frame, or use an OOT frame.
 
 ```python
-from brainmodelkit.model_selection.pandas import cross_validate
+from brainmodelkit.model_selection.pyspark import cross_validate
+# For pandas: from brainmodelkit.model_selection.pandas import cross_validate
 
 result = cross_validate(
     train_df,

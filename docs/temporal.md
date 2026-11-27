@@ -2,11 +2,17 @@
 
 [Documentation home](README.md) ? [Backend journeys](../README.md)
 
-Both `brainmodelkit.pandas` and `brainmodelkit.pyspark` export
+Both `brainmodelkit.pyspark` and `brainmodelkit.pandas` export
 `simulate_bureau_history` and `build_features`. Existing APIs,
 including `temporal_features`, remain available unchanged.
 Install the corresponding backend extra. The root package does not import either
 backend dependency.
+
+**Spark**
+
+Use Spark DataFrames with `brainmodelkit.pyspark.simulate_bureau_history` and `brainmodelkit.pyspark.build_features`. See the [Spark history simulation](standalone-examples.md#spark-history-simulation) and [Spark feature-building example](standalone-examples.md#create-features-with-pyspark) for complete calls.
+
+**pandas**
 
 ```python
 import pandas as pd
@@ -59,8 +65,7 @@ print(
 )
 ```
 
-For Spark, import the same names from `brainmodelkit.pyspark` and pass Spark
-DataFrames instead. Both APIs accept a single key name or a sequence of key names.
+Both APIs accept a single key name or a sequence of key names.
 Composite identifiers and string identifiers with leading zeros are retained;
 the simulator deduplicates customers by their keys. Keys and dates cannot be null.
 Use matching key types in the spine and history. Dates are calendar dates: ISO
@@ -92,7 +97,9 @@ clipped or normalized. Defaults are `date_col="observation_date"`,
 `reference_date_col="dt_ref"`, and `period_unit="months"`.
 Lists and single strings are accepted for column names.
 
-### Public signature (pandas and Spark)
+<a id="public-signature-pandas-and-spark"></a>
+
+### Public signature (Spark and pandas)
 
 ```python
 def build_features(
@@ -383,7 +390,7 @@ create_cols = {
 The expression is evaluated on each historical observation before temporal
 aggregation. A mean of ratios is not a ratio of means. All selected custom
 series receive the usual temporal features and, when enabled, own-history
-comparisons. Identical arithmetic is supported on pandas and Spark.
+comparisons. Identical arithmetic is supported on Spark and pandas.
 
 ### Missing values and validation
 

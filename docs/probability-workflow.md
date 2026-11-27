@@ -11,11 +11,11 @@ serialized model format changes.
 ## Install and run
 
 ```bash
-pip install 'brainmodelkit[pandas,explainability,plots]'
-python examples/probability_workflow_pandas.py --output probability_artifacts
-
 pip install 'brainmodelkit[pyspark,explainability]'
 python examples/probability_workflow_pyspark.py --output spark_probability_artifacts
+
+pip install 'brainmodelkit[pandas,explainability,plots]'
+python examples/probability_workflow_pandas.py --output probability_artifacts
 ```
 
 Spark additionally needs a working Java/Spark environment. Workers need the same
@@ -38,16 +38,16 @@ examples are holdouts, not chronological out-of-time validation.
 
 Use the same class names under either backend:
 
-| Purpose | Pandas namespace | Spark namespace |
+| Purpose | Spark namespace | Pandas namespace |
 | --- | --- | --- |
-| `LogisticCalibrator`, `calibration_diagnostics`, `compare_calibration` | `brainmodelkit.calibration.pandas` | `brainmodelkit.calibration.pyspark` |
-| `ScoreAligner` | `brainmodelkit.scoring.pandas` | `brainmodelkit.scoring.pyspark` |
-| `PredictionPipeline` | `brainmodelkit.prediction.pandas` | `brainmodelkit.prediction.pyspark` |
-| `ModelExplainer`, `ExplanationResult` | `brainmodelkit.explainability.pandas` | `brainmodelkit.explainability.pyspark` |
+| `LogisticCalibrator`, `calibration_diagnostics`, `compare_calibration` | `brainmodelkit.calibration.pyspark` | `brainmodelkit.calibration.pandas` |
+| `ScoreAligner` | `brainmodelkit.scoring.pyspark` | `brainmodelkit.scoring.pandas` |
+| `PredictionPipeline` | `brainmodelkit.prediction.pyspark` | `brainmodelkit.prediction.pandas` |
+| `ModelExplainer`, `ExplanationResult` | `brainmodelkit.explainability.pyspark` | `brainmodelkit.explainability.pandas` |
 
 The previous explainability imports of `PredictionPipeline` remain available.
-The classes are also exposed lazily through `brainmodelkit.pandas` and
-`brainmodelkit.pyspark`. An explainer or prediction composition accepts either a
+The classes are also exposed lazily through `brainmodelkit.pyspark` and
+`brainmodelkit.pandas`. An explainer or prediction composition accepts either a
 fitted model or the existing `TrainingResult`; it unwraps `.model` without fitting
 or modifying it. Native LightGBM loaders return a `Booster`: supply its original
 `class_labels` explicitly (for repository training, `[0, 1]`).
@@ -82,6 +82,21 @@ are invalid, never silently clipped into validity. Raw margins have a
 model-defined orientation; complement options for raw input are rejected. The
 composition adapters orient raw binary margins toward `event_label`.
 
+### Spark
+
+Import the Spark calibrator for use with Spark DataFrames.
+
+```python
+from brainmodelkit.calibration.pyspark import LogisticCalibrator
+
+calibrated = LogisticCalibrator(intercept=-0.2, slope=1.1).transform(predictions, input_col="score")
+```
+
+Spark transformations are native SQL expressions, without Python UDFs, RDD access, or driver collection.
+Strict validation executes a small existence query before returning the lazy
+transformation. Output uses one projection against original columns, including
+when explicit overwriting is requested.
+
 ### Pandas
 
 ```python
@@ -104,14 +119,6 @@ fitted = LogisticCalibrator(event_label=1).fit(
 )
 print(fitted.intercept, fitted.slope, fitted.ranking, fitted.diagnostics_)
 ```
-
-### Spark
-
-Use the same calls with `brainmodelkit.calibration.pyspark`. Transformations are
-native SQL expressions, without Python UDFs, RDD access, or driver collection.
-Strict validation executes a small existence query before returning the lazy
-transformation. Output uses one projection against original columns, including
-when explicit overwriting is requested.
 
 ### Manual versus fitted parameters
 
@@ -211,7 +218,7 @@ are required. Validation and null handling match calibration. Pandas inputs and
 their indexes are preserved; Spark preserves columns and keys, not row ordering.
 
 Full precision is the default (`decimals=None`). Explicit `decimals=0..12` uses
-decimal half-even rounding (Pandas Decimal / Spark `bround`). Bounds must be
+decimal half-even rounding (Spark `bround` / pandas Decimal). Bounds must be
 representable at the selected decimal precision. Rounded output retains
 `business_score_unrounded` (or `unrounded_col`). Floating-point clipping protects
 the theoretical bounds; no observation-based clipping or scaling is applied.
@@ -370,14 +377,14 @@ results when reusing expensive explanations across several actions.
 
 | Actual model/backend | Optimized raw | Optimized base probability / score without calibration | Calibrated event/complement/score | Preprocessing |
 | --- | --- | --- | --- | --- |
-| pandas sklearn `LogisticRegression` | Linear SHAP | Explicit permutation | Explicit permutation | Direct numeric features; sklearn Pipeline via permutation |
-| pandas `LGBMClassifier` / binary native `Booster` | Tree SHAP | Interventional Tree SHAP | Explicit permutation | Direct numeric features |
-| pandas sklearn decision tree / random forest / gradient boosting | Gradient boosting margin only | Interventional Tree SHAP | Explicit permutation | Direct numeric features |
-| pandas other binary `predict_proba` or explicit callable | Only via explicit raw callable/permutation | Explicit permutation | Explicit permutation | Complete callable includes preprocessing |
 | Spark binary `LogisticRegressionModel` | Exported linear SHAP | Explicit permutation | Explicit permutation | Matching scalar columns, optionally repository VectorAssembler pipeline |
 | Spark BrainModelKit `SparkLightGBMModel` | Exported native Tree SHAP | Exported interventional Tree SHAP | Explicit permutation | Matching numeric columns, optionally repository VectorAssembler pipeline |
 | Spark SynapseML binary LightGBM | Native Tree SHAP | Interventional Tree SHAP | Explicit permutation | Requires matching JVM runtime and bounded export parity check |
 | Arbitrary Spark ML pipelines, multiclass, native categorical trees | Not implemented | Not implemented | Not implemented | Raise capability/schema errors |
+| pandas sklearn `LogisticRegression` | Linear SHAP | Explicit permutation | Explicit permutation | Direct numeric features; sklearn Pipeline via permutation |
+| pandas `LGBMClassifier` / binary native `Booster` | Tree SHAP | Interventional Tree SHAP | Explicit permutation | Direct numeric features |
+| pandas sklearn decision tree / random forest / gradient boosting | Gradient boosting margin only | Interventional Tree SHAP | Explicit permutation | Direct numeric features |
+| pandas other binary `predict_proba` or explicit callable | Only via explicit raw callable/permutation | Explicit permutation | Explicit permutation | Complete callable includes preprocessing |
 
 Calibration/scoring can still process probability columns from any model,
 including SynapseML. Explanation support does not imply fitting support. Spark
@@ -403,7 +410,7 @@ It includes intercept/slope, manual/fitted mode and diagnostics, input space,
 event definition, input/output meanings, epsilon, invalid policy, feature order,
 score bounds/direction and rounding precision. Supply `feature_order` when
 constructing standalone configurations; composition validates it when present.
-Fixed parameters are portable between pandas and Spark; no refitting is needed.
+Fixed parameters are portable between Spark and pandas; no refitting is needed.
 JSON does not contain the original estimator or background dataset. Save the
 model with the existing [persistence APIs](training.md#saving-trained-models),
 save the reference separately, and compose the loaded model/configurations.

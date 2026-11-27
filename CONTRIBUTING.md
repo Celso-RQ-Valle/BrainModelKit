@@ -43,7 +43,7 @@ ruff format .
 
 - Add type hints to public functions and methods.
 - Write public names, docstrings, comments, and documentation in English.
-- Keep top-level imports independent of Pandas and PySpark.
+- Keep top-level imports independent of PySpark and pandas.
 - Put framework-specific behavior in its corresponding integration namespace.
 - Import framework dependencies only inside the integration that needs them.
 - Add tests for new behavior and bug fixes.

@@ -2,8 +2,8 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
@@ -12,6 +12,23 @@ The explanations below describe shared concepts and the Pandas behavior. Consult
 the signatures for backend-specific arguments; they are not interchangeable.
 
 ## Signatures
+
+### PySpark
+
+```python
+def permutation_importance_selection(
+    model,
+    df,
+    target_col,
+    feature_cols,
+    *,
+    scoring="roc_auc",
+    n_repeats=5,
+    random_state=42,
+    threshold=None,
+    top_k=None,
+): ...
+```
 
 ### Pandas
 
@@ -31,23 +48,6 @@ def permutation_importance_selection(
 ): ...
 ```
 
-### PySpark
-
-```python
-def permutation_importance_selection(
-    model,
-    df,
-    target_col,
-    feature_cols,
-    *,
-    scoring="roc_auc",
-    n_repeats=5,
-    random_state=42,
-    threshold=None,
-    top_k=None,
-): ...
-```
-
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
 `None` placeholders for train/target/features do not make those inputs optional
@@ -61,7 +61,7 @@ at call time. Unsupported backend keywords raise TypeError.
 | `df` | Alias for train_df except permutation, where this is the held-out development DataFrame. Supplying distinct frames under both aliases raises ValueError. |
 | `target_col` | Target column name; exclude it from feature_cols. Required for supervised methods. Spark requires both 0 and 1; Pandas class support is described below. |
 | `feature_cols` | Explicit nonempty ordered list of unique existing feature names. RFE alone can infer names starting feat_. Selection outputs preserve this order. |
-| `scoring` | Pandas sklearn scorer; Spark accepts roc_auc or average_precision (Spark PR area, not sklearn average precision). |
+| `scoring` | Spark accepts roc_auc or average_precision (Spark PR area). Pandas accepts a sklearn scorer. |
 | `n_repeats` | Positive permutation repetitions per feature; diagnostics report their mean and population standard deviation. |
 | `random_state` | Seed for supported random estimators/resampling. Spark partition/order changes may still change results. |
 | `threshold` | Inclusive score cutoff; None disables it. For correlation, reject at absolute correlation >= threshold in [0,1]. |
@@ -83,12 +83,32 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method permutation_importance_selection`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method permutation_importance_selection`. Use `--backend pandas` for the pandas example.
 
 ## How it works
+
+### Spark usage
+
+See [the complete Spark setup and permutation_importance_selection example](spark.md#permutation_importance_selection) for the
+distributed algorithm, parameters, result fields, limits, and interpretation.
+
+[Example data](spark.md#example-data)
+
+```python
+model = fs.feature_importance_selection(train, "target", features, model="decision_tree").model
+result = fs.permutation_importance_selection(
+    model=model,  # Already-fitted classifier to rescore after each shuffle.
+    df=validation,  # Held-out rows on which shuffling a feature measures the score decrease.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+### pandas usage
+
+[Example data](setup.md)
 
 **Supervised evaluation; Pandas behavior.** For an already fitted model, permute one
 feature repeatedly and measure the decrease in a chosen score. Larger decreases
@@ -118,16 +138,11 @@ data. Correlated features can substitute for one another and depress individual
 importance. Repeats increase runtime; the standard deviation measures permutation
 variation, not a confidence interval over new datasets. Spark supports native permutation; read the [Spark contract](spark.md#permutation_importance_selection).
 
-## Spark usage
-
-See [the complete Spark setup and permutation_importance_selection example](spark.md#permutation_importance_selection) for the
-distributed algorithm, parameters, result fields, limits, and interpretation.
-
 ## Computational cost and practical limits
 
 Typical relative cost: **high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: shuffle one local column and rescore per feature and repeat. Spark: repeated sorting, joins, and predictions per feature.
+Spark: repeated sorting, joins, and predictions per feature. Pandas: shuffle one local column and rescore per feature and repeat.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for validate model reliance when justified;
 do not run every selector as a fixed pipeline.

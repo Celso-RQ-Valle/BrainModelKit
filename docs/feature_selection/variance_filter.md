@@ -2,20 +2,20 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
 
-### Pandas
+### PySpark
 
 ```python
 def variance_filter(train_df=None, feature_cols=None, *, df=None, min_variance=0.0): ...
 ```
 
-### PySpark
+### Pandas
 
 ```python
 def variance_filter(train_df=None, feature_cols=None, *, df=None, min_variance=0.0): ...
@@ -50,18 +50,28 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method variance_filter`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method variance_filter`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Unsupervised; Pandas and native Spark.** Population variance is
+**Unsupervised; native Spark and pandas.** Population variance is
 `sum((x - mean(x))**2) / n`, calculated over non-missing observations (`ddof=0`).
 Features pass only when `variance > min_variance`; the default zero removes
 constants. A single observed value has zero variance; all-missing features have
 undefined variance and are rejected.
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.variance_filter(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import variance_filter
@@ -80,7 +90,7 @@ Spark uses native `var_pop` aggregation.
 
 Typical relative cost: **low**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: column moments. Spark: native var_pop aggregates.
+Spark: native var_pop aggregates. Pandas: column moments.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for before fitting when justified;
 do not run every selector as a fixed pipeline.

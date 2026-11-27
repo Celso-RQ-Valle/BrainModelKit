@@ -2,26 +2,12 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
-
-### Pandas
-
-```python
-def chi_square(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    max_p_value=0.05,
-    top_k=None,
-): ...
-```
 
 ### PySpark
 
@@ -35,6 +21,20 @@ def chi_square(
     max_p_value=0.05,
     top_k=None,
     max_categories=1000,
+): ...
+```
+
+### Pandas
+
+```python
+def chi_square(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    max_p_value=0.05,
+    top_k=None,
 ): ...
 ```
 
@@ -70,17 +70,29 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method chi_square`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method chi_square`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Supervised; Pandas and native Spark, with different input semantics.** The
+**Supervised; native Spark and pandas, with different input semantics.** The
 statistic sums `(observed - expected)**2 / expected` under independence. Small
 p-values indicate evidence against independence, subject to adequate expected
 cell counts and independent observations.
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+counts = train.select("target", *((F.col(c) > 0).cast("int").alias(c) for c in features))
+result = fs.chi_square(
+    train_df=counts,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import chi_square
@@ -90,9 +102,8 @@ result = chi_square(
 )
 ```
 
-Pandas uses sklearn `chi2` on **nonnegative integer counts or indicators**. Spark
-uses native `ChiSquareTest` on **nonnegative integer category codes**, treating
-each distinct value as a categorical level. These statistics are not numerically
+Spark uses native `ChiSquareTest` on **nonnegative integer category codes**, treating
+each distinct value as a categorical level. Pandas uses sklearn `chi2` on **nonnegative integer counts or indicators**. These statistics are not numerically
 interchangeable. Both reject negative or fractional features. Discretize or encode
 explicitly; never pass arbitrary continuous values and interpret them as counts.
 Spark's `max_categories=1000` guards categorical contingency-table size; Spark
@@ -110,9 +121,9 @@ and [Spark ChiSquareTest](https://spark.apache.org/docs/latest/api/java/org/apac
 
 Typical relative cost: **low to moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: count-by-class summaries. Spark: categorical contingency tables.
+Spark: categorical contingency tables. Pandas: count-by-class summaries.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
-change which method dominates. Use this method for counts (pandas); category codes (spark) when justified;
+change which method dominates. Use this method for category codes (Spark) or counts (pandas) when justified;
 do not run every selector as a fixed pipeline.
 
 See the [backend comparison](../selection-costs.md) for an ordered shortlist

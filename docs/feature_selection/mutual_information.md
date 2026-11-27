@@ -2,8 +2,8 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
@@ -12,23 +12,6 @@ The explanations below describe shared concepts and the Pandas behavior. Consult
 the signatures for backend-specific arguments; they are not interchangeable.
 
 ## Signatures
-
-### Pandas
-
-```python
-def mutual_information(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    threshold=None,
-    top_k=None,
-    random_state=42,
-    discrete_features=False,
-    n_neighbors=3,
-): ...
-```
 
 ### PySpark
 
@@ -45,6 +28,23 @@ def mutual_information(
     n_bins=10,
     relative_error=0.001,
     max_categories=1000,
+): ...
+```
+
+### Pandas
+
+```python
+def mutual_information(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    threshold=None,
+    top_k=None,
+    random_state=42,
+    discrete_features=False,
+    n_neighbors=3,
 ): ...
 ```
 
@@ -85,12 +85,30 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method mutual_information`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method mutual_information`. Use `--backend pandas` for the pandas example.
 
 ## How it works
+
+### Spark usage
+
+See [the complete Spark setup and mutual_information example](spark.md#mutual_information) for the
+distributed algorithm, parameters, result fields, limits, and interpretation.
+
+[Example data](spark.md#example-data)
+
+```python
+result = fs.mutual_information(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+### pandas usage
+
+[Example data](setup.md)
 
 **Supervised classification; Pandas behavior.** MI measures departure from independence:
 `I(X; Y) = sum p(x,y) log(p(x,y)/(p(x)p(y)))`, with the analogous integral for
@@ -117,16 +135,11 @@ can be noisy for sparse categories; arbitrary ordinal encoding of nominal
 categories as continuous values is inappropriate. It does not account for
 redundancy or interactions. Spark implements binned MI; read the [Spark estimator contract](spark.md#mutual_information). See [sklearn MI](https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.mutual_info_classif.html).
 
-## Spark usage
-
-See [the complete Spark setup and mutual_information example](spark.md#mutual_information) for the
-distributed algorithm, parameters, result fields, limits, and interpretation.
-
 ## Computational cost and practical limits
 
 Typical relative cost: **moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: nearest-neighbor estimation for continuous data. Spark: quantile binning and joint-count shuffles.
+Spark: quantile binning and joint-count shuffles. Pandas: nearest-neighbor estimation for continuous data.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for nonlinear screening when justified;
 do not run every selector as a fixed pipeline.

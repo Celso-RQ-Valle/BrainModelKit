@@ -2,14 +2,14 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
 
-### Pandas
+### PySpark
 
 ```python
 def completeness(
@@ -23,7 +23,7 @@ def completeness(
 ): ...
 ```
 
-### PySpark
+### Pandas
 
 ```python
 def completeness(
@@ -68,14 +68,11 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method completeness`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method completeness`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Unsupervised; Pandas and native Spark.** Completeness measures data availability,
+**Unsupervised; native Spark and pandas.** Completeness measures data availability,
 not predictive power:
 
 ```text
@@ -83,11 +80,23 @@ completeness = non-null observations / total observations
 missing_rate = 1 - completeness
 ```
 
-Pandas missing values and Spark floating NaN count as missing, as do Spark SQL
-nulls. Empty strings and sentinel values such as `-999` are not automatically
+Spark SQL nulls and floating NaN count as missing, as do pandas missing values. Empty strings and sentinel values such as `-999` are not automatically
 missing; normalize them first if that is their business meaning. Selection uses
 `completeness >= min_completeness` (default 0.70). An all-missing feature therefore
 passes only at an explicitly chosen zero threshold.
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.completeness(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import completeness
@@ -117,7 +126,7 @@ non-null indicators; group tables stay distributed.
 
 Typical relative cost: **low**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: non-null scans; optional grouped aggregates. Spark: non-null aggregates; grouped shuffles.
+Spark: non-null aggregates; grouped shuffles. Pandas: non-null scans; optional grouped aggregates.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for missing-input screening when justified;
 do not run every selector as a fixed pipeline.

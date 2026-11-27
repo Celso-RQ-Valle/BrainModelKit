@@ -10,7 +10,7 @@ The project is experimental and pre-1.0; public APIs remain unstable.
 
 ### Changed
 
-- **Breaking:** removed `ref_col` from pandas and Spark `build_features`. Use
+- **Breaking:** removed `ref_col` from Spark and pandas `build_features`. Use
   existing `create_cols` expressions and select their names in `value_cols`.
   Automatic reference-ratio and ratio-specific percentage-point features were
   removed; ordinary temporal features and own-history comparisons are preserved.
@@ -24,7 +24,7 @@ The project is experimental and pre-1.0; public APIs remain unstable.
   Update downstream feature lists/models; input and explicit custom names are
   unchanged. Legacy `temporal_features`/`build_autoregressive_features` names stay
   unchanged. Normalized output collisions raise `ValueError`.
-- Both pandas and Spark support validated `create_cols` arithmetic trees and
+- Both Spark and pandas support validated `create_cols` arithmetic trees and
   `nullable=False` observation-level zero replacement. Defaults preserve temporal
   values and missing-history semantics. Composite key lists are recommended;
   legacy string keys remain accepted.
@@ -33,7 +33,7 @@ The project is experimental and pre-1.0; public APIs remain unstable.
   of lookup dates, measured against the spine reference date for current and lag
   values. Legacy APIs retain their original date outputs.
 
-- Added generic `build_features` to pandas and Spark with explicit keys and value
+- Added generic `build_features` to Spark and pandas with explicit keys and value
   columns. Deprecated `build_autoregressive_features` while preserving its defaults
   and results. Pandas now sorts history once and uses binary-search boundaries.
 
@@ -56,7 +56,7 @@ The project is experimental and pre-1.0; public APIs remain unstable.
   MLflow delegates staging to its configured filesystem without a local winutils
   preflight; actual Hadoop failures include recovery instructions. `none` performs
   no persistence validation or writes. The Spark quickstart explicitly selects
-  `none`; the API default remains folder (Pandas pickle / Spark native pipeline).
+  `none`; the API default remains folder (Spark native pipeline / pandas pickle).
 
 - Release validation now installs Optuna, MLflow, and Boruta explicitly, rejects
   skipped tests, pins Python/PySpark CI pairs with Java 17, and checks fresh wheel
@@ -126,7 +126,7 @@ The project is experimental and pre-1.0; public APIs remain unstable.
 
 ### Added
 
-- Initial project structure and optional Pandas and PySpark integrations.
+- Initial project structure and optional PySpark and pandas integrations.
 
 [Unreleased]: https://github.com/Celso-RQ-Valle/BrainModelKit/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/Celso-RQ-Valle/BrainModelKit/compare/v0.1.0...v0.2.0

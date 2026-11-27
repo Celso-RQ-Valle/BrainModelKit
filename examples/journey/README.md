@@ -5,8 +5,8 @@
 Run from a repository checkout with the appropriate backend extra installed:
 
 ```bash
-python examples/journey/pandas_workflow.py
 python examples/journey/spark_workflow.py
+python examples/journey/pandas_workflow.py
 ```
 
 Both use [sample_data.py](sample_data.py): 120 synthetic accounts, one reference
@@ -40,11 +40,11 @@ These standalone variants save on the final fit, load the resulting model, and
 assert that rescoring produces valid probabilities:
 
 ```bash
-python examples/journey/pandas_workflow.py --save-dir training_runs/pandas_journey
 python examples/journey/spark_workflow.py --save-dir training_runs/spark_journey
+python examples/journey/pandas_workflow.py --save-dir training_runs/pandas_journey
 ```
 
-The pandas path uses pickle and the Spark path uses a PipelineModel loader.
+The Spark path uses a PipelineModel loader and the pandas path uses pickle.
 Only load trusted artifacts. The Spark script pins local Python workers to its
 interpreter and uses two local threads for reproducibility of the demo setup;
 production sessions remain caller-managed. Spark folder persistence requires a

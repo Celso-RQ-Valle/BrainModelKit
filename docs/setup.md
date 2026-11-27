@@ -22,17 +22,17 @@ for the explicit CI matrix, tested scope, and unverified environments.
 Install the execution stack you need from PyPI:
 
 ```bash
-# Pandas
-python -m pip install "brainmodelkit[pandas]"
-
 # PySpark
 python -m pip install "brainmodelkit[pyspark]"
 
-# Pandas + MLflow
-python -m pip install "brainmodelkit[pandas,mlflow]"
+# Pandas
+python -m pip install "brainmodelkit[pandas]"
 
 # PySpark + MLflow
 python -m pip install "brainmodelkit[pyspark,mlflow]"
+
+# Pandas + MLflow
+python -m pip install "brainmodelkit[pandas,mlflow]"
 ```
 
 `brainmodelkit` by itself installs no execution backend. MLflow is independent
@@ -65,7 +65,7 @@ python -m pip install --no-deps "git+https://github.com/Celso-RQ-Valle/BrainMode
 
 `--no-deps` prevents pip from installing, upgrading, or downgrading runtime
 dependencies. Use it only after confirming that the platform already provides
-the Pandas, PySpark, selected LightGBM backend, and other optional dependencies required by
+the PySpark, pandas, selected LightGBM backend, and other optional dependencies required by
 the features you will call. In particular, do not use the PySpark extra merely
 to replace a managed Spark runtime.
 
@@ -120,8 +120,8 @@ Inspect existing capabilities without changing the environment:
 import brainmodelkit as bmk
 
 bmk.doctor()
-bmk.doctor(backend="pandas")
 bmk.doctor(backend="pyspark")
+bmk.doctor(backend="pandas")
 bmk.doctor(
     backend="pyspark",
     model="lightgbm",
@@ -181,7 +181,7 @@ print(brainmodelkit.__version__)
 Integration-specific functionality lives under explicit namespaces:
 
 ```python
-from brainmodelkit import pandas, pyspark
+from brainmodelkit import pyspark, pandas
 ```
 
 ## Spark scalability limits

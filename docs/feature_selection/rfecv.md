@@ -2,8 +2,8 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
@@ -12,6 +12,26 @@ The explanations below describe shared concepts and the Pandas behavior. Consult
 the signatures for backend-specific arguments; they are not interchangeable.
 
 ## Signatures
+
+### PySpark
+
+```python
+def rfecv(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    model="logistic_regression",
+    model_params=None,
+    scoring="roc_auc",
+    cv=5,
+    fold_col=None,
+    step=1,
+    min_features_to_select=1,
+    random_state=42,
+): ...
+```
 
 ### Pandas
 
@@ -37,26 +57,6 @@ def rfecv(
 ): ...
 ```
 
-### PySpark
-
-```python
-def rfecv(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    model="logistic_regression",
-    model_params=None,
-    scoring="roc_auc",
-    cv=5,
-    fold_col=None,
-    step=1,
-    min_features_to_select=1,
-    random_state=42,
-): ...
-```
-
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
 `None` placeholders for train/target/features do not make those inputs optional
@@ -75,9 +75,9 @@ at call time. Unsupported backend keywords raise TypeError.
 | `df_scoring` | Optional unlabeled frame to score with the final selected-feature classifier; requires OOT evaluation. RFE scores it only at the final fit. |
 | `run_name` | Label used for final training outputs or RFE iteration reports. |
 | `model` | Named or compatible native estimator; permutation requires an already fitted model. Model restrictions and return schemas are explained below. |
-| `model_params` | Optional dictionary of native estimator parameters: Pandas snake_case, Spark camelCase. Custom estimators are copied/cloned. |
-| `scoring` | Pandas sklearn scorer; Spark accepts roc_auc or average_precision (Spark PR area, not sklearn average precision). |
-| `cv` | Pandas fold count or sklearn-compatible splitter/iterable. Spark integer >=2; all validation folds must contain both classes. |
+| `model_params` | Optional dictionary of native estimator parameters: Spark camelCase, pandas snake_case. Custom estimators are copied/cloned. |
+| `scoring` | Spark accepts roc_auc or average_precision (Spark PR area). Pandas accepts a sklearn scorer. |
+| `cv` | Spark takes an integer >=2 and requires both classes in every validation fold. Pandas accepts a fold count or sklearn-compatible splitter/iterable. |
 | `step` | Positive integer number of weakest features removed per RFE/RFECV step; final removal is clipped to the minimum. |
 | `min_features_to_select` | RFECV's smallest tested subset, positive integer no greater than initial feature count. |
 | `n_jobs` | Pandas sklearn parallel-job control; None uses the library default. Not accepted by Spark. |
@@ -99,12 +99,32 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method rfecv`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method rfecv`. Use `--backend pandas` for the pandas example.
 
 ## How it works
+
+### Spark usage
+
+See [the complete Spark setup and rfecv example](spark.md#rfecv) for the
+distributed algorithm, parameters, result fields, limits, and interpretation.
+
+[Example data](spark.md#example-data)
+
+```python
+result = fs.rfecv(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    cv=3,  # Number of cross-validation folds used to score candidate subsets.
+    fold_col='fold',  # Column assigning each training row to a validation fold.
+)
+print(result.selected_features)
+```
+
+### pandas usage
+
+[Example data](setup.md)
 
 **Supervised; Pandas behavior.** RFECV means RFE plus cross-validation used to choose
 the feature count. It is a separate sklearn-based selector, not a change to
@@ -137,16 +157,11 @@ CV used for selection is not an independent final performance estimate. Existing
 RFE's OOT metric path is neither calculated nor persisted by this method.
 See [sklearn RFECV](https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.RFECV.html).
 
-## Spark usage
-
-See [the complete Spark setup and rfecv example](spark.md#rfecv) for the
-distributed algorithm, parameters, result fields, limits, and interpretation.
-
 ## Computational cost and practical limits
 
 Typical relative cost: **very high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: full-data elimination, CV fits per subset, then one refit on the chosen subset. Spark: full-data elimination, CV fits per subset, then elimination again to the chosen size.
+Spark: full-data elimination, CV fits per subset, then elimination again to the chosen size. Pandas: full-data elimination, CV fits per subset, then one refit on the chosen subset.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for budgeted subset search when justified;
 do not run every selector as a fixed pipeline.

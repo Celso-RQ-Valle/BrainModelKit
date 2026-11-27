@@ -11,10 +11,10 @@ checks for these explicit pairs on Ubuntu with Temurin Java 17:
 
 | Python | PySpark | Validation scope |
 | --- | --- | --- |
-| 3.10 | 3.5.7 | Full suite, required integrations, Pandas and Spark wheel checks |
-| 3.11 | 3.5.7 | Full suite, required integrations, Pandas and Spark wheel checks |
-| 3.12 | 4.0.2 | Full suite, required integrations, Pandas and Spark wheel checks |
-| 3.13 | 4.0.2 | Full suite, required integrations, Pandas and Spark wheel checks |
+| 3.10 | 3.5.7 | Full suite, required integrations, Spark and pandas wheel checks |
+| 3.11 | 3.5.7 | Full suite, required integrations, Spark and pandas wheel checks |
+| 3.12 | 4.0.2 | Full suite, required integrations, Spark and pandas wheel checks |
+| 3.13 | 4.0.2 | Full suite, required integrations, Spark and pandas wheel checks |
 
 These are configured CI targets. A pair is **tested for a commit only when its
 CI job passes**; this document does not claim that newly configured jobs have
@@ -45,7 +45,7 @@ release validation; installing a wrapper is not proof of JVM/backend readiness.
 validates distribution metadata. `scripts/check_wheel.py` creates a separate
 virtual environment for each execution backend with no system site-packages.
 It first installs only the wheel and verifies that importing the base package
-needs none of Pandas, Spark, MLflow, Optuna, or Boruta. It then installs that
+needs none of Spark, pandas, MLflow, Optuna, or Boruta. It then installs that
 wheel's backend extra, checks dependency consistency, and runs outside the
 checkout with Python isolated mode (`-I`) and no `PYTHONPATH`.
 
@@ -65,7 +65,7 @@ python -m twine check dist/*
 python scripts/check_wheel.py --spark-version 4.0.2
 ```
 
-Use `--backend pandas` or `--backend spark` to check one backend. Keep exactly
+Use `--backend spark` or `--backend pandas` to check one backend. Keep exactly
 one wheel in `dist/` (or select another directory with `--dist-dir`). Spark
 requires Java and working native filesystem support;
 Windows without Hadoop support cannot complete its disk-persistence check.

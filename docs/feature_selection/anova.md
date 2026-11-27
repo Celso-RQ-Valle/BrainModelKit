@@ -2,8 +2,8 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
@@ -13,7 +13,7 @@ the signatures for backend-specific arguments; they are not interchangeable.
 
 ## Signatures
 
-### Pandas
+### PySpark
 
 ```python
 def anova(
@@ -27,7 +27,7 @@ def anova(
 ): ...
 ```
 
-### PySpark
+### Pandas
 
 ```python
 def anova(
@@ -72,12 +72,30 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method anova`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method anova`. Use `--backend pandas` for the pandas example.
 
 ## How it works
+
+### Spark usage
+
+See [the complete Spark setup and anova example](spark.md#anova) for the
+distributed algorithm, parameters, result fields, limits, and interpretation.
+
+[Example data](spark.md#example-data)
+
+```python
+result = fs.anova(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+)
+print(result.selected_features)
+```
+
+### pandas usage
+
+[Example data](setup.md)
 
 **Supervised classification; Pandas behavior (`anova`).** One-way ANOVA compares
 between-class and within-class variation: `F = MS_between / MS_within`. It tests
@@ -100,16 +118,11 @@ on its p-values under severe heteroskedasticity or dependent observations, and
 do not expect it to find symmetric/nonlinear relationships with equal means.
 Spark computes distributed class statistics; read the [Spark ANOVA contract](spark.md#anova).
 
-## Spark usage
-
-See [the complete Spark setup and anova example](spark.md#anova) for the
-distributed algorithm, parameters, result fields, limits, and interpretation.
-
 ## Computational cost and practical limits
 
 Typical relative cost: **low to moderate**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: class-wise sums and variances. Spark: two class summaries per feature.
+Spark: two class summaries per feature. Pandas: class-wise sums and variances.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for numeric screening when justified;
 do not run every selector as a fixed pipeline.

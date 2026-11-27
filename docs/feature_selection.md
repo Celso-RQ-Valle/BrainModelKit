@@ -5,13 +5,12 @@
 ## Overview
 
 BrainModelKit offers independent selectors that compose through
-`result.selected_features`. Import from `brainmodelkit.feature_selection.pandas`
-for Pandas DataFrames or `brainmodelkit.feature_selection.pyspark` for Spark
-DataFrames. The backends do not delegate to one another. There is no automatic
+`result.selected_features`. Import from `brainmodelkit.feature_selection.pyspark`
+for Spark DataFrames or `brainmodelkit.feature_selection.pandas` for pandas DataFrames. The backends do not delegate to one another. There is no automatic
 pipeline engine and no implicit category encoding or imputation.
 
-Install `pip install "BrainModelKit[pandas]"` for the Pandas backend or
-`pip install "BrainModelKit[pyspark]"` for the Spark backend. Boruta remains a
+Install `pip install "BrainModelKit[pyspark]"` for the Spark backend or
+`pip install "BrainModelKit[pandas]"` for the pandas backend. Boruta remains a
 separate optional extra. Spark requires a caller-configured Spark session and
 Java installation.
 See [Spark's dependency requirements](https://spark.apache.org/docs/3.5.7/api/python/getting_started/install.html).
@@ -24,9 +23,9 @@ Except for the existing RFE, selectors return a lightweight `SelectionResult`:
 | `feature_table` | List of dictionaries, one per input feature, including `selected` |
 | `method` / `metadata` | Method identifier and method-specific configuration |
 | `ranking` | Feature-to-rank mapping for methods that produce ranks |
-| `grouped_table` | Completeness diagnostics: Pandas or distributed Spark DataFrame |
+| `grouped_table` | Completeness diagnostics: distributed Spark or pandas DataFrame |
 | `correlation_pairs` | List of high-correlation feature pairs and coefficients |
-| `bin_details` | WoE diagnostics: Pandas or distributed Spark DataFrame |
+| `bin_details` | WoE diagnostics: distributed Spark or pandas DataFrame |
 | `cv_results` | RFECV CV scores/counts; backend-specific dictionaries |
 | `history` | Stability fit/group diagnostics; RFE has its own history contract |
 | `model` | Fitted estimator when the method returns one |
@@ -57,12 +56,12 @@ is intersected with the p-value gate, not used to refill rejected positions.
 
 ## API quick reference
 
-Browse [pandas and PySpark examples for all 16 selectors](feature_selection/examples.md) for code and links to each method's selection rules.
+Browse [PySpark and pandas examples for all 16 selectors](feature_selection/examples.md) for code and links to each method's selection rules.
 
 Use the backend-specific namespace that matches your DataFrame type. Every link
 below opens the detailed section with parameter guidance and a runnable example.
 
-| Function | Pandas | PySpark |
+| Function | PySpark | Pandas |
 | --- | --- | --- |
 | `completeness` | [guide](feature_selection/completeness.md) | [guide](feature_selection/completeness.md) |
 | `variance_filter` | [guide](feature_selection/variance_filter.md) | [guide](feature_selection/variance_filter.md) |
@@ -79,9 +78,22 @@ below opens the detailed section with parameter guidance and a runnable example.
 | `rfecv` | [guide](feature_selection/rfecv.md) | [guide](feature_selection/rfecv.md) |
 | `sequential_selection` | [guide](feature_selection/sequential_selection.md) | [guide](feature_selection/sequential_selection.md) |
 | `stability_selection` | [guide](feature_selection/stability_selection.md) | [guide](feature_selection/stability_selection.md) |
-| `boruta` | [guide](feature_selection/boruta.md) | [guide](feature_selection/boruta.md#spark-example-and-parameters) |
+| `boruta` | [guide](feature_selection/boruta.md#spark-example-and-parameters) | [guide](feature_selection/boruta.md) |
 
 Basic usage follows the same pattern for all composable selectors:
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.completeness(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import completeness
@@ -128,7 +140,7 @@ discoveries. None of these methods establishes causality.
 
 ### Completeness
 
-**Unsupervised; Pandas and native Spark.** Completeness measures data availability,
+**Unsupervised; native Spark and pandas.** Completeness measures data availability,
 not predictive power:
 
 ```text
@@ -136,11 +148,23 @@ completeness = non-null observations / total observations
 missing_rate = 1 - completeness
 ```
 
-Pandas missing values and Spark floating NaN count as missing, as do Spark SQL
-nulls. Empty strings and sentinel values such as `-999` are not automatically
+Spark SQL nulls and floating NaN count as missing, as do pandas missing values. Empty strings and sentinel values such as `-999` are not automatically
 missing; normalize them first if that is their business meaning. Selection uses
 `completeness >= min_completeness` (default 0.70). An all-missing feature therefore
 passes only at an explicitly chosen zero threshold.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.completeness(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_completeness=0.95,  # Keep columns with observed values in at least this fraction of rows.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import completeness
@@ -168,11 +192,24 @@ non-null indicators; group tables stay distributed.
 
 ### Variance
 
-**Unsupervised; Pandas and native Spark.** Population variance is
+**Unsupervised; native Spark and pandas.** Population variance is
 `sum((x - mean(x))**2) / n`, calculated over non-missing observations (`ddof=0`).
 Features pass only when `variance > min_variance`; the default zero removes
 constants. A single observed value has zero variance; all-missing features have
 undefined variance and are rejected.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.variance_filter(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_variance=0.0,  # Keep columns whose population variance exceeds this cutoff.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import variance_filter
@@ -189,10 +226,23 @@ Spark uses native `var_pop` aggregation.
 
 ### Cardinality
 
-**Unsupervised; Pandas and native Spark.** Cardinality counts distinct non-missing
+**Unsupervised; native Spark and pandas.** Cardinality counts distinct non-missing
 values. `unique_ratio = unique_count / total_rows`, including missing rows in the
 denominator. Defaults are `min_unique=2`, `max_unique=None`, and
 `max_unique_ratio=None`; specified bounds are inclusive.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.cardinality(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_unique=2,  # Minimum number of distinct nonmissing values to keep a column.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import cardinality
@@ -213,10 +263,23 @@ completeness separately rather than treating the ratio as coverage.
 
 ### Correlation
 
-**Unsupervised; Pandas and native Spark.** Pearson correlation is normalized
+**Unsupervised; native Spark and pandas.** Pearson correlation is normalized
 covariance; Spearman correlation is Pearson correlation of ranks and captures
 monotonic rather than only linear relationships. `method` accepts `"pearson"`
 or `"spearman"`; both use absolute correlation for filtering.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.correlation_filter(
+    train_df=train,  # Training rows used to fit the selector.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    threshold=0.9,  # Reject a later column if its absolute correlation with a retained one reaches this value.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import correlation_filter
@@ -250,6 +313,20 @@ See the [Spark correlation API](https://spark.apache.org/docs/3.5.7/api/python/r
 continuous variables. Scores are in nats. Zero estimated MI means no detected
 univariate dependence, not proof of independence.
 
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.mutual_information(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
+
 ```python
 from brainmodelkit.feature_selection.pandas import mutual_information
 
@@ -274,10 +351,25 @@ See [sklearn MI](https://scikit-learn.org/stable/modules/generated/sklearn.featu
 
 ### Chi-Square
 
-**Supervised; Pandas and native Spark, with different input semantics.** The
+**Supervised; native Spark and pandas, with different input semantics.** The
 statistic sums `(observed - expected)**2 / expected` under independence. Small
 p-values indicate evidence against independence, subject to adequate expected
 cell counts and independent observations.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+counts = train.select("target", *((F.col(c) > 0).cast("int").alias(c) for c in features))
+result = fs.chi_square(
+    train_df=counts,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import chi_square
@@ -287,9 +379,8 @@ result = chi_square(
 )
 ```
 
-Pandas uses sklearn `chi2` on **nonnegative integer counts or indicators**. Spark
-uses native `ChiSquareTest` on **nonnegative integer category codes**, treating
-each distinct value as a categorical level. These statistics are not numerically
+Spark uses native `ChiSquareTest` on **nonnegative integer category codes**, treating
+each distinct value as a categorical level. Pandas uses sklearn `chi2` on **nonnegative integer counts or indicators**. These statistics are not numerically
 interchangeable. Both reject negative or fractional features. Discretize or encode
 explicitly; never pass arbitrary continuous values and interpret them as counts.
 Spark's `max_categories=1000` guards categorical contingency-table size; Spark
@@ -305,11 +396,25 @@ and [Spark ChiSquareTest](https://spark.apache.org/docs/latest/api/java/org/apac
 
 ### ANOVA / F-test
 
-**Supervised classification; Pandas and Spark (`anova`).** One-way ANOVA compares
+**Supervised classification; Spark and pandas (`anova`).** One-way ANOVA compares
 between-class and within-class variation: `F = MS_between / MS_within`. It tests
 whether class means differ, not arbitrary dependence. The classical p-value
 assumes independent observations, approximately normal within-class errors, and
 comparable class variances.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.anova(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    max_p_value=0.05,  # Largest unadjusted p-value that qualifies a feature for selection.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import anova
@@ -329,7 +434,7 @@ see [Spark ANOVA](feature_selection/spark.md#anova).
 
 ### Information Value
 
-**Supervised binary classification; Pandas and native Spark.** IV compares the
+**Supervised binary classification; native Spark and pandas.** IV compares the
 event and non-event distributions across a feature's bins. Event means target 1.
 For observed bin b, additive smoothing alpha gives:
 
@@ -339,6 +444,20 @@ dn[b] = (non_events[b] + alpha) / (total_non_events + alpha * observed_bin_count
 WoE[b] = log(de[b] / dn[b])
 IV = sum((de[b] - dn[b]) * WoE[b])
 ```
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.information_value(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    min_iv=0.02,  # Minimum information value required to retain a feature.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import information_value
@@ -386,12 +505,27 @@ It is unsuitable for multiclass targets without a separately designed extension.
 
 ### Feature Importance
 
-**Supervised; Pandas and native Spark.** `feature_importance_selection` fits a
+**Supervised; native Spark and pandas.** `feature_importance_selection` fits a
 fresh estimator and ranks its native tree importance or absolute linear
 coefficient. The signed binary coefficient remains in `importance`; coefficient
 arrays are also in `coefficients`. For Pandas multiclass models, the coefficient
 L2 norm across classes determines importance and all signed coefficients remain
 in diagnostics. Training/RFE's importance record convention is reused.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.feature_importance_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='decision_tree',  # Estimator used to fit the candidate features.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import feature_importance_selection
@@ -408,7 +542,7 @@ result = feature_importance_selection(
 
 Supported names are `logistic_regression`, `decision_tree`, `random_forest`,
 `gradient_boosting`, and `lightgbm`, plus compatible estimator instances.
-Pandas estimators are cloned; Spark estimators are copied. Use native parameter
+Spark estimators are copied and pandas estimators are cloned. Use native parameter
 names in `model_params` (e.g. Spark `numTrees`). Named stochastic estimators use
 `random_state=42`/Spark seed by default; custom estimator randomness remains the
 caller's responsibility. Pandas LightGBM needs its optional extra. Spark LightGBM
@@ -429,9 +563,24 @@ evaluation where those limitations matter.
 
 ### L1 Selection
 
-**Supervised binary classification; Pandas and native Spark.** L1 logistic
+**Supervised binary classification; native Spark and pandas.** L1 logistic
 regression penalizes `sum(abs(coefficient))`, encouraging exact zeros. Selection
 requires `abs(coefficient) > coefficient_tolerance` (default `1e-8`).
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.l1_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    reg_param=0.1,  # Regularization strength. Larger values shrink coefficients more.
+    max_iter=100,  # Maximum solver iterations for the regularized logistic fit.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import l1_selection
@@ -439,9 +588,8 @@ from brainmodelkit.feature_selection.pandas import l1_selection
 result = l1_selection(df, target_col="target", feature_cols=features, C=1.0)
 ```
 
-Pandas uses L1/liblinear with `C > 0`, an inverse regularization strength, and
-`max_iter=1000`. Spark uses native logistic regression with `elasticNetParam=1`,
-`reg_param=0.1`, and `max_iter=100`. Spark's regularization parameter is **not**
+Spark uses native logistic regression with `elasticNetParam=1`, `reg_param=0.1`,
+and `max_iter=100`. Pandas uses L1/liblinear with `C > 0`, an inverse regularization strength, and `max_iter=1000`. Spark's regularization parameter is **not**
 an alias for sklearn C. Diagnostics are the same as feature importance.
 
 Scale predictors and inspect convergence before interpreting coefficients. Spark
@@ -455,6 +603,22 @@ nonlinear interactions. Strong regularization can validly select no features.
 **Supervised evaluation; both backends.** For an already fitted model, permute one
 feature repeatedly and measure the decrease in a chosen score. Larger decreases
 indicate stronger model reliance. This function does not refit the model.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+model = fs.feature_importance_selection(train, "target", features, model="decision_tree").model
+result = fs.permutation_importance_selection(
+    model=model,  # Already-fitted classifier to rescore after each shuffle.
+    df=validation,  # Held-out rows on which shuffling a feature measures the score decrease.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import permutation_importance_selection
@@ -485,10 +649,27 @@ permutations; see the [Spark contract](feature_selection/spark.md#permutation_im
 
 ### RFE
 
-**Supervised; Pandas and native Spark.** The original RFE API and implementation
+**Supervised; native Spark and pandas.** The original RFE API and implementation
 remain available at both backend import paths. RFE is the recursive elimination
 mechanism: fit, calculate native importance, remove the weakest features, refit,
 and repeat until `n_feat_final` remain. The final subset is fitted and evaluated.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.rfe(
+    run_name='example',  # Label used to identify the training run and its outputs.
+    target_col='target',  # Column containing the class label.
+    train_df=train,  # Training rows used to fit the selector.
+    oot_df=validation,  # Held-out rows used to evaluate the elimination fits.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    n_feat_final=1,  # Number of features to retain at the end of elimination.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import rfe
@@ -541,6 +722,22 @@ but can be costly and inherits the model's importance biases and scaling issues.
 the feature count. It is a separate sklearn-based selector, not a change to
 BrainModelKit's OOT RFE or its persistence contract.
 
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.rfecv(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    cv=3,  # Number of cross-validation folds used to score candidate subsets.
+    fold_col='fold',  # Column assigning each training row to a validation fold.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
+
 ```python
 from brainmodelkit.feature_selection.pandas import rfecv
 
@@ -575,6 +772,23 @@ cross-validated score to the current subset. Backward selection removes the
 candidate whose removal gives the best score. Unlike RFE, it does not require
 native importance attributes.
 
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.sequential_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='logistic_regression',  # Estimator used to fit the candidate features.
+    n_features_to_select=1,  # Number of features in the final greedy subset.
+    cv=3,  # Number of cross-validation folds used to score candidate subsets.
+    fold_col='fold',  # Column assigning each training row to a validation fold.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
+
 ```python
 from brainmodelkit.feature_selection.pandas import sequential_selection
 
@@ -607,6 +821,20 @@ cautions as RFECV. See [sklearn sequential selection](https://scikit-learn.org/s
 samples run a base selector. `selection_frequency = selection_count / n_fits`;
 selection requires frequency at least `min_frequency` (default 0.80). This utility
 does not claim the formal error bounds of specialized stability-selection methods.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.stability_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    selector_kwargs={'top_k': 1},  # Options passed to the base selector on each fit.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import stability_selection
@@ -651,9 +879,24 @@ coefficients across periods requires consistent scaling.
 **Supervised all-relevant selection; both backends.** Boruta
 compares real feature importances with randomized shadow features over repeated
 fits. It aims to identify all relevant variables rather than a minimal subset.
-Pandas delegates to BorutaPy; Spark implements native forest/shadow fitting and
-corrected hit tests. Read the [detailed Boruta inference guide](feature_selection/boruta.md)
+Spark implements native forest/shadow fitting and corrected hit tests. Pandas delegates to BorutaPy. Read the [detailed Boruta inference guide](feature_selection/boruta.md)
 for the hypotheses, multiplicity rules, and backend differences.
+
+**Spark** | [Example data](feature_selection/spark.md#example-data)
+
+```python
+result = fs.boruta(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='random_forest',  # Estimator used to fit the candidate features.
+    n_estimators=100,  # Number of trees used to compare original and shadow features.
+    max_iter=30,  # Iteration budget for comparing features with randomized shadows.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](feature_selection/setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import boruta
@@ -685,7 +928,7 @@ and small samples still affect decisions. See the [BorutaPy project](https://git
 
 ## Combining methods
 
-Select from training data and preserve the resulting list for later data:
+For Spark, follow the [native Spark workflow](../examples/feature_selection/pyspark_workflow.py). The pandas example below selects from training data and preserves the resulting list for later data.
 
 ```python
 from brainmodelkit.feature_selection.pandas import (
@@ -718,14 +961,6 @@ appropriate policy; downstream selectors reject an empty feature list. Filtering
 order matters, especially correlation's input-order representative choice. Do not
 automatically tune every cutoff against the final OOT set.
 
-## Pandas workflows
-
-Run [pandas_workflow.py](../examples/feature_selection/pandas_workflow.py) for a
-self-contained completeness → correlation → IV → RFE example. It uses synthetic
-numeric data and a reproducible holdout; replace that split with the appropriate
-temporal design. For more expensive selection, use the screened features with
-RFECV or stability selection. Keep one final test set untouched.
-
 ## PySpark workflows
 
 Run [pyspark_workflow.py](../examples/feature_selection/pyspark_workflow.py) with
@@ -735,32 +970,36 @@ replica. Grouped completeness and IV diagnostics support `.show()` and distribut
 filtering/writing. The existing Spark RFE example remains available separately
 and needs a working native persistence environment.
 
+## Pandas workflows
+
+Run [pandas_workflow.py](../examples/feature_selection/pandas_workflow.py) for a
+self-contained completeness → correlation → IV → RFE example. It uses synthetic
+numeric data and a reproducible holdout; replace that split with the appropriate
+temporal design. For more expensive selection, use the screened features with
+RFECV or stability selection. Keep one final test set untouched.
+
 ## Backend support matrix
 
-| Method | Pandas | PySpark |
+| Method | PySpark | Pandas |
 | --- | --- | --- |
-| `completeness` (including groups) | Yes | Native aggregations |
-| `variance_filter` | Yes | Native population variance |
-| `cardinality` | Yes | Native exact distinct counts |
-| `correlation_filter` | Pearson/Spearman | Native Spark ML, bounded matrix |
-| `mutual_information` | sklearn estimation | Distributed binned counts |
-| `chi_square` | Counts/indicators | Native categorical test |
-| `anova` | sklearn F-test | Distributed class summaries |
-| `information_value` | Yes | Native binning/aggregations |
-| `feature_importance_selection` | Yes | Native Spark estimators |
-| `l1_selection` | sklearn logistic | Spark ML logistic |
-| `permutation_importance_selection` | sklearn permutation | Distributed sort/join permutations |
-| `rfe` | Existing API | Existing native API |
-| `rfecv` | Full-data elimination with CV per subset | Full-data elimination with distributed CV per subset |
-| `sequential_selection` | Forward/backward | Native CV candidate search |
-| `stability_selection` | Stratified bootstrap/groups | Poisson bootstrap/groups |
-| `boruta` | Optional BorutaPy | Native forests and shadow hit tests |
+| `completeness` (including groups) | Native aggregations | Yes |
+| `variance_filter` | Native population variance | Yes |
+| `cardinality` | Native exact distinct counts | Yes |
+| `correlation_filter` | Native Spark ML, bounded matrix | Pearson/Spearman |
+| `mutual_information` | Distributed binned counts | sklearn estimation |
+| `chi_square` | Native categorical test | Counts/indicators |
+| `anova` | Distributed class summaries | sklearn F-test |
+| `information_value` | Native binning/aggregations | Yes |
+| `feature_importance_selection` | Native Spark estimators | Yes |
+| `l1_selection` | Spark ML logistic | sklearn logistic |
+| `permutation_importance_selection` | Distributed sort/join permutations | sklearn permutation |
+| `rfe` | Existing native API | Existing API |
+| `rfecv` | Full-data elimination with distributed CV per subset | Full-data elimination with CV per subset |
+| `sequential_selection` | Native CV candidate search | Forward/backward |
+| `stability_selection` | Poisson bootstrap/groups | Stratified bootstrap/groups |
+| `boruta` | Native forests and shadow hit tests | Optional BorutaPy |
 
 ## Scalability considerations
-
-Pandas holds data in process memory and uses sklearn for local model work.
-Wrapper and bootstrap costs multiply the underlying fit cost; use cheap screening
-first and choose `n_jobs` to avoid excessive parallel memory use.
 
 Spark quality filters aggregate columns together. Exact cardinality can shuffle
 many distinct values. Correlation is bounded by feature count rather than row
@@ -778,3 +1017,7 @@ when appropriate and unpersist it afterward. These functions do not create Spark
 sessions, change caller cache ownership, or promise matching floating-point results
 across partition layouts/backends. Native estimator randomness and approximate
 quantile boundaries may differ even with fixed seeds.
+
+Pandas holds data in process memory and uses sklearn for local model work.
+Wrapper and bootstrap costs multiply the underlying fit cost; use cheap screening
+first and choose `n_jobs` to avoid excessive parallel memory use.

@@ -2,33 +2,12 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
 ## Signatures
-
-### Pandas
-
-```python
-def feature_importance_selection(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    oot_df=None,
-    df_oot=None,
-    df_scoring=None,
-    run_name="feature_selection",
-    model="random_forest",
-    model_params=None,
-    threshold=None,
-    top_k=None,
-    random_state=42,
-): ...
-```
 
 ### PySpark
 
@@ -44,6 +23,27 @@ def feature_importance_selection(
     df_scoring=None,
     run_name="feature_selection",
     n_tiles=10,
+    model="random_forest",
+    model_params=None,
+    threshold=None,
+    top_k=None,
+    random_state=42,
+): ...
+```
+
+### Pandas
+
+```python
+def feature_importance_selection(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    oot_df=None,
+    df_oot=None,
+    df_scoring=None,
+    run_name="feature_selection",
     model="random_forest",
     model_params=None,
     threshold=None,
@@ -70,7 +70,7 @@ at call time. Unsupported backend keywords raise TypeError.
 | `df_scoring` | Optional unlabeled frame to score with the final selected-feature classifier; requires OOT evaluation. RFE scores it only at the final fit. |
 | `run_name` | Label used for final training outputs or RFE iteration reports. |
 | `model` | Named or compatible native estimator; permutation requires an already fitted model. Model restrictions and return schemas are explained below. |
-| `model_params` | Optional dictionary of native estimator parameters: Pandas snake_case, Spark camelCase. Custom estimators are copied/cloned. |
+| `model_params` | Optional dictionary of native estimator parameters: Spark camelCase, pandas snake_case. Custom estimators are copied/cloned. |
 | `threshold` | Inclusive score cutoff; None disables it. For correlation, reject at absolute correlation >= threshold in [0,1]. |
 | `top_k` | Optional positive integer rank limit no larger than candidate count. Intersects other gates; ties favor input order. |
 | `random_state` | Seed for supported random estimators/resampling. Spark partition/order changes may still change results. |
@@ -91,19 +91,31 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method feature_importance_selection`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method feature_importance_selection`. Use `--backend pandas` for the pandas example.
 
 ## How it works
 
-**Supervised; Pandas and native Spark.** `feature_importance_selection` fits a
+**Supervised; native Spark and pandas.** `feature_importance_selection` fits a
 fresh estimator and ranks its native tree importance or absolute linear
 coefficient. The signed binary coefficient remains in `importance`; coefficient
 arrays are also in `coefficients`. For Pandas multiclass models, the coefficient
 L2 norm across classes determines importance and all signed coefficients remain
 in diagnostics. Training/RFE's importance record convention is reused.
+
+**Spark** | [Example data](spark.md#example-data)
+
+```python
+result = fs.feature_importance_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    model='decision_tree',  # Estimator used to fit the candidate features.
+    top_k=1,  # Optional limit on the number of highest-ranked features retained.
+)
+print(result.selected_features)
+```
+
+**pandas** | [Example data](setup.md)
 
 ```python
 from brainmodelkit.feature_selection.pandas import feature_importance_selection
@@ -120,7 +132,7 @@ result = feature_importance_selection(
 
 Supported names are `logistic_regression`, `decision_tree`, `random_forest`,
 `gradient_boosting`, and `lightgbm`, plus compatible estimator instances.
-Pandas estimators are cloned; Spark estimators are copied. Use native parameter
+Spark estimators are copied and pandas estimators are cloned. Use native parameter
 names in `model_params` (e.g. Spark `numTrees`). Named stochastic estimators use
 `random_state=42`/Spark seed by default; custom estimator randomness remains the
 caller's responsibility. Pandas LightGBM needs its optional extra. Spark LightGBM
@@ -145,7 +157,7 @@ evaluation where those limitations matter.
 
 Typical relative cost: **moderate to high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: one estimator fit. Spark: one native model fit.
+Spark: one native model fit. Pandas: one estimator fit.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for capture model-specific signal when justified;
 do not run every selector as a fixed pipeline.

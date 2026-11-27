@@ -2,8 +2,8 @@
 
 [Method index](../feature_selection.md#api-quick-reference) · [README quickstart](https://github.com/Celso-RQ-Valle/BrainModelKit#feature-selection)
 
-Use `from brainmodelkit.feature_selection import pandas as fs` for Pandas,
-or `from brainmodelkit.feature_selection import pyspark as fs` for Spark.
+Use `from brainmodelkit.feature_selection import pyspark as fs` for Spark,
+or `from brainmodelkit.feature_selection import pandas as fs` for pandas.
 Examples use preprocessed training data unless explicitly labeled held-out.
 See the [complete runnable workflows](../../examples/feature_selection/README.md).
 
@@ -12,6 +12,26 @@ The explanations below describe shared concepts and the Pandas behavior. Consult
 the signatures for backend-specific arguments; they are not interchangeable.
 
 ## Signatures
+
+### PySpark
+
+```python
+def stability_selection(
+    train_df=None,
+    target_col=None,
+    feature_cols=None,
+    *,
+    df=None,
+    method="feature_importance",
+    n_iterations=20,
+    sample_fraction=0.8,
+    min_frequency=0.8,
+    random_state=42,
+    group_by=None,
+    selector_kwargs=None,
+    max_groups=100,
+): ...
+```
 
 ### Pandas
 
@@ -36,26 +56,6 @@ def stability_selection(
 ): ...
 ```
 
-### PySpark
-
-```python
-def stability_selection(
-    train_df=None,
-    target_col=None,
-    feature_cols=None,
-    *,
-    df=None,
-    method="feature_importance",
-    n_iterations=20,
-    sample_fraction=0.8,
-    min_frequency=0.8,
-    random_state=42,
-    group_by=None,
-    selector_kwargs=None,
-    max_groups=100,
-): ...
-```
-
 The listings show accepted arguments and defaults. Pass optional controls by
 keyword; permutation requires a fitted model first and RFE requires run_name first.
 `None` placeholders for train/target/features do not make those inputs optional
@@ -75,7 +75,7 @@ at call time. Unsupported backend keywords raise TypeError.
 | `run_name` | Label used for final training outputs or RFE iteration reports. |
 | `method` | Algorithm variant: correlation accepts pearson/spearman; stability accepts feature_importance/l1. |
 | `n_iterations` | Positive number of stability resamples/fits per observed group. |
-| `sample_fraction` | Sampling fraction in (0,1]. Pandas uses class-stratified fixed-size bootstrap; Spark uses Poisson multiplicities with this mean. |
+| `sample_fraction` | Sampling fraction in (0,1]. Spark uses Poisson multiplicities with this mean. Pandas uses a class-stratified fixed-size bootstrap. |
 | `min_frequency` | Inclusive stability selection frequency threshold in [0,1]. |
 | `random_state` | Seed for supported random estimators/resampling. Spark partition/order changes may still change results. |
 | `group_by` | Optional grouping column name or list, including observed null groups. Controls grouped diagnostics or separate stability fits. |
@@ -97,12 +97,30 @@ invalid model parameters or inadequate CV class counts, are propagated.
 
 ## Example setup
 
-Run the [shared example setup](setup.md) before the snippet below, or execute
-`python examples/feature_selection/method_example.py --method stability_selection`
-from the repository root for a self-contained Pandas example. Add `--backend spark`
-for the Spark implementation. See the method-specific parameter tables above.
+Use the [Spark setup](spark.md#example-data) or the [pandas setup](setup.md). From the repository root, run `python examples/feature_selection/method_example.py --backend spark --method stability_selection`. Use `--backend pandas` for the pandas example.
 
 ## How it works
+
+### Spark usage
+
+See [the complete Spark setup and stability_selection example](spark.md#stability_selection) for the
+distributed algorithm, parameters, result fields, limits, and interpretation.
+
+[Example data](spark.md#example-data)
+
+```python
+result = fs.stability_selection(
+    train_df=train,  # Training rows used to fit the selector.
+    target_col='target',  # Column containing the class label.
+    feature_cols=features,  # Ordered candidate columns to evaluate.
+    selector_kwargs={'top_k': 1},  # Options passed to the base selector on each fit.
+)
+print(result.selected_features)
+```
+
+### pandas usage
+
+[Example data](setup.md)
 
 **Supervised robustness diagnostic; Pandas behavior.** Repeated stratified bootstrap
 samples run a base selector. `selection_frequency = selection_count / n_fits`;
@@ -147,16 +165,11 @@ correlated interchangeable features may each have low frequency despite strong
 joint signal. Runtime scales with iteration and group count, and comparing
 coefficients across periods requires consistent scaling.
 
-## Spark usage
-
-See [the complete Spark setup and stability_selection example](spark.md#stability_selection) for the
-distributed algorithm, parameters, result fields, limits, and interpretation.
-
 ## Computational cost and practical limits
 
 Typical relative cost: **high to very high**, with overlapping tiers across methods.
 This is an implementation-based estimate, not a benchmark or a universal ranking.
-Pandas: model fits on class-stratified bootstrap samples, per group when grouped. Spark: model fits on Poisson resamples, per group when grouped.
+Spark: model fits on Poisson resamples, per group when grouped. Pandas: model fits on class-stratified bootstrap samples, per group when grouped.
 Rows, feature count, cardinality, iterations, folds, and the chosen estimator can
 change which method dominates. Use this method for check robustness when justified;
 do not run every selector as a fixed pipeline.

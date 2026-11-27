@@ -6,9 +6,9 @@ For method explanations, assumptions, and the backend matrix, see the
 Run any of the sixteen selectors with a self-contained dataset:
 
 ```bash
-python examples/feature_selection/method_example.py --backend pandas --method completeness
 python examples/feature_selection/method_example.py --backend spark --method rfecv
 python examples/feature_selection/method_example.py --backend spark --method boruta --quick
+python examples/feature_selection/method_example.py --backend pandas --method completeness
 ```
 
 Replace `--method` with any public function name in the
@@ -20,12 +20,12 @@ The [shared notebook setup](../../docs/feature_selection/setup.md) prepares the
 variables used in individual Pandas guide snippets. The
 [Spark guide](../../docs/feature_selection/spark.md) covers all new Spark methods.
 
-- `pandas_workflow.py`: completeness → correlation → IV → existing RFE.
 - `pyspark_workflow.py`: native completeness → variance → correlation → IV → importance.
-- `pandas_example.py` and `spark_example.py`: original RFE examples, retained unchanged.
+- `pandas_workflow.py`: completeness → correlation → IV → existing RFE.
+- `spark_example.py` and `pandas_example.py`: original RFE examples, retained unchanged.
 
-Run workflows with `python examples/feature_selection/pandas_workflow.py` or
-`python examples/feature_selection/pyspark_workflow.py`. The Spark workflow keeps
+Run workflows with `python examples/feature_selection/pyspark_workflow.py` or
+`python examples/feature_selection/pandas_workflow.py`. The Spark workflow keeps
 all dataset rows distributed and does not require model persistence.
 
 Run from the repository root. Edit `model`, `model_params`, `step`, and
